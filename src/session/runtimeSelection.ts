@@ -1,4 +1,7 @@
+import type { ProjectKind } from "./projectKind";
 import type { PythonRuntimeStatus, RuntimeKind, RuntimePreference } from "./types";
+
+export type { ProjectKind } from "./projectKind";
 
 /**
  * Pure runtime-selection logic (#12), split out of `runtime.ts` so it can be
@@ -10,17 +13,33 @@ export interface NodeBindingStatus {
   error?: string;
 }
 
-/** Which runtime `auto`/explicit preference would pick, given current availability. */
+/**
+ * Which runtime `auto`/explicit preference would pick, given current
+ * availability and (for `auto` only) what kind of project this looks like.
+ *
+ * `projectKind` defaults to `"ambiguous"` — the pre-existing "Node always
+ * wins in auto" behavior — so every existing call site keeps working
+ * unchanged. When the workspace looks Python-first (`projectKind ===
+ * "python"`) and Python is actually usable, `auto` prefers Python over Node
+ * even when the Node binding is available; Node remains the default in
+ * every other case (Node-ish or ambiguous repos, or explicit `node`/`python`
+ * preference, which never fall back to the other runtime regardless of
+ * project kind).
+ */
 export function chooseRuntime(
   preference: RuntimePreference,
   node: NodeBindingStatus,
   python: PythonRuntimeStatus,
+  projectKind: ProjectKind = "ambiguous",
 ): RuntimeKind | undefined {
   if (preference === "node") {
     return node.available ? "node" : undefined;
   }
   if (preference === "python") {
     return python.available ? "python" : undefined;
+  }
+  if (projectKind === "python" && python.available) {
+    return "python";
   }
   if (node.available) {
     return "node";

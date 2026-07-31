@@ -34,8 +34,21 @@ The extension can run Cypher and analyst verbs through either engine binding:
   a Python/notebook workflow, or when a native Node binding isn't available for your platform.
 
 Which one is used is controlled by `graphforge.runtime` (`auto` | `node` | `python`, default
-`auto`). In `auto`, Node is always preferred; Python is only used when Node is unavailable and a
-Python interpreter with `graphforge` importable was detected.
+`auto`). In `auto`, **Node is the global default** — except when the workspace looks like a
+**Python project** (and not primarily a Node project), in which case `auto` prefers Python even
+if `@graphforge/node` is also available:
+
+- **Python signals:** `pyproject.toml`, `requirements.txt`, `uv.lock`, `.python-version`,
+  `Pipfile`, `environment.yml`, `setup.py`, a notebook-dominant workspace root, or an explicitly
+  selected VS Code Python interpreter.
+- **Node signals:** a `package.json` at the workspace root (whether or not it depends on
+  `@graphforge/node`).
+- **If both are present:** Python wins only on a *strong* signal — `pyproject.toml`/`uv.lock`
+  present, or a Python `graphforge` environment already usable. Otherwise the workspace is
+  ambiguous and Node stays the default, per the rule that "Node remains the global default only
+  when the repo is Node-ish or ambiguous."
+- Set `graphforge.runtime` to `node` or `python` explicitly to bypass this detection entirely —
+  an explicit preference never falls back to the other runtime, regardless of project kind.
 
 Run **`GraphForge: Check Environment`** any time to see both runtimes' status, which one is
 active, and the single next step to fix whichever is missing.
@@ -58,6 +71,19 @@ absolute path of a built `@graphforge/node` package directory.
 
 #### Python binding (`graphforge`)
 
+**Package manager policy: [`uv`](https://docs.astral.sh/uv/) only — never `pip`.** All setup UX,
+docs, and tests here use `uv`. If `uv` isn't installed, [install it
+first](https://docs.astral.sh/uv/getting-started/installation/); GraphForge will not fall back to
+`pip install`.
+
+```bash
+# in a uv-managed project (has pyproject.toml / uv.lock)
+uv add graphforge
+
+# targeting an arbitrary interpreter/venv instead
+uv pip install --python /path/to/python graphforge
+```
+
 Run **`GraphForge: Setup Python Binding`** — a single QuickPick with up to three choices:
 
 1. **Use detected interpreter** — the extension looks for, in order: an explicit
@@ -66,8 +92,11 @@ Run **`GraphForge: Setup Python Binding`** — a single QuickPick with up to thr
    a workspace `.venv`/`venv`/`env` folder, then `python3`/`python` on `PATH`.
 2. **Select interpreter…** — browse for a specific `python`/`python3` executable; this sets
    `graphforge.pythonInterpreterPath`.
-3. **pip install graphforge** — runs `<interpreter> -m pip install graphforge` in a terminal,
-   only after you explicitly confirm (this makes a network request).
+3. **uv add graphforge / uv pip install graphforge** — runs `uv add graphforge` when the workspace
+   is a uv-managed project (`pyproject.toml`/`uv.lock` present), otherwise `uv pip install
+   --python <interpreter> graphforge`, in a terminal, only after you explicitly confirm (this
+   makes a network request). If `uv` itself isn't installed, the command stops and tells you to
+   install uv — it never falls back to `pip`.
 
 Under the hood, a small bundled script (`python/graphforge_host.py`) is spawned once per open
 project as a long-lived subprocess and speaks newline-delimited JSON over stdin/stdout — every

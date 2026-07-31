@@ -1,3 +1,4 @@
+import type { ProjectKind } from "./projectKind";
 import type { PythonRuntimeStatus, RuntimeKind, RuntimePreference } from "./types";
 
 /**
@@ -16,6 +17,12 @@ export interface EnvironmentReport {
     preference: RuntimePreference;
     /** Backend actually servicing the open session, if any. */
     active: RuntimeKind | "none";
+    /**
+     * What kind of workspace this looks like — `python` (prefers Python in
+     * `auto`), `node`, or `ambiguous` (Node stays default in `auto`). See
+     * `projectKind.ts`.
+     */
+    projectKind: ProjectKind;
   };
   /** Legacy top-level field (#2); mirrors `runtime` Node status. */
   nodeBinding: NodeBindingReport;

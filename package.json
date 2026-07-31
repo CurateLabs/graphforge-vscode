@@ -367,12 +367,12 @@
             "python"
           ],
           "enumDescriptions": [
-            "Prefer @graphforge/node; fall back to Python when Node is unavailable and Python (graphforge) is importable.",
+            "Prefer @graphforge/node, except in a Python-first workspace (pyproject.toml/uv.lock/etc., no package.json) where Python is preferred when usable; falls back to whichever runtime is available.",
             "Require @graphforge/node. Never falls back to Python, even if detected.",
             "Require the Python graphforge bridge. Never falls back to Node, even if available."
           ],
           "default": "auto",
-          "description": "Which engine runtime backs Cypher/verb calls. Node remains the preferred default within \"auto\"."
+          "description": "Which engine runtime backs Cypher/verb calls. Node is the global default within \"auto\", except a Python-first workspace prefers Python even when @graphforge/node is available."
         },
         "graphforge.pythonInterpreterPath": {
           "type": "string",
@@ -389,7 +389,7 @@
     "check": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/projectKind.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js",
     "package": "vsce package"
   },
   "dependencies": {
