@@ -60,7 +60,7 @@ export class KnowledgeTreeProvider
     return item;
   }
 
-  getChildren(element?: Node): Node[] {
+  async getChildren(element?: Node): Promise<Node[]> {
     if (element) {
       return [];
     }
@@ -68,7 +68,7 @@ export class KnowledgeTreeProvider
       return [{ kind: "note", label: "Open a project to inspect knowledge" }];
     }
 
-    const summary = this.session.knowledgeSummary();
+    const summary = await this.session.knowledgeSummary();
     const nodes: Node[] = [
       {
         kind: "summary",

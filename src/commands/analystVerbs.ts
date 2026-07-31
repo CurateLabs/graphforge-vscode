@@ -53,7 +53,7 @@ async function runVerb(
     return;
   }
 
-  const labels = session.labels();
+  const labels = await session.labels();
   let label: string | undefined;
   if (verb !== "find" && verb !== "paths") {
     label =
@@ -119,7 +119,7 @@ async function runVerb(
   }
 
   try {
-    const result = session.invokeVerb(verb, {
+    const result = await session.invokeVerb(verb, {
       label,
       by,
       query,

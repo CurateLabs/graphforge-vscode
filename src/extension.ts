@@ -3,8 +3,10 @@ import { registerAnalystVerbs } from "./commands/analystVerbs";
 import { registerOpenViews } from "./commands/openViews";
 import { registerRunQuery } from "./commands/runQuery";
 import { registerSetup } from "./commands/setup";
+import { registerSetupPython } from "./commands/setupPython";
 import { GraphForgeSession } from "./session/graphForgeSession";
 import { resetNativeCache } from "./session/nativeLoader";
+import { resetPythonCache } from "./session/pythonLoader";
 import { KnowledgeTreeProvider } from "./views/knowledgeTree";
 import { OntologyTreeProvider } from "./views/ontologyTree";
 import { ProjectExplorerProvider } from "./views/projectExplorer";
@@ -34,11 +36,12 @@ export function activate(context: vscode.ExtensionContext): void {
   registerAnalystVerbs(context, session);
   registerOpenViews(context, session, refreshTrees);
   registerSetup(context, session, refreshTrees);
+  registerSetupPython(context, session);
 
   void projects.refresh();
 
   const autoOpenFirstProject = async () => {
-    if (!session.bindingAvailable || session.project) {
+    if (session.project || !(await session.hasUsableRuntime())) {
       return;
     }
     const found = await session.listProjects();
@@ -52,9 +55,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
-  // Re-resolve the native binding without a window reload after Setup UX
-  // changes `nativeModulePath` (issue #2 acceptance: Run Query becomes
-  // available without a full reload when possible).
+  // Re-resolve the active runtime without a window reload after Setup UX
+  // changes `nativeModulePath` (#2) or `pythonInterpreterPath`/`runtime`
+  // (#12): Run Query becomes available without a full reload when possible.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("graphforge.nativeModulePath")) {
@@ -62,8 +65,45 @@ export function activate(context: vscode.ExtensionContext): void {
         session.notifyChanged();
         void autoOpenFirstProject();
       }
+      if (
+        event.affectsConfiguration("graphforge.pythonInterpreterPath") ||
+        event.affectsConfiguration("graphforge.runtime")
+      ) {
+        resetPythonCache();
+        session.notifyChanged();
+        void autoOpenFirstProject();
+      }
     }),
   );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      resetPythonCache();
+      session.notifyChanged();
+    }),
+  );
+
+  // Best-effort: invalidate the Python probe cache when the user switches
+  // interpreters via the Python extension, so Check Environment / Run Query
+  // reflect the change without waiting out the cache TTL.
+  void (async () => {
+    const pythonExt = vscode.extensions.getExtension("ms-python.python");
+    if (!pythonExt) {
+      return;
+    }
+    try {
+      const api = pythonExt.isActive ? pythonExt.exports : await pythonExt.activate();
+      const disposable = api?.environments?.onDidChangeActiveEnvironmentPath?.(() => {
+        resetPythonCache();
+        session.notifyChanged();
+      });
+      if (disposable) {
+        context.subscriptions.push(disposable);
+      }
+    } catch {
+      // Extension present but API incompatible — cache TTL still applies.
+    }
+  })();
 
   void autoOpenFirstProject();
 }

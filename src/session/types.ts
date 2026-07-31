@@ -343,6 +343,92 @@ export interface GraphForgeModule {
   version?: () => string;
 }
 
+/** Which backend actually services engine calls (#12). */
+export type RuntimeKind = "node" | "python";
+
+/** User-facing preference; `auto` prefers Node, falling back to Python. */
+export type RuntimePreference = "auto" | RuntimeKind;
+
+export type PythonInterpreterSource =
+  | "config"
+  | "python-extension"
+  | "venv"
+  | "conda"
+  | "path";
+
+/** Agent- and human-facing Python environment status (see #12 Check Environment). */
+export interface PythonRuntimeStatus {
+  /** True when the resolved interpreter can `import graphforge`. */
+  available: boolean;
+  interpreter?: string;
+  interpreterSource?: PythonInterpreterSource;
+  /** Provenance detail, e.g. the venv directory that was detected. */
+  interpreterDetail?: string;
+  graphforgeVersion?: string;
+  error?: string;
+}
+
+/**
+ * Runtime-agnostic engine facade (#12). `GraphForgeSession` depends only on
+ * this surface; `NodeEngineBackend` and `PythonEngineBackend` each implement
+ * it over `@graphforge/node` and the Python bridge respectively, so callers
+ * never branch on which runtime is active. Deliberately scoped to the verbs
+ * and reads the current session actually uses — not the full (and still
+ * moving) `GraphForgeNative` surface.
+ */
+export interface EngineBackend {
+  readonly runtime: RuntimeKind;
+  readonly path: string | null;
+  ontologyMode(): Promise<string>;
+  execute(cypher: string, params?: Record<string, unknown>): Promise<Buffer>;
+  rank(
+    label: string,
+    by: string,
+    via?: string | null,
+    directed?: boolean | null,
+    writeProperty?: string | null,
+  ): Promise<Buffer>;
+  cluster(
+    label: string,
+    by: string,
+    via?: string | null,
+    directed?: boolean | null,
+    writeProperty?: string | null,
+    vectorProperty?: string | null,
+  ): Promise<Buffer>;
+  paths(
+    source: unknown,
+    target: unknown,
+    by: string,
+    via?: string | null,
+    directed?: boolean | null,
+    k?: number | null,
+  ): Promise<Buffer>;
+  analyze(
+    label: string | null | undefined,
+    by: string,
+    via?: string | null,
+    directed?: boolean | null,
+  ): Promise<Buffer>;
+  similar(
+    label: string,
+    by: string,
+    k?: number | null,
+    vectorProperty?: string | null,
+    via?: string | null,
+  ): Promise<Buffer>;
+  find(
+    query?: string | null,
+    label?: string | null,
+    limit?: number | null,
+  ): Promise<Buffer>;
+  labels(): Promise<string[]>;
+  relationshipTypes(): Promise<string[]>;
+  loadOntology(path: string): Promise<void>;
+  listAssertions?(request?: unknown): Promise<Buffer>;
+  dispose(): Promise<void>;
+}
+
 export type AnalystVerb = "rank" | "cluster" | "paths" | "analyze" | "similar" | "find";
 
 export const RANK_BY = [

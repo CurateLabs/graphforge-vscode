@@ -96,7 +96,7 @@ async function executeAndShowResult(
   params?: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const result = session.execute(cypher, params);
+    const result = await session.execute(cypher, params);
     const doc = await vscode.workspace.openTextDocument({
       content: formatResultDocument(result),
       language: "json",
