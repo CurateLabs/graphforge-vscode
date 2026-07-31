@@ -23,28 +23,58 @@ export function querySnippet(text: string, max = 80): string {
 }
 
 /**
+ * Structured, agent-copyable failure shape returned by command handlers when
+ * setup is incomplete (see `docs/experience/agent-interop.md` #3: fail
+ * closed with an actionable `nextAction` instead of a bare throw).
+ */
+export interface SetupRecovery {
+  error: string;
+  code?: string;
+  nextAction: string;
+}
+
+/** Human-readable next command an agent (or human) should run to unblock setup. */
+export function nextSetupAction(session: GraphForgeSession): string {
+  return session.bindingAvailable
+    ? 'Run "GraphForge: Open Project" (graphforge.openProject) or "GraphForge: Initialize Project Here" (graphforge.initializeProjectHere).'
+    : 'Run "GraphForge: Setup Native Binding" (graphforge.setupNativeBinding).';
+}
+
+/**
  * Show a setup/project-open failure with a next-step action button instead of
- * a dead-end toast (per #2/#3 UX doctrine: never a vague failure).
+ * a dead-end toast (per #2/#3 UX doctrine: never a vague failure), and return
+ * a structured `SetupRecovery` describing the failure and next action.
+ *
+ * The notification itself is fire-and-forget: callers (including
+ * `vscode.commands.executeCommand` from another extension or a coding agent)
+ * must not block on a human dismissing a dialog, so the returned promise
+ * resolves immediately with the structured recovery info while the
+ * notification and its follow-up command (if any) resolve in the
+ * background.
  */
 export async function offerSetupRecovery(
   session: GraphForgeSession,
   err: unknown,
-): Promise<void> {
+): Promise<SetupRecovery> {
   const code = engineErrorCode(err);
   const message = errorMessage(err);
   const primary = session.bindingAvailable
     ? "Open Project"
     : "Setup Native Binding";
-  const choice = await vscode.window.showErrorMessage(
-    `GraphForge: ${message}${code ? ` [${code}]` : ""}`,
-    primary,
-    "Check Environment",
-  );
-  if (choice === "Setup Native Binding") {
-    await vscode.commands.executeCommand("graphforge.setupNativeBinding");
-  } else if (choice === "Open Project") {
-    await vscode.commands.executeCommand("graphforge.openProject");
-  } else if (choice === "Check Environment") {
-    await vscode.commands.executeCommand("graphforge.checkEnvironment");
-  }
+  void vscode.window
+    .showErrorMessage(
+      `GraphForge: ${message}${code ? ` [${code}]` : ""}`,
+      primary,
+      "Check Environment",
+    )
+    .then((choice) => {
+      if (choice === "Setup Native Binding") {
+        void vscode.commands.executeCommand("graphforge.setupNativeBinding");
+      } else if (choice === "Open Project") {
+        void vscode.commands.executeCommand("graphforge.openProject");
+      } else if (choice === "Check Environment") {
+        void vscode.commands.executeCommand("graphforge.checkEnvironment");
+      }
+    });
+  return { error: message, code, nextAction: nextSetupAction(session) };
 }

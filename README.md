@@ -70,17 +70,21 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 
 ## Commands
 
-- `GraphForge: Check Environment`
+- `GraphForge: Check Environment` (`graphforge.checkEnvironment`) — accepts optional `{ silent: true }` to suppress the toast/opened doc; always returns the `EnvironmentReport` JSON from `executeCommand`
 - `GraphForge: Setup Native Binding`
 - `GraphForge: Initialize Project Here`
-- `GraphForge: Open Project`
-- `GraphForge: Run Query` — selection → whole file → single input box; opens a structured `{ columns, rows, rowCount }` results document and reports row count
-- `GraphForge: Run Query with Parameters…` — Advanced: same input resolution, plus a JSON parameters prompt
-- `GraphForge: Rank` / `Cluster` / `Paths` / `Analyze` / `Similar` / `Find` (each has an `…Advanced…` command for optional/weedy parameters)
+- `GraphForge: Open Project` (`graphforge.openProject`) — accepts an optional folder-path string arg to skip the picker
+- `GraphForge: Run Query` (`graphforge.runQuery`) — selection → whole file → single input box, or pass `{ cypher, params? }` to skip both; opens a structured `{ columns, rows, rowCount }` results document, reports row count, and returns that same object from `executeCommand`
+- `GraphForge: Run Query with Parameters…` (`graphforge.runQueryWithParams`) — Advanced: same input resolution, plus a JSON parameters prompt (or pass `{ cypher, params }` directly)
+- `GraphForge: Rank` / `Cluster` / `Paths` / `Analyze` / `Similar` / `Find` (each has an `…Advanced…` command for optional/weedy parameters) — QuickPick-driven today; each now returns its result JSON (or `{ error }` / `{ cancelled: true }`) from `executeCommand`
 - `GraphForge: Show Ontology Viewer`
 - `GraphForge: Show Result Graph` (+ `Show Result Graph (Advanced)…`)
 - `GraphForge: Show Project Capabilities`
 - `GraphForge: Load Ontology…`
+
+### Coding agent interop
+
+Every command above is a stable ID callable via `vscode.commands.executeCommand("graphforge.<id>", ...)` — no Command Palette click required. See [`docs/experience/agent-interop.md`](./docs/experience/agent-interop.md) for the full command table (args accepted, return shapes, which commands still require a QuickPick), the recommended Check Environment → Setup/Init → Run Query/Rank agent loop, and known gaps. `src/test/extension.test.ts` asserts this contract in CI.
 
 ## License
 

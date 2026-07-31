@@ -2,73 +2,111 @@ import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { QueryResult } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
-import { errorMessage, offerSetupRecovery, querySnippet } from "./shared";
+import {
+  engineErrorCode,
+  errorMessage,
+  offerSetupRecovery,
+  querySnippet,
+  SetupRecovery,
+} from "./shared";
+
+/**
+ * Optional args for `graphforge.runQuery` / `graphforge.runQueryWithParams`
+ * so a coding agent that already has a Cypher string (and optionally bound
+ * parameters) can call `vscode.commands.executeCommand("graphforge.runQuery",
+ * { cypher, params })` and skip the editor-selection / QuickPick / input-box
+ * chain entirely. Human palette-first UX is unchanged when no args (or a
+ * blank `cypher`) are supplied.
+ */
+export interface RunQueryArgs {
+  cypher?: string;
+  params?: Record<string, unknown>;
+}
+
+type RunQueryOutcome = SetupRecovery | QueryResult | { error: string; code?: string };
 
 export function registerRunQuery(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("graphforge.runQuery", async () => {
-      if (!(await ensureProjectOrRecover(session))) {
-        return;
-      }
+    vscode.commands.registerCommand(
+      "graphforge.runQuery",
+      async (args?: RunQueryArgs): Promise<RunQueryOutcome | undefined> => {
+        const recovery = await ensureProjectOrRecover(session);
+        if (recovery) {
+          return recovery;
+        }
 
-      const cypher = await resolveCypherInput("GraphForge: Run Query");
-      if (!cypher?.trim()) {
-        return;
-      }
+        const cypher =
+          args?.cypher?.trim() || (await resolveCypherInput("GraphForge: Run Query"));
+        if (!cypher?.trim()) {
+          return { error: "No Cypher query provided." };
+        }
 
-      await executeAndShowResult(context, session, cypher);
-    }),
+        return executeAndShowResult(context, session, cypher, args?.params);
+      },
+    ),
 
     // Advanced (issue #3): parameters live here, not in the primary flow.
-    vscode.commands.registerCommand("graphforge.runQueryWithParams", async () => {
-      if (!(await ensureProjectOrRecover(session))) {
-        return;
-      }
-
-      const cypher = await resolveCypherInput("GraphForge: Run Query with Parameters…");
-      if (!cypher?.trim()) {
-        return;
-      }
-
-      const paramsRaw = await vscode.window.showInputBox({
-        title: "GraphForge: Run Query with Parameters…",
-        prompt: "Parameters as a JSON object",
-        placeHolder: '{"min": 28}',
-        value: "{}",
-      });
-      if (paramsRaw === undefined) {
-        return;
-      }
-
-      let params: Record<string, unknown>;
-      try {
-        const parsed = paramsRaw.trim() ? JSON.parse(paramsRaw) : {};
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-          throw new Error("parameters must be a JSON object");
+    // Accepts the same `{ cypher, params }` args as `runQuery` so an agent
+    // can pass bound parameters directly instead of the JSON input box.
+    vscode.commands.registerCommand(
+      "graphforge.runQueryWithParams",
+      async (args?: RunQueryArgs): Promise<RunQueryOutcome | undefined> => {
+        const recovery = await ensureProjectOrRecover(session);
+        if (recovery) {
+          return recovery;
         }
-        params = parsed as Record<string, unknown>;
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          `GraphForge: invalid parameters JSON — ${errorMessage(err)}`,
-        );
-        return;
-      }
 
-      await executeAndShowResult(context, session, cypher, params);
-    }),
+        const cypher =
+          args?.cypher?.trim() ||
+          (await resolveCypherInput("GraphForge: Run Query with Parameters…"));
+        if (!cypher?.trim()) {
+          return { error: "No Cypher query provided." };
+        }
+
+        let params: Record<string, unknown>;
+        if (args?.params) {
+          params = args.params;
+        } else {
+          const paramsRaw = await vscode.window.showInputBox({
+            title: "GraphForge: Run Query with Parameters…",
+            prompt: "Parameters as a JSON object",
+            placeHolder: '{"min": 28}',
+            value: "{}",
+          });
+          if (paramsRaw === undefined) {
+            return { error: "No parameters provided." };
+          }
+
+          try {
+            const parsed = paramsRaw.trim() ? JSON.parse(paramsRaw) : {};
+            if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+              throw new Error("parameters must be a JSON object");
+            }
+            params = parsed as Record<string, unknown>;
+          } catch (err) {
+            const message = `invalid parameters JSON — ${errorMessage(err)}`;
+            void vscode.window.showErrorMessage(`GraphForge: ${message}`);
+            return { error: message };
+          }
+        }
+
+        return executeAndShowResult(context, session, cypher, params);
+      },
+    ),
   );
 }
 
-async function ensureProjectOrRecover(session: GraphForgeSession): Promise<boolean> {
+async function ensureProjectOrRecover(
+  session: GraphForgeSession,
+): Promise<SetupRecovery | undefined> {
   try {
     await session.ensureProject();
-    return true;
+    return undefined;
   } catch (err) {
-    await offerSetupRecovery(session, err);
-    return false;
+    return offerSetupRecovery(session, err);
   }
 }
 
@@ -94,7 +132,7 @@ async function executeAndShowResult(
   session: GraphForgeSession,
   cypher: string,
   params?: Record<string, unknown>,
-): Promise<void> {
+): Promise<QueryResult | { error: string; code?: string }> {
   try {
     const result = session.execute(cypher, params);
     const doc = await vscode.workspace.openTextDocument({
@@ -115,10 +153,13 @@ async function executeAndShowResult(
     }
 
     void vscode.window.showInformationMessage(`GraphForge: ${result.rowCount} row(s)`);
+    return result;
   } catch (err) {
+    const message = errorMessage(err);
     void vscode.window.showErrorMessage(
-      `GraphForge query failed: ${errorMessage(err)} — query: ${querySnippet(cypher)}`,
+      `GraphForge query failed: ${message} — query: ${querySnippet(cypher)}`,
     );
+    return { error: message, code: engineErrorCode(err) };
   }
 }
 

@@ -80,4 +80,4 @@ and give each a stable, descriptive lowercase-kebab-case filename. -->
 
 | Document | Kind | Status | What it informs |
 |---|---|---|---|
-| _filename.md_ | _Opportunity / journey / study / product slice_ | _Active / validated / retired_ | _Requirement, decision, or open question_ |
+| [agent-interop.md](./agent-interop.md) | Agent experience / product slice | Active | Stable `graphforge.*` command IDs, structured output shapes, and the Check Environment → Setup/Init → Run Query/Rank loop a coding agent should follow; gaps for #4 verb-args follow-up |
