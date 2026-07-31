@@ -157,7 +157,9 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 - **Error handling:** Fail closed on missing binding or invalid FORMAT; `showErrorMessage`. When
   no runtime is usable, the message and recovery actions cover **both** Setup commands (#12).
 - **Configuration:** `graphforge.nativeModulePath`, `graphforge.openResultGraphOnQuery`,
-  `graphforge.runtime`, `graphforge.pythonInterpreterPath`.
+  `graphforge.runtime`, `graphforge.pythonInterpreterPath`, `graphforge.experienceMode`
+  (`guided` | `autonomous`, default `guided` — set from the Get Started Welcome screen; see
+  `docs/DESIGN.md` "Welcome + experience modes").
 - **Package manager policy:** Python package installs use **`uv` only, never `pip`** —
   `GraphForge: Setup Python Binding`'s install choice runs `uv add graphforge` in a uv-managed
   project (`pyproject.toml`/`uv.lock` present) or `uv pip install --python <interpreter>

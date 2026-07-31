@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as vscode from "vscode";
+import { defaultsForExperienceMode, resolveExperienceMode } from "../session/experienceMode";
 import {
   EnvironmentReport,
   computeNextAction,
@@ -241,12 +242,17 @@ async function runInitializeProjectHere(
       return;
     }
   } else {
-    const confirm = await vscode.window.showInformationMessage(
-      `Initialize a new GraphForge project in ${rootPath}?`,
-      "Initialize",
+    const mode = resolveExperienceMode(
+      vscode.workspace.getConfiguration("graphforge").get("experienceMode"),
     );
-    if (!confirm) {
-      return;
+    if (defaultsForExperienceMode(mode).confirmBeforeInitialize) {
+      const confirm = await vscode.window.showInformationMessage(
+        `Initialize a new GraphForge project in ${rootPath}?`,
+        "Initialize",
+      );
+      if (!confirm) {
+        return;
+      }
     }
   }
 

@@ -10,6 +10,7 @@ import { registerPower } from "./commands/power";
 import { registerRunQuery } from "./commands/runQuery";
 import { registerSetup } from "./commands/setup";
 import { registerSetupPython } from "./commands/setupPython";
+import { defaultsForExperienceMode, resolveExperienceMode } from "./session/experienceMode";
 import { GraphForgeSession } from "./session/graphForgeSession";
 import { resetNativeCache } from "./session/nativeLoader";
 import { resetPythonCache } from "./session/pythonLoader";
@@ -59,6 +60,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const autoOpenFirstProject = async () => {
     if (session.project || !(await session.hasUsableRuntime())) {
+      return;
+    }
+    // Guided (the default) leaves project selection to the analyst — Get
+    // Started still surfaces "Open Project" as the next step. Autonomous
+    // mode auto-detects, matching the Welcome card's promise.
+    const mode = resolveExperienceMode(
+      vscode.workspace.getConfiguration("graphforge").get("experienceMode"),
+    );
+    if (!defaultsForExperienceMode(mode).autoOpenDetectedProject) {
       return;
     }
     const found = await session.listProjects();

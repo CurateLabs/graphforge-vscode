@@ -1,8 +1,15 @@
 import * as vscode from "vscode";
+import {
+  defaultsForExperienceMode,
+  EXPERIENCE_MODE_CARDS,
+  resolveExperienceMode,
+  type ExperienceMode,
+} from "../session/experienceMode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { HostToWebview, WebviewToHost } from "../webview/protocol";
 
 export type GetStartedStepStatus = "pending" | "done" | "current";
+export type GetStartedScreen = "welcome" | "checklist";
 
 export interface GetStartedStep {
   id: string;
@@ -14,9 +21,11 @@ export interface GetStartedStep {
 }
 
 export interface GetStartedState {
+  screen: GetStartedScreen;
   headline: string;
   subhead: string;
   steps: GetStartedStep[];
+  mode: ExperienceMode;
 }
 
 /** Focus the GraphForge activity bar and refresh Get Started state. */
@@ -26,10 +35,28 @@ export async function revealGetStarted(provider: GetStartedViewProvider): Promis
   await provider.refresh();
 }
 
+/** Has the user ever completed (or skipped) the Welcome mode picker? */
+function experienceModeChosen(): boolean {
+  const inspected = vscode.workspace.getConfiguration("graphforge").inspect("experienceMode");
+  return Boolean(
+    inspected?.globalValue !== undefined ||
+      inspected?.workspaceValue !== undefined ||
+      inspected?.workspaceFolderValue !== undefined,
+  );
+}
+
+function currentExperienceMode(): ExperienceMode {
+  return resolveExperienceMode(
+    vscode.workspace.getConfiguration("graphforge").get("experienceMode"),
+  );
+}
+
 export class GetStartedViewProvider implements vscode.WebviewViewProvider {
   static instance: GetStartedViewProvider | undefined;
 
   private view: vscode.WebviewView | undefined;
+  /** Set by "Change mode" to re-show Welcome without waiting for a reload. */
+  private forceWelcome = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -57,16 +84,40 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
         void this.refresh();
       } else if (msg.type === "graphforge/runCommand" && msg.command) {
         void vscode.commands.executeCommand(msg.command);
+      } else if (msg.type === "graphforge/selectExperienceMode") {
+        void this.completeWelcome(msg.mode);
       }
     });
     void this.refresh();
+  }
+
+  /** Re-show the Welcome mode picker (e.g. from the checklist's "Change mode" link). */
+  showWelcome(): void {
+    this.forceWelcome = true;
+    void this.refresh();
+  }
+
+  private async completeWelcome(mode: ExperienceMode): Promise<void> {
+    const config = vscode.workspace.getConfiguration("graphforge");
+    const defaults = defaultsForExperienceMode(mode);
+    await config.update("experienceMode", mode, vscode.ConfigurationTarget.Global);
+    await config.update(
+      "openResultGraphOnQuery",
+      defaults.openResultGraphOnQuery,
+      vscode.ConfigurationTarget.Global,
+    );
+    this.forceWelcome = false;
+    this.session.notifyChanged();
+    await this.refresh();
   }
 
   async refresh(): Promise<void> {
     if (!this.view) {
       return;
     }
-    const state = await buildGetStartedState(this.session);
+    const screen: GetStartedScreen =
+      this.forceWelcome || !experienceModeChosen() ? "welcome" : "checklist";
+    const state = await buildGetStartedState(this.session, screen);
     const msg: HostToWebview = { type: "graphforge/getStarted", state };
     void this.view.webview.postMessage(msg);
   }
@@ -81,6 +132,7 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
       `style-src ${webview.cspSource} 'unsafe-inline'`,
       `script-src ${webview.cspSource} 'unsafe-inline'`,
     ].join("; ");
+    const cardsJson = JSON.stringify(EXPERIENCE_MODE_CARDS);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -106,6 +158,40 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
     .subhead {
       font-size: 12px; line-height: 1.45;
       color: var(--vscode-descriptionForeground); margin: 0;
+    }
+    .banner {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+      border-radius: 8px; padding: 8px 10px; margin-bottom: 14px;
+      background: color-mix(in srgb, var(--gf-accent) 12%, var(--vscode-editor-background));
+      font-size: 11px;
+    }
+    .banner .mode-label { font-weight: 600; }
+    .banner button.link { padding: 0; font-size: 11px; }
+    .cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+    .card {
+      border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+      border-radius: 10px; padding: 12px; cursor: pointer;
+      background: var(--vscode-editor-background);
+      text-align: left;
+    }
+    .card.selected {
+      border-color: var(--gf-accent);
+      box-shadow: 0 0 0 1px var(--gf-accent) inset;
+    }
+    .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .radio {
+      flex-shrink: 0; width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid var(--vscode-panel-border, rgba(128,128,128,0.6));
+    }
+    .card.selected .radio { border-color: var(--gf-accent); background: var(--gf-accent); }
+    .card-title { font-size: 13px; font-weight: 600; margin: 0; }
+    .card-tagline {
+      font-size: 11px; color: var(--vscode-descriptionForeground); margin: 0 0 8px;
+    }
+    .card ul { margin: 0; padding-left: 18px; }
+    .card li {
+      font-size: 11px; line-height: 1.5; color: var(--vscode-descriptionForeground);
     }
     .step {
       border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
@@ -145,6 +231,7 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-button-foreground);
     }
     button.primary:hover { background: var(--vscode-button-hoverBackground); }
+    button.primary.full { width: 100%; padding: 8px 10px; font-weight: 600; }
     button.secondary {
       background: var(--vscode-button-secondaryBackground, transparent);
       color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
@@ -165,21 +252,62 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
     <h1 id="headline">Get started with GraphForge</h1>
     <p class="subhead" id="subhead"></p>
   </div>
+  <div id="banner"></div>
+  <div id="cards"></div>
+  <div id="continue"></div>
   <div id="steps"></div>
   <div class="footer">
     <button class="link" id="refresh">Check Environment</button>
   </div>
   <script>
     const vscode = acquireVsCodeApi();
+    const CARDS = ${cardsJson};
+    let selectedMode = 'guided';
+
     document.getElementById('refresh').addEventListener('click', () =>
       vscode.postMessage({ type: 'graphforge/runCommand', command: 'graphforge.checkEnvironment' })
     );
 
-    function render(state) {
-      document.getElementById('headline').textContent = state.headline;
-      document.getElementById('subhead').textContent = state.subhead;
+    function renderBanner(mode) {
+      const bannerEl = document.getElementById('banner');
+      bannerEl.innerHTML =
+        '<div class="banner">' +
+          '<span><span class="mode-label">' + (mode === 'autonomous' ? 'Autonomous' : 'Guided') + '</span> mode</span>' +
+          '<button class="link" id="change-mode">Change mode</button>' +
+        '</div>';
+      document.getElementById('change-mode').addEventListener('click', () =>
+        vscode.postMessage({ type: 'graphforge/runCommand', command: 'graphforge.chooseExperienceMode' })
+      );
+    }
+
+    function renderCards(mode) {
+      selectedMode = mode;
+      const cardsEl = document.getElementById('cards');
+      cardsEl.innerHTML = CARDS.map((card) =>
+        '<div class="card' + (card.mode === selectedMode ? ' selected' : '') + '" data-mode="' + card.mode + '">' +
+          '<div class="card-head"><div class="radio"></div><p class="card-title">' + card.title + '</p></div>' +
+          '<p class="card-tagline">' + card.tagline + '</p>' +
+          '<ul>' + card.bullets.map((b) => '<li>' + b + '</li>').join('') + '</ul>' +
+        '</div>'
+      ).join('');
+      cardsEl.querySelectorAll('.card').forEach((el) => {
+        el.addEventListener('click', () => {
+          selectedMode = el.getAttribute('data-mode');
+          cardsEl.querySelectorAll('.card').forEach((c) =>
+            c.classList.toggle('selected', c.getAttribute('data-mode') === selectedMode)
+          );
+        });
+      });
+      document.getElementById('continue').innerHTML =
+        '<button class="primary full" id="continue-btn">Continue</button>';
+      document.getElementById('continue-btn').addEventListener('click', () =>
+        vscode.postMessage({ type: 'graphforge/selectExperienceMode', mode: selectedMode })
+      );
+    }
+
+    function renderSteps(steps) {
       const stepsEl = document.getElementById('steps');
-      stepsEl.innerHTML = state.steps.map((step, i) => {
+      stepsEl.innerHTML = steps.map((step, i) => {
         const actions = [];
         if (step.primaryAction) {
           actions.push('<button class="primary" data-cmd="' + step.primaryAction.command + '">' +
@@ -205,6 +333,22 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
       });
     }
 
+    function render(state) {
+      document.getElementById('headline').textContent = state.headline;
+      document.getElementById('subhead').textContent = state.subhead;
+      const isWelcome = state.screen === 'welcome';
+      document.getElementById('banner').style.display = isWelcome ? 'none' : '';
+      document.getElementById('cards').style.display = isWelcome ? '' : 'none';
+      document.getElementById('continue').style.display = isWelcome ? '' : 'none';
+      document.getElementById('steps').style.display = isWelcome ? 'none' : '';
+      if (isWelcome) {
+        renderCards(state.mode);
+      } else {
+        renderBanner(state.mode);
+        renderSteps(state.steps);
+      }
+    }
+
     window.addEventListener('message', (event) => {
       const msg = event.data;
       if (msg && msg.type === 'graphforge/getStarted') render(msg.state);
@@ -216,7 +360,22 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
   }
 }
 
-export async function buildGetStartedState(session: GraphForgeSession): Promise<GetStartedState> {
+export async function buildGetStartedState(
+  session: GraphForgeSession,
+  screen: GetStartedScreen = "checklist",
+): Promise<GetStartedState> {
+  const mode = currentExperienceMode();
+
+  if (screen === "welcome") {
+    return {
+      screen,
+      headline: "Welcome to GraphForge",
+      subhead: "Choose how you want to work. You can change this anytime from Get Started.",
+      steps: [],
+      mode,
+    };
+  }
+
   const snapshot = await session.environmentSnapshot();
   const project = session.project;
   const runtimeReady = await session.hasUsableRuntime();
@@ -289,8 +448,10 @@ export async function buildGetStartedState(session: GraphForgeSession): Promise<
   }
 
   return {
+    screen,
     headline,
     subhead,
     steps: [runtimeStep, projectStep, queryStep],
+    mode,
   };
 }

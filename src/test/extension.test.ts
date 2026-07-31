@@ -22,6 +22,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.runQueryWithParams",
   "graphforge.checkEnvironment",
   "graphforge.getStarted",
+  "graphforge.chooseExperienceMode",
   "graphforge.setupNativeBinding",
   "graphforge.setupPythonBinding",
   "graphforge.initializeProjectHere",
@@ -186,6 +187,12 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
   test("getStarted does not throw when no runtime is available", async () => {
     await assert.doesNotReject(
       Promise.resolve(vscode.commands.executeCommand("graphforge.getStarted")),
+    );
+  });
+
+  test("chooseExperienceMode does not throw and does not prompt", async () => {
+    await assert.doesNotReject(
+      Promise.resolve(vscode.commands.executeCommand("graphforge.chooseExperienceMode")),
     );
   });
 

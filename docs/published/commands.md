@@ -15,6 +15,8 @@ Every command below is a stable ID, invokable from the Command Palette or progra
 | GraphForge: Initialize Project Here | `graphforge.initializeProjectHere` | Creates a new GraphForge project in an empty/uninitialized folder. |
 | GraphForge: Open Project | `graphforge.openProject` | Opens an existing `FORMAT`-marked project; accepts an optional path string arg. |
 | GraphForge: Refresh Explorer | `graphforge.refreshExplorer` | Refreshes the Projects Activity Bar view. |
+| GraphForge: Get Started | `graphforge.getStarted` | Opens the Get Started sidebar (Welcome mode picker on first use, then the runtime → project → query checklist). |
+| GraphForge: Choose Experience Mode… | `graphforge.chooseExperienceMode` | Reopens the Welcome mode picker (Guided/Autonomous) inside Get Started. |
 
 ## Cypher
 
