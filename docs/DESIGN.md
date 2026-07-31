@@ -21,6 +21,36 @@ First-run, missing-runtime, and no-project states share one **Get Started** side
 
 Emulate Kilo Code’s **interaction patterns** (guided sidebar, cards, one primary CTA per step), not their brand colors — GraphForge keeps indigo accent (`#4c6ef5`) and the existing activity-bar icon.
 
+## Welcome + experience modes (phase 2)
+
+Kilo's "Choose how you want to work" step (REVIEW FIRST vs. HIGH AUTONOMY) maps
+onto GraphForge's own vocabulary, not agent-autonomy language:
+
+- **Guided** (default) — confirms before Initialize on an empty folder, leaves
+  project auto-detection to the analyst, and keeps Result Graph closed until
+  asked. This is the checklist experience that already existed.
+- **Autonomous** — auto-opens the first detected project on activation, skips
+  the Initialize confirmation for empty folders, and opens Result Graph after
+  every query. Still fails closed on destructive operations (non-empty-folder
+  init still confirms; the engine's write-mode/ontology-strictness guards are
+  unaffected).
+
+Persisted as `graphforge.experienceMode` (`guided` | `autonomous`, default
+`guided`). The Get Started webview gains a **Welcome** screen — logo, one
+sentence, two selectable mode cards, a single primary **Continue** — shown
+before the existing runtime → project → query checklist the first time a
+workspace opens the panel (detected via whether the setting has ever been
+written, not a separate flag). "Change mode" in the checklist banner reopens
+Welcome at any time; Continue re-applies the mode's settings. Status bar
+clicks and `offerSetupRecovery` still land on this same panel (Kilo's
+"Get Started / Next" promo-banner role is filled by the status bar + this
+sidebar — GraphForge has no editor-level banner surface yet).
+
+A full **Settings** webview with left-nav categories (Kilo pattern #3) is out
+of scope for this phase — tracked as a follow-up issue rather than a stub UI,
+since `graphforge.experienceMode` and existing settings are already reachable
+via VS Code Settings UI / `graphforge.*` search.
+
 ## Visual notes
 
 - Activity Bar icon: simple node/edge mark (`media/graphforge.svg`).

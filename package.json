@@ -88,6 +88,10 @@
         "icon": "$(rocket)"
       },
       {
+        "command": "graphforge.chooseExperienceMode",
+        "title": "GraphForge: Choose Experience Mode…"
+      },
+      {
         "command": "graphforge.checkEnvironment",
         "title": "GraphForge: Check Environment"
       },
@@ -406,6 +410,19 @@
           "type": "string",
           "default": "",
           "description": "Optional absolute path to a Python interpreter with `graphforge` installed. Leave empty to auto-detect (VS Code Python extension selection, workspace .venv/venv/env, then python3/python on PATH)."
+        },
+        "graphforge.experienceMode": {
+          "type": "string",
+          "enum": [
+            "guided",
+            "autonomous"
+          ],
+          "enumDescriptions": [
+            "Confirms before Initialize; quieter auto-run; Result Graph stays closed until opened.",
+            "Auto-opens detected projects and the Result Graph after queries; skips routine confirmations. Still fails closed on destructive operations."
+          ],
+          "default": "guided",
+          "description": "How much GraphForge confirms with you vs. acts on its own. Set from the Welcome step in Get Started, or here."
         }
       }
     }
@@ -417,7 +434,7 @@
     "check": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js",
     "package": "vsce package"
   },
   "dependencies": {

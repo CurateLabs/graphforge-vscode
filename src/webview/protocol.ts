@@ -1,3 +1,4 @@
+import type { ExperienceMode } from "../session/experienceMode";
 import type {
   EpistemicStatus,
   GraphPayload,
@@ -24,7 +25,8 @@ export type WebviewToHost =
   | { type: "graphforge/requestReload" }
   | { type: "graphforge/explainMode" }
   | { type: "graphforge/openOntologyFile" }
-  | { type: "graphforge/runCommand"; command: string };
+  | { type: "graphforge/runCommand"; command: string }
+  | { type: "graphforge/selectExperienceMode"; mode: ExperienceMode };
 
 /** Extension-owned palette (product has no official colors). */
 export const EPISTEMIC_COLORS: Record<EpistemicStatus, string> = {
