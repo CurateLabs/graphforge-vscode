@@ -22,6 +22,22 @@ export function querySnippet(text: string, max = 80): string {
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
 }
 
+/**
+ * One-line toast copy for setup recovery. Full diagnostics belong in Check
+ * Environment (JSON) or the status-bar tooltip — not in `showErrorMessage`.
+ */
+export function recoveryToastMessage(err: unknown, max = 120): string {
+  const message = errorMessage(err);
+  if (message.startsWith("No usable GraphForge runtime")) {
+    return "No usable GraphForge runtime.";
+  }
+  if (message.includes("Cannot find module") || message.includes("Require stack:")) {
+    return "No usable GraphForge runtime.";
+  }
+  const oneLine = message.split(/\r?\n/)[0]?.trim() ?? message;
+  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
+}
+
 /** Short labels for `showErrorMessage` action buttons (toast space is tight). */
 export const RECOVERY_SETUP_NATIVE = "Setup Native (Node)";
 export const RECOVERY_SETUP_PYTHON = "Setup Python";
@@ -66,6 +82,7 @@ export async function offerSetupRecovery(
 ): Promise<SetupRecovery> {
   const code = engineErrorCode(err);
   const message = errorMessage(err);
+  const toast = recoveryToastMessage(err);
   const hasRuntime = await session.hasUsableRuntime();
   const primary = hasRuntime ? RECOVERY_OPEN_PROJECT : RECOVERY_SETUP_NATIVE;
   const buttons = hasRuntime
@@ -77,7 +94,7 @@ export async function offerSetupRecovery(
   // while the notification and its follow-up command (if any) resolve in
   // the background.
   void vscode.window
-    .showErrorMessage(`GraphForge: ${message}${code ? ` [${code}]` : ""}`, ...buttons)
+    .showErrorMessage(`GraphForge: ${toast}${code ? ` [${code}]` : ""}`, ...buttons)
     .then((choice) => {
       if (choice === RECOVERY_SETUP_NATIVE) {
         void vscode.commands.executeCommand("graphforge.setupNativeBinding");

@@ -61,6 +61,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.showOntology",
   "graphforge.showResultGraph",
   "graphforge.showResultGraphAdvanced",
+  "graphforge.statusBarClick",
   "graphforge.showCapabilities",
   "graphforge.loadOntology",
   "graphforge.openOntologyFile",
@@ -178,6 +179,14 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     // immediately instead of opening the capabilities document.
     await assert.doesNotReject(
       Promise.resolve(vscode.commands.executeCommand("graphforge.showCapabilities")),
+    );
+  });
+
+  test("statusBarClick does not throw when no runtime is available", async () => {
+    // Routes through offerSetupRecovery with a short toast — no ensureProject()
+    // attempt that would dump binding stack traces into the notification body.
+    await assert.doesNotReject(
+      Promise.resolve(vscode.commands.executeCommand("graphforge.statusBarClick")),
     );
   });
 });
