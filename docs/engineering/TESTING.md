@@ -58,8 +58,27 @@ Requires `@vscode/test-electron` ≥ 3.1.0 on macOS (VS Code 1.110+ ships `Code`
   classification logic it delegates to (`detectProjectKind`, `isNotebookDominant` in
   `projectKind.ts`) has full unit coverage instead
 
-## CI recommendation
+## CI
 
-Run `npm run check && npm run compile && npm run test:unit && npm test` on PRs once a headless
-VS Code test job is wired. `test:unit` needs no Python or Electron and should gate every PR;
-`test` (Extension Development Host) additionally proves command registration.
+`.github/workflows/ci.yml` runs on every PR and on push to `main`, on Blacksmith
+(`blacksmith-4vcpu-ubuntu-2404`) runners, matching the runner convention used across the
+CurateLabs/GraphForge repos:
+
+| Job | Steps | Gate |
+|---|---|---|
+| `build` | `npm ci` → `npm run check` → `npm run compile` → `npm run test:unit` | Required. No Python or Electron needed; this is the fast, deterministic gate. |
+| `vscode-test` | `npm ci` → `npm run compile` → `xvfb-run -a npm test` (Extension Development Host under Xvfb) | Non-blocking (`continue-on-error: true`) for now — downloading/launching real VS Code is more environment-sensitive than the unit suite. Promote to required once it's proven stable across several CI runs. |
+| `package` | `npm ci` → `npm run compile` → `npx vsce package --no-dependencies` | Required. Proves the extension still packages; uploads the `.vsix` as a build artifact (not published — see `PUBLISHING.md`). |
+
+The `pythonProbe.test.ts` "graphforge is importable" case only runs when a sibling
+`../graphforge/.venv` dev venv exists, so it's automatically skipped (not failed) in CI,
+per the notes above.
+
+To reproduce CI locally:
+
+```bash
+npm ci
+npm run check && npm run compile && npm run test:unit
+xvfb-run -a npm test   # Linux only; on macOS/Windows just `npm test`
+npx vsce package --no-dependencies
+```
