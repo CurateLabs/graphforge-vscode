@@ -32,7 +32,7 @@ suite("computeNextAction", () => {
 suite("formatSummaryLines", () => {
   test("produces exactly 3 lines: runtime, project, next", () => {
     const lines = formatSummaryLines({
-      runtime: { preference: "auto", active: "node" },
+      runtime: { preference: "auto", active: "node", projectKind: "ambiguous" },
       nodeBinding: { available: true },
       python: { available: false, error: "no interpreter" },
       project: { open: true, path: "/tmp/proj", name: "proj" },
@@ -47,7 +47,7 @@ suite("formatSummaryLines", () => {
 
   test("surfaces Python availability and version when active", () => {
     const lines = formatSummaryLines({
-      runtime: { preference: "python", active: "python" },
+      runtime: { preference: "python", active: "python", projectKind: "python" },
       nodeBinding: { available: false, error: "no candidates" },
       python: { available: true, interpreter: "/usr/bin/python3", graphforgeVersion: "0.5.0-dev" },
       project: { open: false },
@@ -61,7 +61,7 @@ suite("formatSummaryLines", () => {
 
   test("shows active runtime as none when neither runtime is usable", () => {
     const lines = formatSummaryLines({
-      runtime: { preference: "auto", active: "none" },
+      runtime: { preference: "auto", active: "none", projectKind: "ambiguous" },
       nodeBinding: { available: false, error: "no candidates" },
       python: { available: false, error: "no interpreter" },
       project: { open: false },

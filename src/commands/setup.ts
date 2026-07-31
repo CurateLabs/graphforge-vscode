@@ -57,6 +57,7 @@ export async function buildEnvironmentReport(session: GraphForgeSession): Promis
     runtime: {
       preference: snapshot.preference,
       active,
+      projectKind: snapshot.projectKind,
     },
     nodeBinding: {
       available: snapshot.node.available,
