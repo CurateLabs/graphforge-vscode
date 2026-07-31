@@ -12,8 +12,8 @@ Publisher: **CurateLabs** (`CurateLabs.graphforge`).
 | **Cypher** | `.cypher` / `.cql` language id + TextMate highlighting + **Run Query** (+ Advanced: Run Query with Parameters…) |
 | **Analyst verbs** | Rank, Cluster, Paths, Analyze, Similar, Find (QuickPick → engine; each has an Advanced… variant for optional params) |
 | **Projects** | Activity-bar explorer for folders with a valid `FORMAT` marker |
-| **Ontology** | Mode + entity/relation tree; Ontology Viewer webview |
-| **Knowledge** | Ledger summary + hooks for epistemic status |
+| **Ontology** | Mode badge + entity/relation tree; Ontology Viewer webview with a helpful exploratory empty state, **Load Ontology…**, and an Advanced section (open `ontology.json`, explain mode) |
+| **Knowledge** | Inspect and create assertions: list/empty states, **Create Assertion…** (minimal fields), **Show Assertion** / **Show on Graph**, plus Advanced attach-evidence / assess-confidence / record-status commands |
 | **Result Graph** | Webview shell: nodes/edges styled by class + epistemic status |
 
 ## Develop
@@ -81,6 +81,15 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 - `GraphForge: Show Result Graph` (+ `Show Result Graph (Advanced)…`)
 - `GraphForge: Show Project Capabilities`
 - `GraphForge: Load Ontology…`
+- `GraphForge: Open ontology.json` / `Explain Ontology Mode`
+- `GraphForge: List Assertions` / `Create Assertion…` / `Show Assertion…` / `Show Assertion on Graph…`
+- `GraphForge: Attach Evidence…` / `Assess Confidence…` / `Record Assertion Status…` (Advanced)
+
+## Knowledge ledger notes
+
+- Identity UUIDs for assertions/evidence/confidence/status events must be UUIDv7 (engine-enforced); the extension mints them client-side (`src/session/uuid.ts`). Operation/idempotency UUIDs accept any version.
+- Every knowledge-ledger native method (`listAssertions`, `createAssertion`, …) is optional on the `@graphforge/node` binding and feature-detected at call time — the sibling engine API is still moving and may change sync/async return shape or method names.
+- `Record Assertion Status…` requires an existing `provenanceUuid`; until there's a provenance picker, paste one in directly.
 
 ## License
 

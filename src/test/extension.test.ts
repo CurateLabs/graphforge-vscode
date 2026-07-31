@@ -19,6 +19,16 @@ suite("GraphForge extension", () => {
       "graphforge.checkEnvironment",
       "graphforge.setupNativeBinding",
       "graphforge.initializeProjectHere",
+      "graphforge.loadOntology",
+      "graphforge.openOntologyFile",
+      "graphforge.explainOntologyMode",
+      "graphforge.listAssertions",
+      "graphforge.createAssertion",
+      "graphforge.showAssertion",
+      "graphforge.showAssertionOnGraph",
+      "graphforge.attachEvidence",
+      "graphforge.assessConfidence",
+      "graphforge.recordAssertionStatus",
     ]) {
       assert.ok(commands.includes(id), `missing command ${id}`);
     }

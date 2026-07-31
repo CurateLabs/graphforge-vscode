@@ -19,7 +19,9 @@ export type WebviewToHost =
   | { type: "graphforge/ready" }
   | { type: "graphforge/selectNode"; id: string }
   | { type: "graphforge/selectEdge"; id: string }
-  | { type: "graphforge/requestReload" };
+  | { type: "graphforge/requestReload" }
+  | { type: "graphforge/explainMode" }
+  | { type: "graphforge/openOntologyFile" };
 
 /** Extension-owned palette (product has no official colors). */
 export const EPISTEMIC_COLORS: Record<EpistemicStatus, string> = {
