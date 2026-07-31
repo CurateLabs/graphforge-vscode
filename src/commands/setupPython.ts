@@ -4,6 +4,10 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { collectPythonCandidates, resetPythonCache, resolvePythonRuntime } from "../session/pythonLoader";
+import {
+  describeUvInstallCommand as describeUvInstallCommandPure,
+  uvInstallCommand as uvInstallCommandPure,
+} from "../session/pythonInstallCommand";
 
 const UV_INSTALL_DOCS_URL = "https://docs.astral.sh/uv/getting-started/installation/";
 
@@ -140,17 +144,11 @@ async function runUvInstall(interpreterPath: string | undefined): Promise<void> 
 
 /** Human-facing label for the install QuickPick choice, before we know if `uv` is even installed. */
 function describeUvInstallCommand(): string {
-  return workspaceLooksLikeUvProject() ? "uv add graphforge" : "uv pip install graphforge";
+  return describeUvInstallCommandPure(workspaceLooksLikeUvProject());
 }
 
 function uvInstallCommand(interpreterPath: string | undefined): string | undefined {
-  if (workspaceLooksLikeUvProject()) {
-    return "uv add graphforge";
-  }
-  if (!interpreterPath) {
-    return undefined;
-  }
-  return `uv pip install --python "${interpreterPath}" graphforge`;
+  return uvInstallCommandPure(workspaceLooksLikeUvProject(), interpreterPath);
 }
 
 /** `pyproject.toml` or `uv.lock` at the workspace root — a real uv-managed project, not just a stray script. */
