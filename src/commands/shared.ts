@@ -22,6 +22,13 @@ export function querySnippet(text: string, max = 80): string {
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
 }
 
+/** Short labels for `showErrorMessage` action buttons (toast space is tight). */
+export const RECOVERY_SETUP_NATIVE = "Setup Native (Node)";
+export const RECOVERY_SETUP_PYTHON = "Setup Python";
+export const RECOVERY_OPEN_PROJECT = "Open Project";
+export const RECOVERY_INIT_PROJECT = "Initialize";
+export const RECOVERY_CHECK_ENV = "$(refresh)";
+
 /**
  * Structured, agent-copyable failure shape returned by command handlers when
  * setup is incomplete (see `docs/experience/agent-interop.md` #3: fail
@@ -60,10 +67,10 @@ export async function offerSetupRecovery(
   const code = engineErrorCode(err);
   const message = errorMessage(err);
   const hasRuntime = await session.hasUsableRuntime();
-  const primary = hasRuntime ? "Open Project" : "Setup Native Binding";
+  const primary = hasRuntime ? RECOVERY_OPEN_PROJECT : RECOVERY_SETUP_NATIVE;
   const buttons = hasRuntime
-    ? [primary, "Initialize Project Here", "Check Environment"]
-    : [primary, "Setup Python Binding", "Check Environment"];
+    ? [primary, RECOVERY_INIT_PROJECT, RECOVERY_CHECK_ENV]
+    : [primary, RECOVERY_SETUP_PYTHON, RECOVERY_CHECK_ENV];
   // Fire-and-forget: callers (including `executeCommand` from another
   // extension or a coding agent) must not block on a human dismissing a
   // dialog, so this resolves immediately with the structured recovery info
@@ -72,15 +79,15 @@ export async function offerSetupRecovery(
   void vscode.window
     .showErrorMessage(`GraphForge: ${message}${code ? ` [${code}]` : ""}`, ...buttons)
     .then((choice) => {
-      if (choice === "Setup Native Binding") {
+      if (choice === RECOVERY_SETUP_NATIVE) {
         void vscode.commands.executeCommand("graphforge.setupNativeBinding");
-      } else if (choice === "Setup Python Binding") {
+      } else if (choice === RECOVERY_SETUP_PYTHON) {
         void vscode.commands.executeCommand("graphforge.setupPythonBinding");
-      } else if (choice === "Open Project") {
+      } else if (choice === RECOVERY_OPEN_PROJECT) {
         void vscode.commands.executeCommand("graphforge.openProject");
-      } else if (choice === "Initialize Project Here") {
+      } else if (choice === RECOVERY_INIT_PROJECT) {
         void vscode.commands.executeCommand("graphforge.initializeProjectHere");
-      } else if (choice === "Check Environment") {
+      } else if (choice === RECOVERY_CHECK_ENV) {
         void vscode.commands.executeCommand("graphforge.checkEnvironment");
       }
     });

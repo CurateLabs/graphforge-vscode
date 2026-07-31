@@ -8,7 +8,7 @@ import {
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { detectSiblingBindingPath, resetNativeCache } from "../session/nativeLoader";
 import { classifyInitTarget } from "../session/projectDetector";
-import { engineErrorCode, errorMessage } from "./shared";
+import { engineErrorCode, errorMessage, RECOVERY_SETUP_NATIVE, RECOVERY_SETUP_PYTHON } from "./shared";
 
 /**
  * Registers Setup UX commands (#2, extended by #12 for Python): `Check
@@ -186,12 +186,12 @@ async function runInitializeProjectHere(
   if (!(await session.hasUsableRuntime())) {
     const action = await vscode.window.showErrorMessage(
       "GraphForge: no usable runtime (Node binding and Python graphforge both unavailable).",
-      "Setup Native Binding",
-      "Setup Python Binding",
+      RECOVERY_SETUP_NATIVE,
+      RECOVERY_SETUP_PYTHON,
     );
-    if (action === "Setup Native Binding") {
+    if (action === RECOVERY_SETUP_NATIVE) {
       await vscode.commands.executeCommand("graphforge.setupNativeBinding");
-    } else if (action === "Setup Python Binding") {
+    } else if (action === RECOVERY_SETUP_PYTHON) {
       await vscode.commands.executeCommand("graphforge.setupPythonBinding");
     }
     return;
