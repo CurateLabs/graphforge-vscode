@@ -18,10 +18,10 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
@@ -49,10 +49,10 @@ jobs:
     continue-on-error: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
@@ -75,10 +75,10 @@ jobs:
     needs: build
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
@@ -93,7 +93,10 @@ jobs:
         run: npx vsce package --no-dependencies -o graphforge-ci.vsix
 
       - name: Upload .vsix artifact
-        uses: actions/upload-artifact@v4
+        # Best-effort: the packaging step above is the actual gate. Don't fail the
+        # required job over org-level artifact storage/quota issues.
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
         with:
           name: graphforge-vsix
           path: graphforge-ci.vsix
