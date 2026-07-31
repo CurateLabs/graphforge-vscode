@@ -40,7 +40,27 @@ flowchart LR
 | `GraphForgeSession` | Open project, execute/verbs, IPC→rows, graph payload | `EngineBackend` + arrow |
 | Tree providers | Projects, Ontology, Knowledge sidebars | Session |
 | Commands | Run Query, verbs, open panels, load ontology, Setup (Native/Python) | Session, webviews |
-| Webviews | Result Graph + Ontology Viewer + message protocol | Session payloads |
+| Webviews | Result Graph + Ontology Viewer + Settings + message protocol | Session payloads |
+| `webview-ui/` | Vite-built browser bundles for webview panels (currently: Settings) | `src/webview/settingsSchema.ts` |
+
+### Build tooling (Vite direction, #24)
+
+Two build tools coexist by design, per the sequenced decision recorded in issue #24:
+
+- **Extension host:** `esbuild.mjs` bundles `src/extension.ts` → `dist/extension.js` (CJS) and
+  per-file test bundles → `dist/test/`. Unchanged in Phase 1.
+- **Webview UI (Phase 1):** `webview-ui/` holds browser-side webview apps with their own Vite
+  build (`webview-ui/vite.config.ts`, config inside this package — no monorepo/workspace
+  split). `vite build` emits fixed-name bundles to `dist/webview-ui/` (e.g. `settings.js` /
+  `settings.css`), which panel hosts load via `webview.asWebviewUri` under a nonce-based CSP.
+  The Settings panel is the first Vite-built surface; new webviews should start here rather
+  than as inline HTML template strings.
+- `npm run compile` runs both (`compile:host` then `compile:webview`); `npm run check`
+  type-checks both TS projects (`tsconfig.json` and `webview-ui/tsconfig.json`). The
+  `webview-ui` app shares vscode-free modules from `src/` (e.g. `settingsSchema.ts`) by direct
+  relative import.
+- **Phase 2 (later, separate commit):** migrate the host bundle itself from esbuild to Vite
+  library mode — gated on the parity criteria and blocking-CI promotion listed in #24.
 
 ### Runtime abstraction (#12)
 

@@ -258,6 +258,7 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
   <div id="steps"></div>
   <div class="footer">
     <button class="link" id="refresh">Check Environment</button>
+    <button class="link" id="open-settings">Settings</button>
   </div>
   <script>
     const vscode = acquireVsCodeApi();
@@ -266,6 +267,9 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
 
     document.getElementById('refresh').addEventListener('click', () =>
       vscode.postMessage({ type: 'graphforge/runCommand', command: 'graphforge.checkEnvironment' })
+    );
+    document.getElementById('open-settings').addEventListener('click', () =>
+      vscode.postMessage({ type: 'graphforge/runCommand', command: 'graphforge.openSettings' })
     );
 
     function renderBanner(mode) {

@@ -46,10 +46,24 @@ clicks and `offerSetupRecovery` still land on this same panel (Kilo's
 "Get Started / Next" promo-banner role is filled by the status bar + this
 sidebar — GraphForge has no editor-level banner surface yet).
 
-A full **Settings** webview with left-nav categories (Kilo pattern #3) is out
-of scope for this phase — tracked as a follow-up issue rather than a stub UI,
-since `graphforge.experienceMode` and existing settings are already reachable
-via VS Code Settings UI / `graphforge.*` search.
+## Settings webview (phase 3, #24)
+
+A **Settings** panel with left-nav categories (Kilo pattern #3) — `GraphForge:
+Settings` (`graphforge.openSettings`), also linked from the Get Started footer.
+It is a friendlier surface over the existing `graphforge.*` settings, not a
+second store: reads/writes go through `workspace.getConfiguration`, and the
+panel live-syncs with edits made in the VS Code Settings UI.
+
+- Categories: **Runtime** (engine choice) / **Experience** (mode, Result Graph
+  auto-open) / **Advanced** (manual binding/interpreter paths). Copy is
+  analyst-facing; "Project" waits until a project-scoped setting exists (no
+  stub categories).
+- Accessibility is part of the contract, not a retrofit: the left nav is a
+  keyboard-navigable `role="tablist"`, enums are native radio groups in
+  fieldset/legend, and every control has a real label — the custom-div radio
+  mistake flagged in the Get Started audit is off-limits here.
+- Built as the first Vite `webview-ui/` surface (see
+  `docs/engineering/ARCHITECTURE.md`, "Build tooling").
 
 ## Visual notes
 

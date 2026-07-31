@@ -92,6 +92,11 @@
         "title": "GraphForge: Choose Experience Mode…"
       },
       {
+        "command": "graphforge.openSettings",
+        "title": "GraphForge: Settings",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "graphforge.checkEnvironment",
         "title": "GraphForge: Check Environment"
       },
@@ -429,12 +434,15 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "node esbuild.mjs",
+    "compile": "npm run compile:host && npm run compile:webview",
+    "compile:host": "node esbuild.mjs",
+    "compile:webview": "vite build --config webview-ui/vite.config.ts",
     "watch": "node esbuild.mjs --watch",
-    "check": "tsc --noEmit",
-    "lint": "tsc --noEmit",
+    "watch:webview": "vite build --watch --config webview-ui/vite.config.ts",
+    "check": "tsc --noEmit && tsc --noEmit -p webview-ui",
+    "lint": "npm run check",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js",
     "package": "vsce package"
   },
   "dependencies": {
@@ -457,6 +465,7 @@
     "@vscode/vsce": "^3.3.2",
     "esbuild": "^0.25.1",
     "mocha": "^11.1.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vite": "^7.3.6"
   }
 }
