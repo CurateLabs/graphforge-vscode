@@ -32,6 +32,14 @@
     "type": "git",
     "url": "https://github.com/CurateLabs/graphforge-vscode.git"
   },
+  "bugs": {
+    "url": "https://github.com/CurateLabs/graphforge-vscode/issues"
+  },
+  "homepage": "https://github.com/CurateLabs/graphforge-vscode#readme",
+  "galleryBanner": {
+    "color": "#0B1220",
+    "theme": "dark"
+  },
   "contributes": {
     "languages": [
       {

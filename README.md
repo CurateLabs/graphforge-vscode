@@ -4,7 +4,7 @@ Explore [GraphForge](https://docs.graphforge.sh/) projects in the editor: Cypher
 
 Publisher: **CurateLabs** (`CurateLabs.graphforge`).
 
-## Features (scaffold)
+## Features
 
 | Surface | What you get |
 |---|---|
@@ -15,6 +15,14 @@ Publisher: **CurateLabs** (`CurateLabs.graphforge`).
 | **Ontology** | Mode badge + entity/relation tree; Ontology Viewer webview with a helpful exploratory empty state, **Load Ontology…**, and an Advanced section (open `ontology.json`, explain mode) |
 | **Knowledge** | Inspect and create assertions: list/empty states, **Create Assertion…** (minimal fields), **Show Assertion** / **Show on Graph**, plus Advanced attach-evidence / assess-confidence / record-status commands |
 | **Result Graph** | Webview shell: nodes/edges styled by class + epistemic status |
+
+## Requirements
+
+- VS Code `^1.96.0`
+- One GraphForge engine runtime, either:
+  - **Node** — a built `@graphforge/node` package (optional peer dependency), or
+  - **Python** — a `graphforge` (PyPI) install in an interpreter VS Code can see, plus [`uv`](https://docs.astral.sh/uv/) for setup (never `pip`)
+- No runtime yet? Run **`GraphForge: Check Environment`** after installing — it always tells you what to run next.
 
 ## Develop
 
@@ -139,31 +147,24 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 
 ## Commands
 
-- `GraphForge: Check Environment` (`graphforge.checkEnvironment`) — accepts optional `{ silent: true }` to suppress the toast/opened doc; always returns the `EnvironmentReport` JSON from `executeCommand`
-- `GraphForge: Setup Native Binding`
-- `GraphForge: Initialize Project Here`
-- `GraphForge: Open Project` (`graphforge.openProject`) — accepts an optional folder-path string arg to skip the picker
-- `GraphForge: Run Query` (`graphforge.runQuery`) — selection → whole file → single input box, or pass `{ cypher, params? }` to skip both; opens a structured `{ columns, rows, rowCount }` results document, reports row count, and returns that same object from `executeCommand`
-- `GraphForge: Run Query with Parameters…` (`graphforge.runQueryWithParams`) — Advanced: same input resolution, plus a JSON parameters prompt (or pass `{ cypher, params }` directly)
-- `GraphForge: Rank` / `Cluster` / `Paths` / `Analyze` / `Similar` / `Find` (each has an `…Advanced…` command for optional/weedy parameters) — QuickPick-driven today; each now returns its result JSON (or `{ error }` / `{ cancelled: true }`) from `executeCommand`
-- `GraphForge: Show Ontology Viewer`
-- `GraphForge: Show Result Graph` (+ `Show Result Graph (Advanced)…`)
-- `GraphForge: Show Project Capabilities`
-- `GraphForge: Load Ontology…`
-- `GraphForge: Open ontology.json` / `Explain Ontology Mode`
-- `GraphForge: List Assertions` / `Create Assertion…` / `Show Assertion…` / `Show Assertion on Graph…`
-- `GraphForge: Attach Evidence…` / `Assess Confidence…` / `Record Assertion Status…` (Advanced)
-- `GraphForge: Setup Python Binding` — alternative to `Setup Native Binding` when running on the Python `graphforge` runtime (#12)
+- **Setup** — `GraphForge: Check Environment` (`graphforge.checkEnvironment`, accepts optional `{ silent: true }`, always returns the `EnvironmentReport` JSON from `executeCommand`), `Setup Native Binding`, `Setup Python Binding`, `Initialize Project Here`, `Open Project` (`graphforge.openProject`, accepts an optional folder-path string arg to skip the picker), `Refresh Explorer`
+- **Cypher** — `Run Query` (`graphforge.runQuery`: selection → whole file → single input box, or pass `{ cypher, params? }` to skip both; opens a structured `{ columns, rows, rowCount }` results document and returns that same object from `executeCommand`), `Run Query with Parameters…`
+- **Analyst verbs** — `Rank` / `Cluster` / `Paths` / `Analyze` / `Similar` / `Find` (each has an `…Advanced…` command for optional parameters) — QuickPick-driven today; each returns its result JSON (or `{ error }` / `{ cancelled: true }`) from `executeCommand`
+- **Indexing** *(Node-only)* — `Index Text…`, `Index Vector…`, `Inspect Text Index…`, `Index Adjacency`, `Inspect Adjacency Index`, `Rebuild Adjacency Index`
+- **Checkpoints** *(Node-only, ADR 0014)* — `Create Checkpoint…`, `List Checkpoints`, `Open Checkpoint…`, `Diff Checkpoints…`, `Delete Checkpoint…`, `Revert to Checkpoint…`
+- **Embedding spaces** *(Node-only)* — `Embedding Spaces`, `Publish Caller Embeddings…`, `Bind Embedding Space Alias…`, `Set Default Embedding Space…`, `Delete Embedding Space…`, `Inspect Embedding Space Freshness…`
+- **Write mode & transactions** *(Node-only, ADR 0015)* — `Enable Capability…`, `Open with Write Mode…`, `Export Invocation Descriptor…`, `List Algorithm Runs`, `Publish Composite Transaction…` (Advanced)
+- **Ontology** — `Show Ontology Viewer`, `Load Ontology…`, `Open ontology.json`, `Explain Ontology Mode`
+- **Knowledge ledger** — `List Assertions`, `Create Assertion…`, `Show Assertion…`, `Show Assertion on Graph…`, `Attach Evidence…` / `Assess Confidence…` / `Record Assertion Status…` (Advanced)
+- **Result views** — `Show Result Graph` (+ `Show Result Graph (Advanced)…`), `Show Project Capabilities`
+
+See [`docs/published/commands.md`](docs/published/commands.md) for the full command-ID table.
 
 ## Knowledge ledger notes
 
 - Identity UUIDs for assertions/evidence/confidence/status events must be UUIDv7 (engine-enforced); the extension mints them client-side (`src/session/uuid.ts`). Operation/idempotency UUIDs accept any version.
 - Every knowledge-ledger native method (`listAssertions`, `createAssertion`, …) is optional on the `@graphforge/node` binding and feature-detected at call time — the sibling engine API is still moving and may change sync/async return shape or method names.
 - `Record Assertion Status…` requires an existing `provenanceUuid`; until there's a provenance picker, paste one in directly.
-
-## Runtimes: Node vs Python (#12)
-
-`graphforge.runtime` (default `auto`) selects which engine backs Cypher/verb calls. `auto` always prefers `@graphforge/node` and only falls back to the Python `graphforge` bridge when Node is unavailable; `node`/`python` pin to one runtime and fail closed (with setup guidance for that path) rather than silently falling back. The Python bridge currently backs `execute` and the analyst verbs; Node-only surfaces (checkpoints, embedding spaces, indexing, invocation descriptors, composite transactions, and the full knowledge-ledger write API) require the Node runtime for now. Run **GraphForge: Check Environment** to see both runtimes' status and the active one, or **GraphForge: Setup Python Binding** to configure the interpreter.
 
 ### Coding agent interop
 

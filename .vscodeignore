@@ -1,9 +1,13 @@
 .vscode/**
 .vscode-test/**
+.vscode-test.mjs
 src/**
+dist/test/**
 docs/**
 node_modules/**
 .gitignore
+.gitattributes
+.editorconfig
 .eslintrc*
 **/tsconfig.json
 **/*.ts
