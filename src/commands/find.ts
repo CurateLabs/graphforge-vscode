@@ -3,11 +3,17 @@ import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { QueryResult } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
 import {
+  CommandOutcome,
   ensureProjectOrRecover,
   isMissingIndexError,
   reportEngineError,
   reportMissingIndexError,
 } from "./shared";
+
+/** Structured result of `graphforge.find`, returned to `executeCommand` callers (#36). */
+type FindOutcome = CommandOutcome<
+  QueryResult & { verb: "find"; query: string; label?: string }
+>;
 
 /**
  * `GraphForge: Find` (#8) — palette-first hybrid text/vector search.
@@ -21,19 +27,19 @@ export function registerFind(
   session: GraphForgeSession,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("graphforge.find", async () => {
-      await runFind(context, session);
-    }),
+    vscode.commands.registerCommand("graphforge.find", () =>
+      runFind(context, session),
+    ),
   );
 }
 
 async function runFind(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
-): Promise<void> {
+): Promise<FindOutcome> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
-    return;
+    return recovery;
   }
 
   const query = await vscode.window.showInputBox({
@@ -42,7 +48,7 @@ async function runFind(
     placeHolder: "e.g. climate risk mitigation",
   });
   if (query === undefined) {
-    return;
+    return { cancelled: true };
   }
 
   const labels = await session.labels();
@@ -51,7 +57,7 @@ async function runFind(
     placeHolder: "(any)",
   });
   if (labelPick === undefined) {
-    return;
+    return { cancelled: true };
   }
   const label = labelPick === "(any)" ? undefined : labelPick;
 
@@ -59,8 +65,7 @@ async function runFind(
   try {
     result = await session.invokeVerb("find", { query, label, k: 10 });
   } catch (err) {
-    await handleFindError(err, label);
-    return;
+    return handleFindError(err, label);
   }
 
   const doc = await vscode.workspace.openTextDocument({
@@ -95,17 +100,25 @@ async function runFind(
   void vscode.window.showInformationMessage(
     `GraphForge Find: ${result.rowCount} hit(s)`,
   );
+  return { ...result, verb: "find", query, label };
 }
 
 /**
  * Missing-index errors must name the remediation command (#8 AC). Detection
  * and the remediation toast are shared with Similar/Cluster (#39) via
- * `isMissingIndexError` / `reportMissingIndexError`.
+ * `isMissingIndexError` / `reportMissingIndexError`; the structured return
+ * additionally carries a `nextAction` naming the exact command (#36).
  */
-async function handleFindError(err: unknown, label?: string): Promise<void> {
+function handleFindError(
+  err: unknown,
+  label?: string,
+): { error: string; code?: string; nextAction?: string } {
   if (!isMissingIndexError(err)) {
-    reportEngineError("Find failed", err);
-    return;
+    return reportEngineError("Find failed", err);
   }
-  reportMissingIndexError("Find failed", err, { index: "text", label });
+  const reported = reportMissingIndexError("Find failed", err, { index: "text", label });
+  return {
+    ...reported,
+    nextAction: `Run "GraphForge: Index Text…" (graphforge.indexText${label ? `, { label: "${label}" }` : ""}) then retry graphforge.find.`,
+  };
 }
