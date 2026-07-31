@@ -10,7 +10,7 @@ Publisher: **CurateLabs** (`CurateLabs.graphforge`).
 |---|---|
 | **Setup** | Check Environment, Setup Native Binding, Initialize Project Here — palette-first, never a dead end |
 | **Cypher** | `.cypher` / `.cql` language id + TextMate highlighting + **Run Query** (+ Advanced: Run Query with Parameters…) |
-| **Analyst verbs** | Rank, Cluster, Paths, Analyze, Similar, Find (QuickPick → engine) |
+| **Analyst verbs** | Rank, Cluster, Paths, Analyze, Similar, Find (QuickPick → engine; each has an Advanced… variant for optional params) |
 | **Projects** | Activity-bar explorer for folders with a valid `FORMAT` marker |
 | **Ontology** | Mode + entity/relation tree; Ontology Viewer webview |
 | **Knowledge** | Ledger summary + hooks for epistemic status |
@@ -76,9 +76,9 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 - `GraphForge: Open Project`
 - `GraphForge: Run Query` — selection → whole file → single input box; opens a structured `{ columns, rows, rowCount }` results document and reports row count
 - `GraphForge: Run Query with Parameters…` — Advanced: same input resolution, plus a JSON parameters prompt
-- `GraphForge: Rank` / `Cluster` / `Paths` / `Analyze` / `Similar` / `Find`
+- `GraphForge: Rank` / `Cluster` / `Paths` / `Analyze` / `Similar` / `Find` (each has an `…Advanced…` command for optional/weedy parameters)
 - `GraphForge: Show Ontology Viewer`
-- `GraphForge: Show Result Graph`
+- `GraphForge: Show Result Graph` (+ `Show Result Graph (Advanced)…`)
 - `GraphForge: Show Project Capabilities`
 - `GraphForge: Load Ontology…`
 

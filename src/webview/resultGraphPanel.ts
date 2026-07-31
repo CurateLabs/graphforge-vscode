@@ -1,6 +1,11 @@
 import * as vscode from "vscode";
 import type { GraphPayload } from "../session/types";
-import { EPISTEMIC_COLORS, type HostToWebview, type WebviewToHost } from "./protocol";
+import {
+  CLASS_COLOR_PALETTE,
+  EPISTEMIC_COLORS,
+  type HostToWebview,
+  type WebviewToHost,
+} from "./protocol";
 
 export class ResultGraphPanel {
   public static current: ResultGraphPanel | undefined;
@@ -67,6 +72,7 @@ export class ResultGraphPanel {
     ].join("; ");
 
     const colorsJson = JSON.stringify(EPISTEMIC_COLORS);
+    const classPaletteJson = JSON.stringify(CLASS_COLOR_PALETTE);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -114,6 +120,12 @@ export class ResultGraphPanel {
     .node text { fill: var(--fg); font-size: 11px; pointer-events: none; }
     .edge { stroke: var(--muted); stroke-width: 1.5; fill: none; opacity: 0.85; }
     .empty { padding: 24px; color: var(--muted); }
+    .banner {
+      margin-top: 6px; padding: 4px 8px; border-radius: 3px; font-size: 11px;
+      background: var(--vscode-inputValidation-infoBackground, rgba(255,255,255,0.06));
+      border: 1px solid var(--vscode-inputValidation-infoBorder, var(--border));
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -121,28 +133,46 @@ export class ResultGraphPanel {
     <h1 id="title">Result Graph</h1>
     <div class="legend" id="status-legend"></div>
     <div class="legend" id="type-legend"></div>
+    <div class="banner" id="banner"></div>
   </header>
   <div id="canvas-wrap">
     <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
     <div class="empty" id="empty">Waiting for graph data…</div>
   </div>
-  <footer id="footer">Epistemic colors are extension-owned. Class = primary label ∩ ontology type.</footer>
+  <footer id="footer">Colors are extension-owned. Epistemic when the knowledge ledger is resolvable, otherwise class-only.</footer>
   <script>
     const vscode = acquireVsCodeApi();
     const COLORS = ${colorsJson};
+    const CLASS_PALETTE = ${classPaletteJson};
     const svg = document.getElementById('svg');
     const empty = document.getElementById('empty');
     const titleEl = document.getElementById('title');
     const statusLegend = document.getElementById('status-legend');
     const typeLegend = document.getElementById('type-legend');
+    const banner = document.getElementById('banner');
     const footer = document.getElementById('footer');
 
-    function renderLegend(statuses, types) {
-      statusLegend.innerHTML = statuses.map(s =>
+    function classColor(name) {
+      const key = name || '(none)';
+      let hash = 0;
+      for (let i = 0; i < key.length; i++) {
+        hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+      }
+      return CLASS_PALETTE[hash % CLASS_PALETTE.length];
+    }
+
+    function classOf(n) {
+      return n.ontologyType || (n.labels && n.labels[0]) || 'Node';
+    }
+
+    function renderLegend(styleMode, statuses, types) {
+      const epistemic = styleMode === 'epistemic' || styleMode === 'demo';
+      statusLegend.style.display = epistemic ? 'flex' : 'none';
+      statusLegend.innerHTML = epistemic ? statuses.map(s =>
         '<span class="swatch"><span class="dot" style="background:' + (COLORS[s] || '#888') + '"></span>' + s + '</span>'
-      ).join('');
+      ).join('') : '';
       typeLegend.innerHTML = types.map(t =>
-        '<span class="swatch"><span class="dot" style="background:transparent; border-style:dashed"></span>class: ' + t + '</span>'
+        '<span class="swatch"><span class="dot" style="background:' + (epistemic ? 'transparent' : classColor(t)) + '; border-style:' + (epistemic ? 'dashed' : 'solid') + '"></span>class: ' + t + '</span>'
       ).join('');
     }
 
@@ -158,8 +188,18 @@ export class ResultGraphPanel {
     }
 
     function render(payload) {
+      const styleMode = payload.styleMode || 'class-only';
+      const epistemic = styleMode === 'epistemic' || styleMode === 'demo';
       titleEl.textContent = payload.title || 'Result Graph';
-      renderLegend(payload.legend.statuses || [], payload.legend.types || []);
+      renderLegend(styleMode, payload.legend.statuses || [], payload.legend.types || []);
+
+      if (payload.banner) {
+        banner.textContent = payload.banner;
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+
       const nodes = layout(payload.nodes || []);
       const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
       const edges = payload.edges || [];
@@ -171,26 +211,33 @@ export class ResultGraphPanel {
       }
       empty.style.display = 'none';
 
+      const edgeColor = (e) => epistemic
+        ? (COLORS[e.epistemicStatus || 'statusless'] || '#888')
+        : 'var(--muted)';
+
       const edgeLines = edges.map(e => {
         const a = byId[e.source], b = byId[e.target];
         if (!a || !b) return '';
-        const color = COLORS[e.epistemicStatus || 'statusless'] || '#888';
-        return '<line class="edge" x1="' + a.x + '" y1="' + a.y + '" x2="' + b.x + '" y2="' + b.y + '" stroke="' + color + '" />' +
+        return '<line class="edge" x1="' + a.x + '" y1="' + a.y + '" x2="' + b.x + '" y2="' + b.y + '" stroke="' + edgeColor(e) + '" />' +
           '<text x="' + ((a.x+b.x)/2) + '" y="' + ((a.y+b.y)/2 - 6) + '" fill="currentColor" font-size="10" text-anchor="middle">' + (e.type || '') + '</text>';
       }).join('');
 
       const nodeEls = nodes.map(n => {
-        const color = COLORS[n.epistemicStatus || 'statusless'] || '#888';
+        const cls = classOf(n);
+        const color = epistemic ? (COLORS[n.epistemicStatus || 'statusless'] || '#888') : classColor(cls);
         const label = (n.properties && (n.properties.name || n.properties.label)) || n.labels[0] || n.id.slice(0, 8);
         return '<g class="node" data-id="' + n.id + '">' +
           '<circle cx="' + n.x + '" cy="' + n.y + '" r="18" fill="' + color + '" fill-opacity="0.85" />' +
           '<text x="' + n.x + '" y="' + (n.y + 32) + '" text-anchor="middle">' + String(label).slice(0, 24) + '</text>' +
-          '<text x="' + n.x + '" y="' + (n.y + 4) + '" text-anchor="middle" font-size="9" fill="#fff">' + (n.ontologyType || n.labels[0] || '').slice(0, 8) + '</text>' +
+          '<text x="' + n.x + '" y="' + (n.y + 4) + '" text-anchor="middle" font-size="9" fill="#fff">' + cls.slice(0, 8) + '</text>' +
           '</g>';
       }).join('');
 
       svg.innerHTML = edgeLines + nodeEls;
-      footer.textContent = nodes.length + ' nodes · ' + edges.length + ' edges · epistemic + class styling';
+      const styleLabel = styleMode === 'epistemic' ? 'epistemic styling'
+        : styleMode === 'demo' ? 'demo styling'
+        : 'class-only styling';
+      footer.textContent = nodes.length + ' nodes · ' + edges.length + ' edges · ' + styleLabel;
     }
 
     window.addEventListener('message', (event) => {

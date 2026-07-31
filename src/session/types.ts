@@ -55,6 +55,16 @@ export interface GraphEdge {
   properties?: TableRow;
 }
 
+/**
+ * How the Result Graph should render node/edge color:
+ * - "epistemic": real ledger-resolved statuses are present (may include
+ *   legitimate "statusless" values).
+ * - "class-only": no knowledge capability (or binding support) — color by
+ *   ontology/label class only. Never invent a status in this mode.
+ * - "demo": scaffold sample data shown when there are no graph-shaped rows.
+ */
+export type GraphStyleMode = "epistemic" | "class-only" | "demo";
+
 export interface GraphPayload {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -63,6 +73,9 @@ export interface GraphPayload {
     types: string[];
   };
   title?: string;
+  styleMode: GraphStyleMode;
+  /** Human-readable note shown in the webview header (e.g. why styling fell back). */
+  banner?: string;
 }
 
 export interface OntologyEntityType {
@@ -112,11 +125,34 @@ export interface ProjectCapabilities {
   raw?: unknown;
 }
 
+/** One live M18 algorithm descriptor contract (`algorithmDescriptorContracts()`). */
+export interface AlgorithmDescriptorContract {
+  verb: string;
+  algorithm: string;
+  algorithmVersion: number;
+  resultSchemaVersion: number;
+}
+
+/** Advanced belief-resolution controls (GraphForge: Result Graph (Advanced)…). */
+export interface BeliefPolicySettings {
+  /** Attempt ledger status resolution at all when the knowledge capability exists. */
+  enabled: boolean;
+  /** Bound on how many result-graph node UUIDs get resolved per render. */
+  maxNodes: number;
+}
+
+export const DEFAULT_BELIEF_POLICY: BeliefPolicySettings = {
+  enabled: true,
+  maxNodes: 40,
+};
+
 /** Minimal surface we expect from @graphforge/node GraphForge. */
 export interface GraphForgeNative {
   path: string | null;
   ontologyMode: string;
   execute(cypher: string, params?: Record<string, unknown>): Buffer;
+  /** Live M18 descriptor catalog, deterministic order (sync; requires open project). */
+  algorithmDescriptorContracts?(): AlgorithmDescriptorContract[];
   rank(
     label: string,
     by: string,
@@ -161,7 +197,14 @@ export interface GraphForgeNative {
   labels(): string[];
   relationshipTypes(): string[];
   loadOntology(path: string): void;
-  listAssertions?(request?: unknown): Buffer;
+  /** Page of assertions, optionally filtered to one graph object (node/edge) UUID. Async. */
+  listAssertions?(request?: {
+    graphUuid?: string;
+    limit?: number;
+    after?: string;
+  }): Promise<Buffer>;
+  /** Current explicit status for one assertion, or an empty table when statusless. Async. */
+  assertionStatus?(assertionUuid: string): Promise<Buffer>;
 }
 
 export interface GraphForgeModule {
@@ -218,3 +261,12 @@ export const SIMILAR_BY = [
   "knn",
   "cosine",
 ] as const;
+
+/** Static fallback catalogs, used only when `algorithmDescriptorContracts()` is unavailable. */
+export const FALLBACK_BY: Record<Exclude<AnalystVerb, "find">, readonly string[]> = {
+  rank: RANK_BY,
+  cluster: CLUSTER_BY,
+  paths: PATHS_BY,
+  analyze: ANALYZE_BY,
+  similar: SIMILAR_BY,
+};

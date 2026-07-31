@@ -63,11 +63,42 @@ export function registerOpenViews(
       });
     }),
 
-    vscode.commands.registerCommand("graphforge.showResultGraph", () => {
-      const payload = session.toGraphPayload(
-        { columns: [], rows: [], rowCount: 0 },
-        "Demo graph",
+    vscode.commands.registerCommand("graphforge.showResultGraph", async () => {
+      // Refresh from the last query/verb result when there is one; an
+      // explicit demo graph only when nothing has run yet in this session.
+      const payload = await session.lastGraphPayload();
+      ResultGraphPanel.show(context.extensionUri, payload);
+    }),
+
+    vscode.commands.registerCommand("graphforge.showResultGraphAdvanced", async () => {
+      const current = session.getBeliefPolicy();
+      const enabledPick = await vscode.window.showQuickPick(
+        [
+          { label: "Enabled", picked: current.enabled, value: true },
+          { label: "Disabled (always class-only)", picked: !current.enabled, value: false },
+        ],
+        { title: "GraphForge: Result Graph — resolve epistemic status from ledger?" },
       );
+      if (!enabledPick) {
+        return;
+      }
+      const maxNodesRaw = await vscode.window.showInputBox({
+        title: "GraphForge: Result Graph — max nodes to resolve",
+        prompt: "Bounds belief/status lookups per render (higher = slower on large graphs)",
+        value: String(current.maxNodes),
+        validateInput: (value) =>
+          Number.isFinite(Number(value)) && Number(value) > 0
+            ? undefined
+            : "Enter a positive number",
+      });
+      if (maxNodesRaw === undefined) {
+        return;
+      }
+      session.setBeliefPolicy({
+        enabled: enabledPick.value,
+        maxNodes: Math.max(1, Math.trunc(Number(maxNodesRaw)) || current.maxNodes),
+      });
+      const payload = await session.lastGraphPayload();
       ResultGraphPanel.show(context.extensionUri, payload);
     }),
 
