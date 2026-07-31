@@ -4,8 +4,8 @@ import type { QueryResult } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
 import {
   engineErrorCode,
+  ensureProjectOrRecover,
   errorMessage,
-  offerSetupRecovery,
   querySnippet,
   SetupRecovery,
 } from "./shared";
@@ -97,17 +97,6 @@ export function registerRunQuery(
       },
     ),
   );
-}
-
-async function ensureProjectOrRecover(
-  session: GraphForgeSession,
-): Promise<SetupRecovery | undefined> {
-  try {
-    await session.ensureProject();
-    return undefined;
-  } catch (err) {
-    return offerSetupRecovery(session, err);
-  }
 }
 
 /** Selection → whole document → single input box. One step, no cascading prompts. */

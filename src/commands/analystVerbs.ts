@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { AnalystVerb, QueryResult } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
-import { errorMessage, nextSetupAction, SetupRecovery } from "./shared";
+import { ensureProjectOrRecover, errorMessage, SetupRecovery } from "./shared";
 
 const CATALOG_VERBS: Array<Exclude<AnalystVerb, "find">> = [
   "rank",
@@ -82,12 +82,9 @@ async function runVerb(
   verb: AnalystVerb,
   advanced: boolean,
 ): Promise<VerbOutcome> {
-  try {
-    await session.ensureProject();
-  } catch (err) {
-    const message = errorMessage(err);
-    void vscode.window.showErrorMessage(message);
-    return { error: message, nextAction: await nextSetupAction(session) };
+  const recovery = await ensureProjectOrRecover(session);
+  if (recovery) {
+    return recovery;
   }
 
   const title = VERB_TITLE[verb] + (advanced ? " (Advanced)" : "");

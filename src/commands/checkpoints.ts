@@ -3,7 +3,7 @@ import { decodeTable } from "../session/arrowCodec";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { UnsupportedByBindingError } from "../session/graphForgeSession";
 import type { QueryResult, TableRow } from "../session/types";
-import { errorMessage } from "./shared";
+import { ensureProjectReady, errorMessage } from "./shared";
 
 const DIFF_SCOPES = [
   "summary",
@@ -56,13 +56,7 @@ export function registerCheckpoints(
 }
 
 async function ensureReady(session: GraphForgeSession): Promise<boolean> {
-  try {
-    await session.ensureProject();
-    return true;
-  } catch (err) {
-    void vscode.window.showErrorMessage(errorMessage(err));
-    return false;
-  }
+  return ensureProjectReady(session);
 }
 
 function checkpointNameOf(row: TableRow): string | undefined {

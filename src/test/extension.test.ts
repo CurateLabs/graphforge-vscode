@@ -174,7 +174,7 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
 
   test("showCapabilities does not throw when no project is open", async () => {
     // ensureProject() rejects (no project); the handler reports via a
-    // fire-and-forget showErrorMessage (no action items) and resolves
+    // fire-and-forget showErrorMessage with action buttons and resolves
     // immediately instead of opening the capabilities document.
     await assert.doesNotReject(
       Promise.resolve(vscode.commands.executeCommand("graphforge.showCapabilities")),

@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { UnsupportedByBindingError } from "../session/graphForgeSession";
 import { ANALYZE_BY, AnalystVerb, CLUSTER_BY, RANK_BY, SIMILAR_BY, WriteMode, WRITE_MODES } from "../session/types";
-import { errorMessage } from "./shared";
+import { ensureProjectReady, errorMessage } from "./shared";
 
 const COMPOSITE_DOCS_URL =
   "https://docs.graphforge.sh/reference/composite-transactions";
@@ -64,13 +64,7 @@ export function registerPower(
 }
 
 async function ensureReady(session: GraphForgeSession): Promise<boolean> {
-  try {
-    await session.ensureProject();
-    return true;
-  } catch (err) {
-    void vscode.window.showErrorMessage(errorMessage(err));
-    return false;
-  }
+  return ensureProjectReady(session);
 }
 
 async function showJson(title: string, value: unknown): Promise<void> {

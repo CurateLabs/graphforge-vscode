@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
-import { offerSetupRecovery } from "./shared";
+import { ensureProjectReady } from "./shared";
 import type {
   AssertionGraphKind,
   ConfidencePolicy,
@@ -57,18 +57,6 @@ function isUuidish(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     value.trim(),
   );
-}
-
-async function ensureProjectOrRecover(
-  session: GraphForgeSession,
-): Promise<boolean> {
-  try {
-    await session.ensureProject();
-    return true;
-  } catch (err) {
-    await offerSetupRecovery(session, err);
-    return false;
-  }
 }
 
 async function openJsonDoc(content: unknown): Promise<void> {
@@ -145,7 +133,7 @@ export function registerKnowledgeCommands(
 }
 
 async function runListAssertions(session: GraphForgeSession): Promise<void> {
-  if (!(await ensureProjectOrRecover(session))) {
+  if (!(await ensureProjectReady(session))) {
     return;
   }
   try {
@@ -171,7 +159,7 @@ async function runCreateAssertion(
   session: GraphForgeSession,
   refreshTrees: () => void,
 ): Promise<void> {
-  if (!(await ensureProjectOrRecover(session))) {
+  if (!(await ensureProjectReady(session))) {
     return;
   }
 
@@ -232,7 +220,7 @@ async function runShowAssertion(
   session: GraphForgeSession,
   arg?: unknown,
 ): Promise<void> {
-  if (!(await ensureProjectOrRecover(session))) {
+  if (!(await ensureProjectReady(session))) {
     return;
   }
   const assertionUuid = await resolveAssertionUuid(session, arg);
@@ -268,7 +256,7 @@ async function runShowAssertionOnGraph(
   session: GraphForgeSession,
   arg?: unknown,
 ): Promise<void> {
-  if (!(await ensureProjectOrRecover(session))) {
+  if (!(await ensureProjectReady(session))) {
     return;
   }
   const assertionUuid = await resolveAssertionUuid(session, arg);
@@ -333,7 +321,7 @@ function assertionToGraphPayload(
 
 /** Advanced: attach one evidence link. Kept out of Create Assertion by design. */
 async function runAttachEvidence(session: GraphForgeSession): Promise<void> {
-  if (!(await ensureProjectOrRecover(session))) {
+  if (!(await ensureProjectReady(session))) {
     return;
   }
   const assertionUuid = await resolveAssertionUuid(session);
@@ -367,7 +355,7 @@ async function runAttachEvidence(session: GraphForgeSession): Promise<void> {
 
 /** Advanced: record one confidence assessment. Kept out of Create Assertion by design. */
 async function runAssessConfidence(session: GraphForgeSession): Promise<void> {
-  if (!(await ensureProjectOrRecover(session))) {
+  if (!(await ensureProjectReady(session))) {
     return;
   }
   const assertionUuid = await resolveAssertionUuid(session);
@@ -412,7 +400,7 @@ async function runAssessConfidence(session: GraphForgeSession): Promise<void> {
 async function runRecordAssertionStatus(
   session: GraphForgeSession,
 ): Promise<void> {
-  if (!(await ensureProjectOrRecover(session))) {
+  if (!(await ensureProjectReady(session))) {
     return;
   }
   const assertionUuid = await resolveAssertionUuid(session);

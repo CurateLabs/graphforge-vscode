@@ -6,7 +6,7 @@ import { isGraphForgeProject } from "../session/projectDetector";
 import type { QueryResult } from "../session/types";
 import { OntologyPanel } from "../webview/ontologyPanel";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
-import { errorMessage } from "./shared";
+import { ensureProjectOrRecover, errorMessage } from "./shared";
 
 export function registerOpenViews(
   context: vscode.ExtensionContext,
@@ -107,12 +107,8 @@ export function registerOpenViews(
     }),
 
     vscode.commands.registerCommand("graphforge.showCapabilities", async () => {
-      try {
-        await session.ensureProject();
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          err instanceof Error ? err.message : String(err),
-        );
+      const recovery = await ensureProjectOrRecover(session);
+      if (recovery) {
         return;
       }
 
@@ -162,12 +158,8 @@ export function registerOpenViews(
     }),
 
     vscode.commands.registerCommand("graphforge.loadOntology", async () => {
-      try {
-        await session.ensureProject();
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          err instanceof Error ? err.message : String(err),
-        );
+      const recovery = await ensureProjectOrRecover(session);
+      if (recovery) {
         return;
       }
       const uri = await vscode.window.showOpenDialog({

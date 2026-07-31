@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { UnsupportedByBindingError } from "../session/graphForgeSession";
-import { errorMessage } from "./shared";
+import { ensureProjectReady, errorMessage } from "./shared";
 
 /**
  * Embedding space commands (#10). The primary `Embedding Spaces` list is an
@@ -56,13 +56,7 @@ export function registerEmbeddingSpaces(
 }
 
 async function ensureReady(session: GraphForgeSession): Promise<boolean> {
-  try {
-    await session.ensureProject();
-    return true;
-  } catch (err) {
-    void vscode.window.showErrorMessage(errorMessage(err));
-    return false;
-  }
+  return ensureProjectReady(session);
 }
 
 async function showJson(title: string, value: unknown): Promise<void> {
