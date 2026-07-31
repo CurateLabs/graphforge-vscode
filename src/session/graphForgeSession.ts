@@ -8,13 +8,18 @@ import {
   readWorkspaceOntology,
 } from "./projectDetector";
 import {
+  AlgorithmDescriptorContract,
   AnalystVerb,
+  BeliefPolicySettings,
+  DEFAULT_BELIEF_POLICY,
   DetectedProject,
   EpistemicStatus,
+  FALLBACK_BY,
   GraphEdge,
   GraphForgeNative,
   GraphNode,
   GraphPayload,
+  GraphStyleMode,
   KnowledgeSummary,
   OntologyDoc,
   ProjectCapabilities,
@@ -22,9 +27,34 @@ import {
   TableRow,
 } from "./types";
 
+/** Live catalog for one verb, or the static fallback with a UI-visible reason. */
+export interface AlgorithmCatalog {
+  items: string[];
+  source: "contracts" | "fallback";
+  note?: string;
+}
+
+const ALL_EPISTEMIC_STATUSES: EpistemicStatus[] = [
+  "hypothesis",
+  "supported",
+  "refuted",
+  "disputed",
+  "retracted",
+  "superseded",
+  "statusless",
+];
+
+function isEpistemicStatus(value: unknown): value is EpistemicStatus {
+  return typeof value === "string" && (ALL_EPISTEMIC_STATUSES as string[]).includes(value);
+}
+
 export class GraphForgeSession implements vscode.Disposable {
   private forge: GraphForgeNative | undefined;
   private activeProject: DetectedProject | undefined;
+  private algorithmContractsCache: AlgorithmDescriptorContract[] | undefined;
+  private lastResult: QueryResult | undefined;
+  private lastResultTitle: string | undefined;
+  private beliefPolicy: BeliefPolicySettings = { ...DEFAULT_BELIEF_POLICY };
   private readonly statusBar: vscode.StatusBarItem;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
@@ -82,6 +112,9 @@ export class GraphForgeSession implements vscode.Disposable {
       this.forge = undefined;
       throw err instanceof Error ? err : new Error(String(err));
     }
+    this.algorithmContractsCache = undefined;
+    this.lastResult = undefined;
+    this.lastResultTitle = undefined;
 
     const projects = await discoverProjects();
     this.activeProject =
@@ -128,6 +161,8 @@ export class GraphForgeSession implements vscode.Disposable {
       by?: string;
       via?: string;
       directed?: boolean;
+      writeProperty?: string;
+      vectorProperty?: string;
       query?: string;
       k?: number;
       source?: string;
@@ -143,6 +178,7 @@ export class GraphForgeSession implements vscode.Disposable {
           args.by ?? "pagerank",
           args.via,
           args.directed,
+          args.writeProperty,
         );
         break;
       case "cluster":
@@ -151,6 +187,8 @@ export class GraphForgeSession implements vscode.Disposable {
           args.by ?? "louvain",
           args.via,
           args.directed,
+          args.writeProperty,
+          args.vectorProperty,
         );
         break;
       case "paths":
@@ -167,7 +205,13 @@ export class GraphForgeSession implements vscode.Disposable {
         buf = forge.analyze(args.label, args.by ?? "spanning_tree", args.via, args.directed);
         break;
       case "similar":
-        buf = forge.similar(args.label ?? "", args.by ?? "node_similarity", args.k);
+        buf = forge.similar(
+          args.label ?? "",
+          args.by ?? "node_similarity",
+          args.k,
+          args.vectorProperty,
+          args.via,
+        );
         break;
       case "find":
         buf = forge.find(args.query, args.label, args.k ?? 10);
@@ -176,6 +220,51 @@ export class GraphForgeSession implements vscode.Disposable {
         throw new Error(`Unknown verb: ${verb}`);
     }
     return decodeTable(buf);
+  }
+
+  /**
+   * Live `by=` catalog for one verb from `algorithmDescriptorContracts()`,
+   * grouped and de-duplicated by verb. Falls back to the static lists in
+   * `types.ts` when the binding is missing, predates the contracts method,
+   * or returns nothing for this verb — callers should show `note` in the UI.
+   */
+  algorithmCatalog(verb: Exclude<AnalystVerb, "find">): AlgorithmCatalog {
+    const fallback: AlgorithmCatalog = { items: [...FALLBACK_BY[verb]], source: "fallback" };
+    if (!this.forge) {
+      return fallback;
+    }
+    try {
+      if (typeof this.forge.algorithmDescriptorContracts !== "function") {
+        return fallback;
+      }
+      if (!this.algorithmContractsCache) {
+        this.algorithmContractsCache = this.forge.algorithmDescriptorContracts();
+      }
+      const items = [
+        ...new Set(
+          this.algorithmContractsCache
+            .filter((c) => c.verb === verb)
+            .map((c) => c.algorithm),
+        ),
+      ];
+      if (!items.length) {
+        return { ...fallback, note: "Engine returned no contracts for this verb." };
+      }
+      return { items, source: "contracts" };
+    } catch (err) {
+      return {
+        ...fallback,
+        note: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  getBeliefPolicy(): BeliefPolicySettings {
+    return { ...this.beliefPolicy };
+  }
+
+  setBeliefPolicy(policy: Partial<BeliefPolicySettings>): void {
+    this.beliefPolicy = { ...this.beliefPolicy, ...policy };
   }
 
   labels(): string[] {
@@ -241,24 +330,29 @@ export class GraphForgeSession implements vscode.Disposable {
           : getNativeLoadError(),
       };
     }
-    try {
-      const result = decodeTable(this.forge.listAssertions());
-      return {
-        assertionCount: result.rowCount,
-        statusCounts: {},
-        note: "Assertion rows loaded; epistemic projection pending.",
-      };
-    } catch (err) {
-      return {
-        assertionCount: 0,
-        statusCounts: {},
-        note: err instanceof Error ? err.message : String(err),
-      };
-    }
+    // `listAssertions`/`assertionStatus` are async (napi AsyncTask); a
+    // synchronous ledger summary needs a paged/aggregating call this
+    // scaffold doesn't have yet. Per-node epistemic status is wired for the
+    // Result Graph (see `resolveEpistemicStatuses`); full ledger browsing is
+    // Knowledge view scope (#6).
+    return {
+      assertionCount: 0,
+      statusCounts: {},
+      note: "Knowledge ledger summary pending (#6). Result Graph resolves per-node status live.",
+    };
   }
 
-  /** Build a graph payload from tabular results + optional epistemic/class tags. */
-  toGraphPayload(result: QueryResult, title?: string): GraphPayload {
+  /**
+   * Build a graph payload from tabular results, then (when the project has
+   * the `knowledge` + `epistemic` capabilities and the binding exposes the
+   * status APIs) resolve real ledger status for each node UUID. Remembers
+   * the raw result so `GraphForge: Show Result Graph` can refresh/re-resolve
+   * without re-running the query or verb.
+   */
+  async toGraphPayload(result: QueryResult, title?: string): Promise<GraphPayload> {
+    this.lastResult = result;
+    this.lastResultTitle = title;
+
     const nodes = new Map<string, GraphNode>();
     const edges: GraphEdge[] = [];
     const ontology = this.workspaceOntology();
@@ -310,7 +404,6 @@ export class GraphForgeSession implements vscode.Disposable {
             id: source,
             labels: ["Node"],
             properties: {},
-            epistemicStatus: "statusless",
           });
         }
         if (!nodes.has(target)) {
@@ -318,7 +411,6 @@ export class GraphForgeSession implements vscode.Disposable {
             id: target,
             labels: ["Node"],
             properties: {},
-            epistemicStatus: "statusless",
           });
         }
         edges.push({
@@ -337,6 +429,27 @@ export class GraphForgeSession implements vscode.Disposable {
       return demoGraphPayload(title ?? "Result (demo)", result);
     }
 
+    const resolution = await this.resolveEpistemicStatuses([...nodes.keys()]);
+    let styleMode: GraphStyleMode = "class-only";
+    if (resolution.active) {
+      styleMode = "epistemic";
+      for (const [id, status] of resolution.statuses) {
+        const node = nodes.get(id);
+        if (node) {
+          node.epistemicStatus = status;
+        }
+      }
+    } else {
+      // No fake statuses when the knowledge capability (or binding support)
+      // is absent — strip any speculative per-row hints and style by class.
+      for (const node of nodes.values()) {
+        delete node.epistemicStatus;
+      }
+      for (const edge of edges) {
+        delete edge.epistemicStatus;
+      }
+    }
+
     const types = [
       ...new Set(
         [...nodes.values()]
@@ -349,19 +462,113 @@ export class GraphForgeSession implements vscode.Disposable {
       nodes: [...nodes.values()],
       edges,
       legend: {
-        statuses: [
-          "hypothesis",
-          "supported",
-          "refuted",
-          "disputed",
-          "retracted",
-          "superseded",
-          "statusless",
-        ],
+        statuses: ALL_EPISTEMIC_STATUSES,
         types,
       },
       title,
+      styleMode,
+      banner: resolution.note,
     };
+  }
+
+  /** Rebuild the last query/verb result's graph payload (palette refresh). */
+  async lastGraphPayload(): Promise<GraphPayload> {
+    if (this.lastResult) {
+      return this.toGraphPayload(this.lastResult, this.lastResultTitle);
+    }
+    return this.toGraphPayload({ columns: [], rows: [], rowCount: 0 }, "Demo graph");
+  }
+
+  get hasLastResult(): boolean {
+    return this.lastResult !== undefined;
+  }
+
+  /**
+   * Best-effort ledger status resolution for a bounded set of node UUIDs:
+   * `listAssertions({ graphUuid })` to find an assertion about the node, then
+   * `assertionStatus(assertionUuid)` for its current explicit status (empty
+   * table = legitimately statusless). Defensive throughout — the engine API
+   * may still be moving; any missing method, missing capability, or thrown
+   * error falls back to `{ active: false }` (class-only styling) rather than
+   * inventing a status.
+   */
+  private async resolveEpistemicStatuses(
+    nodeIds: string[],
+  ): Promise<{ active: boolean; statuses: Map<string, EpistemicStatus>; note?: string }> {
+    const empty = new Map<string, EpistemicStatus>();
+    if (!this.forge || nodeIds.length === 0) {
+      return { active: false, statuses: empty };
+    }
+    if (!this.beliefPolicy.enabled) {
+      return {
+        active: false,
+        statuses: empty,
+        note: "Epistemic resolution disabled (GraphForge: Result Graph (Advanced)…) — class-only styling.",
+      };
+    }
+    const caps = this.capabilities().capabilities;
+    if (!caps.includes("knowledge") || !caps.includes("epistemic")) {
+      return {
+        active: false,
+        statuses: empty,
+        note: "Knowledge capability not enabled for this project — class-only styling.",
+      };
+    }
+    const forge = this.forge;
+    const listAssertions = forge.listAssertions;
+    const assertionStatus = forge.assertionStatus;
+    if (typeof listAssertions !== "function" || typeof assertionStatus !== "function") {
+      return {
+        active: false,
+        statuses: empty,
+        note: "GraphForge binding does not expose belief/status APIs yet — class-only styling.",
+      };
+    }
+
+    const cap = Math.max(1, this.beliefPolicy.maxNodes);
+    const truncated = nodeIds.length > cap;
+    const ids = nodeIds.slice(0, cap);
+    const statuses = new Map<string, EpistemicStatus>();
+    let failures = 0;
+
+    const resolveOne = async (uuid: string): Promise<void> => {
+      try {
+        const assertions = decodeTable(await listAssertions({ graphUuid: uuid, limit: 1 }));
+        const assertionUuid =
+          assertions.rowCount > 0 ? stringField(assertions.rows[0], "assertion_uuid") : undefined;
+        if (!assertionUuid) {
+          statuses.set(uuid, "statusless");
+          return;
+        }
+        const statusTable = decodeTable(await assertionStatus(assertionUuid));
+        const raw = statusTable.rowCount > 0 ? stringField(statusTable.rows[0], "status") : undefined;
+        statuses.set(uuid, isEpistemicStatus(raw) ? raw : "statusless");
+      } catch {
+        failures += 1;
+      }
+    };
+
+    const concurrency = 6;
+    for (let i = 0; i < ids.length; i += concurrency) {
+      await Promise.all(ids.slice(i, i + concurrency).map(resolveOne));
+    }
+
+    if (statuses.size === 0 && failures > 0) {
+      return {
+        active: false,
+        statuses: empty,
+        note: "Belief status lookup failed for every resolved node — class-only styling.",
+      };
+    }
+
+    const notes: string[] = [];
+    if (truncated) {
+      notes.push(`Resolved epistemic status for first ${cap} of ${nodeIds.length} nodes.`);
+    }
+    if (failures > 0) {
+      notes.push(`${failures} node(s) failed status lookup (left class-only).`);
+    }
+    return { active: true, statuses, note: notes.length ? notes.join(" ") : undefined };
   }
 
   notifyChanged(): void {
@@ -456,21 +663,16 @@ function labelsFromRow(row: TableRow, prefix = ""): string[] {
   return [];
 }
 
-function statusFromRow(row: TableRow): EpistemicStatus {
+/**
+ * Optional per-row status hint from the query/verb result itself (e.g. a
+ * Cypher query that projects `n.epistemic_status`). Returns `undefined` —
+ * never a default "statusless" — so `toGraphPayload` can tell a real hint
+ * apart from "no data": defaulting here would fabricate a status when the
+ * knowledge capability is absent.
+ */
+function statusFromRow(row: TableRow): EpistemicStatus | undefined {
   const raw = stringField(row, "epistemic_status") ?? stringField(row, "status");
-  const allowed: EpistemicStatus[] = [
-    "hypothesis",
-    "supported",
-    "refuted",
-    "disputed",
-    "retracted",
-    "superseded",
-    "statusless",
-  ];
-  if (raw && (allowed as string[]).includes(raw)) {
-    return raw as EpistemicStatus;
-  }
-  return "statusless";
+  return isEpistemicStatus(raw) ? raw : undefined;
 }
 
 function demoGraphPayload(title: string, result: QueryResult): GraphPayload {
@@ -517,17 +719,11 @@ function demoGraphPayload(title: string, result: QueryResult): GraphPayload {
     nodes,
     edges,
     legend: {
-      statuses: [
-        "hypothesis",
-        "supported",
-        "refuted",
-        "disputed",
-        "retracted",
-        "superseded",
-        "statusless",
-      ],
+      statuses: ALL_EPISTEMIC_STATUSES,
       types: ["Person", "Org"],
     },
     title,
+    styleMode: "demo",
+    banner: "Demo graph — no graph-shaped rows in the last result.",
   };
 }

@@ -31,3 +31,22 @@ export const EPISTEMIC_COLORS: Record<EpistemicStatus, string> = {
   superseded: "#868e96",
   statusless: "#495057",
 };
+
+/**
+ * Extension-owned class palette for "class-only" styling (no knowledge
+ * capability, or binding predates belief/status APIs). Deterministically
+ * hashed onto by ontology/label class name — see `classColor` in the
+ * webview script.
+ */
+export const CLASS_COLOR_PALETTE: readonly string[] = [
+  "#4c6ef5",
+  "#12b886",
+  "#fab005",
+  "#7048e8",
+  "#e64980",
+  "#15aabf",
+  "#82c91e",
+  "#fa5252",
+  "#fd7e14",
+  "#20c997",
+];

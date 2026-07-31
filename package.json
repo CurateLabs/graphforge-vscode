@@ -74,20 +74,40 @@
         "title": "GraphForge: Rank"
       },
       {
+        "command": "graphforge.rankAdvanced",
+        "title": "GraphForge: Rank (Advanced)…"
+      },
+      {
         "command": "graphforge.cluster",
         "title": "GraphForge: Cluster"
+      },
+      {
+        "command": "graphforge.clusterAdvanced",
+        "title": "GraphForge: Cluster (Advanced)…"
       },
       {
         "command": "graphforge.paths",
         "title": "GraphForge: Paths"
       },
       {
+        "command": "graphforge.pathsAdvanced",
+        "title": "GraphForge: Paths (Advanced)…"
+      },
+      {
         "command": "graphforge.analyze",
         "title": "GraphForge: Analyze"
       },
       {
+        "command": "graphforge.analyzeAdvanced",
+        "title": "GraphForge: Analyze (Advanced)…"
+      },
+      {
         "command": "graphforge.similar",
         "title": "GraphForge: Similar"
+      },
+      {
+        "command": "graphforge.similarAdvanced",
+        "title": "GraphForge: Similar (Advanced)…"
       },
       {
         "command": "graphforge.find",
@@ -100,6 +120,10 @@
       {
         "command": "graphforge.showResultGraph",
         "title": "GraphForge: Show Result Graph"
+      },
+      {
+        "command": "graphforge.showResultGraphAdvanced",
+        "title": "GraphForge: Result Graph (Advanced)…"
       },
       {
         "command": "graphforge.showCapabilities",

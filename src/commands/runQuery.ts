@@ -49,7 +49,7 @@ export function registerRunQuery(
           .getConfiguration("graphforge")
           .get<boolean>("openResultGraphOnQuery", true);
         if (openGraph) {
-          const payload = session.toGraphPayload(result, "Cypher result");
+          const payload = await session.toGraphPayload(result, "Cypher result");
           ResultGraphPanel.show(context.extensionUri, payload);
         }
 
