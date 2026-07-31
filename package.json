@@ -247,6 +247,10 @@
         "title": "GraphForge: Result Graph (Advanced)…"
       },
       {
+        "command": "graphforge.statusBarClick",
+        "title": "GraphForge: Status Bar"
+      },
+      {
         "command": "graphforge.showCapabilities",
         "title": "GraphForge: Show Project Capabilities"
       },

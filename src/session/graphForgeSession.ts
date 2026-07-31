@@ -129,7 +129,7 @@ export class GraphForgeSession implements vscode.Disposable {
       vscode.StatusBarAlignment.Left,
       50,
     );
-    this.statusBar.command = "graphforge.showCapabilities";
+    this.statusBar.command = "graphforge.statusBarClick";
     this.statusBar.show();
     this.refreshStatus();
   }
