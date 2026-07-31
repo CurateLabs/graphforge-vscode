@@ -1,9 +1,12 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
+import { UnsupportedByBindingError } from "../session/graphForgeSession";
 import { isGraphForgeProject } from "../session/projectDetector";
+import type { QueryResult } from "../session/types";
 import { OntologyPanel } from "../webview/ontologyPanel";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import { errorMessage } from "./shared";
 
 export function registerOpenViews(
   context: vscode.ExtensionContext,
@@ -112,18 +115,43 @@ export function registerOpenViews(
         );
         return;
       }
+
+      let liveCaps: QueryResult | undefined;
+      try {
+        liveCaps = await session.liveCapabilities();
+      } catch (err) {
+        if (!(err instanceof UnsupportedByBindingError)) {
+          void vscode.window.showWarningMessage(
+            `GraphForge: could not fetch live capabilities (${errorMessage(err)}), falling back to manifest.`,
+          );
+        }
+        liveCaps = undefined;
+      }
+
       const caps = session.capabilities();
       const lines = [
         `Project: ${session.project?.rootPath}`,
         `Generation: ${caps.generationUuid ?? "(none)"}`,
         `Ontology mode: ${session.ontologyMode()}`,
+        `Write mode: ${session.writeMode}`,
         `Binding: ${session.bindingAvailable ? "ok" : session.bindingError}`,
         "",
-        "Capabilities / participants:",
+        "Manifest capabilities / participants:",
         ...(caps.capabilities.length
           ? caps.capabilities.map((c) => `  - ${c}`)
           : ["  (none listed in manifest)"]),
       ];
+      if (liveCaps) {
+        lines.push(
+          "",
+          "Live capabilities (from engine):",
+          ...(liveCaps.rows.length
+            ? liveCaps.rows.map(
+                (row) => `  - ${row.capability_id} (v${row.capability_version})`,
+              )
+            : ["  (none enabled by engine)"]),
+        );
+      }
       const doc = await vscode.workspace.openTextDocument({
         content: lines.join("\n"),
         language: "markdown",

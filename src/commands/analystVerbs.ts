@@ -25,6 +25,11 @@ interface LastUsed {
   by?: string;
 }
 
+/**
+ * `find` is registered as its own dedicated command (see `commands/find.ts`,
+ * issue #8) with a tailored ≤2-input primary flow and Advanced index
+ * remediation — it is intentionally excluded from this generic verb loop.
+ */
 export function registerAnalystVerbs(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
@@ -35,7 +40,6 @@ export function registerAnalystVerbs(
     "paths",
     "analyze",
     "similar",
-    "find",
   ];
 
   for (const verb of verbs) {

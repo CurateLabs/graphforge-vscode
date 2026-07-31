@@ -130,6 +130,98 @@
         "title": "GraphForge: Find"
       },
       {
+        "command": "graphforge.indexText",
+        "title": "GraphForge: Index Text…"
+      },
+      {
+        "command": "graphforge.indexVector",
+        "title": "GraphForge: Index Vector…"
+      },
+      {
+        "command": "graphforge.inspectTextIndex",
+        "title": "GraphForge: Inspect Text Index…"
+      },
+      {
+        "command": "graphforge.indexAdjacency",
+        "title": "GraphForge: Index Adjacency"
+      },
+      {
+        "command": "graphforge.inspectAdjacency",
+        "title": "GraphForge: Inspect Adjacency Index"
+      },
+      {
+        "command": "graphforge.rebuildAdjacency",
+        "title": "GraphForge: Rebuild Adjacency Index"
+      },
+      {
+        "command": "graphforge.createCheckpoint",
+        "title": "GraphForge: Create Checkpoint…"
+      },
+      {
+        "command": "graphforge.listCheckpoints",
+        "title": "GraphForge: List Checkpoints"
+      },
+      {
+        "command": "graphforge.openCheckpoint",
+        "title": "GraphForge: Open Checkpoint…"
+      },
+      {
+        "command": "graphforge.diffCheckpoints",
+        "title": "GraphForge: Diff Checkpoints…"
+      },
+      {
+        "command": "graphforge.deleteCheckpoint",
+        "title": "GraphForge: Delete Checkpoint…"
+      },
+      {
+        "command": "graphforge.revertToCheckpoint",
+        "title": "GraphForge: Revert to Checkpoint…"
+      },
+      {
+        "command": "graphforge.embeddingSpaces",
+        "title": "GraphForge: Embedding Spaces"
+      },
+      {
+        "command": "graphforge.publishCallerEmbeddings",
+        "title": "GraphForge: Publish Caller Embeddings…"
+      },
+      {
+        "command": "graphforge.bindEmbeddingSpaceAlias",
+        "title": "GraphForge: Bind Embedding Space Alias…"
+      },
+      {
+        "command": "graphforge.setDefaultEmbeddingSpace",
+        "title": "GraphForge: Set Default Embedding Space…"
+      },
+      {
+        "command": "graphforge.deleteEmbeddingSpace",
+        "title": "GraphForge: Delete Embedding Space…"
+      },
+      {
+        "command": "graphforge.inspectEmbeddingSpaceFreshness",
+        "title": "GraphForge: Inspect Embedding Space Freshness…"
+      },
+      {
+        "command": "graphforge.enableCapability",
+        "title": "GraphForge: Enable Capability…"
+      },
+      {
+        "command": "graphforge.openWithWriteMode",
+        "title": "GraphForge: Open with Write Mode…"
+      },
+      {
+        "command": "graphforge.exportInvocationDescriptor",
+        "title": "GraphForge: Export Invocation Descriptor…"
+      },
+      {
+        "command": "graphforge.listAlgorithmRuns",
+        "title": "GraphForge: List Algorithm Runs"
+      },
+      {
+        "command": "graphforge.publishCompositeTransaction",
+        "title": "GraphForge: Publish Composite Transaction… (Advanced)"
+      },
+      {
         "command": "graphforge.showOntology",
         "title": "GraphForge: Show Ontology Viewer"
       },

@@ -217,6 +217,27 @@ export interface AlgorithmDescriptorContract {
   resultSchemaVersion: number;
 }
 
+/** Alias kept for the native-binding-facing surface (#11); same shape as {@link AlgorithmDescriptorContract}. */
+export type AlgorithmDescriptorContractNative = AlgorithmDescriptorContract;
+
+/** Read-only handle over one pinned checkpoint generation (v0.5 `CheckpointView`, #9 / ADR 0014). */
+export interface CheckpointViewNative {
+  readonly checkpointUuid: string;
+  readonly generationUuid: string;
+  execute(cypher: string): Buffer;
+  projectCapabilities(): Buffer;
+  inspectAdjacency(): unknown;
+}
+
+/** Opaque canonical M18 invocation descriptor handle (ADR contract, #11). */
+export interface InvocationDescriptorNative {
+  readonly canonicalBytes: Buffer;
+  readonly fingerprint: string;
+  readonly projectionFingerprint: string;
+  readonly verb: string;
+  readonly algorithm: string;
+}
+
 /** Advanced belief-resolution controls (GraphForge: Result Graph (Advanced)…). */
 export interface BeliefPolicySettings {
   /** Attempt ledger status resolution at all when the knowledge capability exists. */
@@ -276,11 +297,146 @@ export interface GraphForgeNative {
   find(
     query?: string | null,
     label?: string | null,
+    vector?: number[] | null,
+    similarTo?: unknown,
+    semanticQuery?: string | null,
     limit?: number | null,
+    space?: string | null,
+    forceStale?: boolean | null,
   ): Buffer;
   labels(): string[];
   relationshipTypes(): string[];
   loadOntology(path: string): void;
+
+  // ---- Checkpoints (#9 / ADR 0014) — every op is async (Promise<Buffer>). ----
+  checkpoint?(request: {
+    name: string;
+    description?: string | null;
+    idempotencyKey: string;
+    actorUuid?: string | null;
+  }): Promise<Buffer>;
+  listCheckpoints?(request?: {
+    limit?: number;
+    after?: string | null;
+  }): Promise<Buffer>;
+  openCheckpoint?(name: string): CheckpointViewNative;
+  deleteCheckpoint?(request: {
+    name: string;
+    idempotencyKey: string;
+    actorUuid?: string | null;
+  }): Promise<Buffer>;
+  diffCheckpoints?(request: {
+    from: string;
+    to: string;
+    scope: string;
+    detail: string;
+    limit?: number;
+    after?: string | null;
+  }): Promise<Buffer>;
+  revertToCheckpoint?(request: {
+    name: string;
+    reason: string;
+    idempotencyKey: string;
+    actorUuid?: string | null;
+  }): Promise<Buffer>;
+
+  // ---- Capabilities / write coordination (#11 / ADR 0015). ----
+  projectCapabilities?(): Promise<Buffer>;
+  enableCapability?(request: {
+    operationUuid: string;
+    capabilityId: string;
+    capabilityVersion: number;
+    actorUuid?: string | null;
+  }): Promise<Buffer>;
+
+  // ---- Embedding spaces (#10). ----
+  embeddingSpaces?(): unknown[];
+  embeddingSpace?(name?: string | null): unknown;
+  bindEmbeddingSpaceAlias?(
+    name: string,
+    compatibilityId: string,
+    replace?: boolean,
+  ): unknown;
+  removeEmbeddingSpaceAlias?(name: string): boolean;
+  setDefaultEmbeddingSpace?(name?: string | null): unknown;
+  deleteEmbeddingSpace?(name?: string | null): boolean;
+  publishCallerEmbeddings?(
+    name: string,
+    input: {
+      rows: Array<{ node: string; vector: number[] }>;
+      dimensions: number;
+      sourceProjection: Record<string, string>;
+      normalization?: "none" | "l2";
+      replace?: boolean;
+    },
+  ): string;
+  inspectEmbeddingSpaceFreshness?(
+    name?: string | null,
+    forceStale?: boolean,
+  ): unknown;
+  embeddingRefreshProjectPolicy?(): unknown;
+
+  // ---- Find + indexing (#8). ----
+  index?(
+    label: string,
+    input?: {
+      properties?: string[] | null;
+      rebuild?: boolean;
+      node?: string | null;
+      vector?: number[] | null;
+      space?: string | null;
+    } | null,
+  ): unknown;
+  inspectTextIndex?(label: string, properties?: string[] | null): unknown;
+  indexAdjacency?(): unknown;
+  inspectAdjacency?(): unknown;
+  rebuildAdjacency?(): unknown;
+
+  // ---- Invocation descriptors / algorithm runs (#11). ----
+  prepareRankInvocation?(
+    label: string,
+    by: string,
+    via?: string | null,
+    directed?: boolean | null,
+  ): InvocationDescriptorNative;
+  prepareClusterInvocation?(
+    label: string,
+    by: string,
+    via?: string | null,
+    directed?: boolean | null,
+    vectorProperty?: string | null,
+  ): InvocationDescriptorNative;
+  preparePathsInvocation?(
+    source: unknown,
+    target: unknown,
+    by: string,
+    via?: string | null,
+    directed?: boolean | null,
+    k?: number | null,
+  ): InvocationDescriptorNative;
+  prepareAnalyzeInvocation?(
+    by: string,
+    label?: string | null,
+    via?: string | null,
+    directed?: boolean | null,
+  ): InvocationDescriptorNative;
+  prepareSimilarInvocation?(
+    label: string,
+    by: string,
+    k?: number | null,
+    vectorProperty?: string | null,
+    via?: string | null,
+  ): InvocationDescriptorNative;
+  invokeDescriptor?(descriptor: InvocationDescriptorNative): Buffer;
+  listAlgorithmRuns?(request?: {
+    algorithm?: string | null;
+    limit?: number;
+    after?: string | null;
+  }): Promise<Buffer>;
+  algorithmRun?(runUuid: string): Promise<Buffer>;
+
+  // ---- Composite transactions (#11, expert/Advanced-only). ----
+  publishCompositeTransaction?(request: unknown): Buffer;
   /**
    * Knowledge ledger surface. Optional and defensively typed: the sibling
    * `@graphforge/node` binding is a separate, moving project and these methods

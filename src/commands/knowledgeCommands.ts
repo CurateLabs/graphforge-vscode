@@ -327,6 +327,7 @@ function assertionToGraphPayload(
     edges,
     legend: { statuses: ["statusless"], types: ["Assertion"] },
     title: `Assertion ${assertionUuid.slice(0, 8)}`,
+    styleMode: "class-only",
   };
 }
 
