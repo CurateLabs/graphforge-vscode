@@ -65,7 +65,7 @@
     "commands": [
       {
         "command": "graphforge.openProject",
-        "title": "GraphForge: Open Project",
+        "title": "GraphForge: Open Project…",
         "icon": "$(folder-opened)"
       },
       {
@@ -101,20 +101,24 @@
         "title": "GraphForge: Check Environment"
       },
       {
+        "command": "graphforge.copyEnvironmentReport",
+        "title": "GraphForge: Copy Environment Report"
+      },
+      {
         "command": "graphforge.setupNativeBinding",
-        "title": "GraphForge: Setup Native Binding"
+        "title": "GraphForge: Setup Native Binding…"
       },
       {
         "command": "graphforge.setupPythonBinding",
-        "title": "GraphForge: Setup Python Binding"
+        "title": "GraphForge: Setup Python Binding…"
       },
       {
         "command": "graphforge.initializeProjectHere",
-        "title": "GraphForge: Initialize Project Here"
+        "title": "GraphForge: Initialize Project Here…"
       },
       {
         "command": "graphforge.rank",
-        "title": "GraphForge: Rank"
+        "title": "GraphForge: Rank…"
       },
       {
         "command": "graphforge.rankAdvanced",
@@ -122,7 +126,7 @@
       },
       {
         "command": "graphforge.cluster",
-        "title": "GraphForge: Cluster"
+        "title": "GraphForge: Cluster…"
       },
       {
         "command": "graphforge.clusterAdvanced",
@@ -130,7 +134,7 @@
       },
       {
         "command": "graphforge.paths",
-        "title": "GraphForge: Paths"
+        "title": "GraphForge: Paths…"
       },
       {
         "command": "graphforge.pathsAdvanced",
@@ -138,7 +142,7 @@
       },
       {
         "command": "graphforge.analyze",
-        "title": "GraphForge: Analyze"
+        "title": "GraphForge: Analyze…"
       },
       {
         "command": "graphforge.analyzeAdvanced",
@@ -146,7 +150,7 @@
       },
       {
         "command": "graphforge.similar",
-        "title": "GraphForge: Similar"
+        "title": "GraphForge: Similar…"
       },
       {
         "command": "graphforge.similarAdvanced",
@@ -154,7 +158,7 @@
       },
       {
         "command": "graphforge.find",
-        "title": "GraphForge: Find"
+        "title": "GraphForge: Find…"
       },
       {
         "command": "graphforge.indexText",
@@ -230,23 +234,23 @@
       },
       {
         "command": "graphforge.enableCapability",
-        "title": "GraphForge: Enable Capability…"
+        "title": "GraphForge: Power: Enable Capability…"
       },
       {
         "command": "graphforge.openWithWriteMode",
-        "title": "GraphForge: Open with Write Mode…"
+        "title": "GraphForge: Power: Open with Write Mode…"
       },
       {
         "command": "graphforge.exportInvocationDescriptor",
-        "title": "GraphForge: Export Invocation Descriptor…"
+        "title": "GraphForge: Power: Export Invocation Descriptor…"
       },
       {
         "command": "graphforge.listAlgorithmRuns",
-        "title": "GraphForge: List Algorithm Runs"
+        "title": "GraphForge: Power: List Algorithm Runs"
       },
       {
         "command": "graphforge.publishCompositeTransaction",
-        "title": "GraphForge: Publish Composite Transaction… (Advanced)"
+        "title": "GraphForge: Power: Publish Composite Transaction…"
       },
       {
         "command": "graphforge.showOntology",
@@ -300,15 +304,15 @@
       },
       {
         "command": "graphforge.attachEvidence",
-        "title": "GraphForge: Attach Evidence… (Advanced)"
+        "title": "GraphForge: Attach Evidence (Advanced)…"
       },
       {
         "command": "graphforge.assessConfidence",
-        "title": "GraphForge: Assess Confidence… (Advanced)"
+        "title": "GraphForge: Assess Confidence (Advanced)…"
       },
       {
         "command": "graphforge.recordAssertionStatus",
-        "title": "GraphForge: Record Assertion Status… (Advanced)"
+        "title": "GraphForge: Record Assertion Status (Advanced)…"
       }
     ],
     "menus": {
@@ -442,7 +446,7 @@
     "check": "tsc --noEmit && tsc --noEmit -p webview-ui",
     "lint": "npm run check",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/knowledgeStatus.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js",
     "package": "vsce package"
   },
   "dependencies": {

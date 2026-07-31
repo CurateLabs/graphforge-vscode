@@ -123,7 +123,17 @@ async function executeAndShowResult(
   params?: Record<string, unknown>,
 ): Promise<QueryResult | { error: string; code?: string }> {
   try {
-    const result = await session.execute(cypher, params);
+    // #31: lightweight in-flight indicator (status-bar spinner) so slow
+    // queries aren't silent. Window location is non-modal, so agent-invoked
+    // runs are never blocked; it clears when the engine call settles either
+    // way, and the result document / toast / graph behavior is unchanged.
+    const result = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Window,
+        title: "GraphForge: running query…",
+      },
+      () => session.execute(cypher, params),
+    );
     const doc = await vscode.workspace.openTextDocument({
       content: formatResultDocument(result),
       language: "json",

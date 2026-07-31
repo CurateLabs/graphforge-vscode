@@ -21,6 +21,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.runQuery",
   "graphforge.runQueryWithParams",
   "graphforge.checkEnvironment",
+  "graphforge.copyEnvironmentReport",
   "graphforge.getStarted",
   "graphforge.chooseExperienceMode",
   "graphforge.openSettings",
@@ -147,6 +148,25 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     );
     assert.ok(report);
     assert.equal(typeof report.nodeBinding.available, "boolean");
+  });
+
+  test("copyEnvironmentReport puts the environment JSON on the clipboard and returns the report (#32)", async () => {
+    const report = await vscode.commands.executeCommand<{
+      nodeBinding: { available: boolean };
+      nextAction: string;
+    }>("graphforge.copyEnvironmentReport");
+
+    assert.ok(report, "copyEnvironmentReport returned nothing");
+    assert.equal(typeof report.nodeBinding.available, "boolean");
+    assert.ok(report.nextAction.length > 0);
+
+    const clipboard = await vscode.env.clipboard.readText();
+    const parsed = JSON.parse(clipboard) as { nextAction?: string };
+    assert.equal(
+      parsed.nextAction,
+      report.nextAction,
+      "clipboard must contain the same curated report the command returned",
+    );
   });
 
   test("openProject with a non-GraphForge path arg fails closed without throwing or prompting", async () => {

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { ANALYZE_BY, AnalystVerb, CLUSTER_BY, RANK_BY, SIMILAR_BY, WriteMode, WRITE_MODES } from "../session/types";
+import { ANALYZE_BY, AnalystVerb, CLUSTER_BY, RANK_BY, SIMILAR_BY, WriteMode } from "../session/types";
+import { WRITE_MODE_OPTIONS } from "./pickerCopy";
 import { ensureProjectReady, errorMessage, reportEngineError } from "./shared";
 
 const COMPOSITE_DOCS_URL =
@@ -102,8 +103,11 @@ async function runEnableCapability(session: GraphForgeSession): Promise<void> {
     );
     return;
   }
+  // #40: plain workbench voice, same facts — applied in one step (atomic),
+  // and not undoable from here.
   const confirm = await vscode.window.showWarningMessage(
-    `Enable capability "${capabilityId}" v${version}? This atomically mutates the project's capability manifest.`,
+    `Enable capability "${capabilityId}" v${version}? This changes what your project can do — ` +
+      `it is applied in one step and can't be undone from here.`,
     { modal: true },
     "Enable",
   );
@@ -130,13 +134,14 @@ async function runOpenWithWriteMode(session: GraphForgeSession): Promise<void> {
   if (!(await ensureReady(session))) {
     return;
   }
-  const mode = await vscode.window.showQuickPick([...WRITE_MODES], {
+  const modePick = await vscode.window.showQuickPick([...WRITE_MODE_OPTIONS], {
     title: "GraphForge: Open with Write Mode…",
     placeHolder: session.writeMode,
   });
-  if (!mode) {
+  if (!modePick) {
     return;
   }
+  const mode = modePick.label;
   if (mode === session.writeMode) {
     void vscode.window.showInformationMessage(
       `GraphForge: already open in ${mode}.`,

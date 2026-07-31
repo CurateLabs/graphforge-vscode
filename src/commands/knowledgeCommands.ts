@@ -1,40 +1,16 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import {
+  CONFIDENCE_POLICY_OPTIONS,
+  EVIDENCE_ROLE_OPTIONS,
+  EXPLICIT_STATUS_OPTIONS,
+  GRAPH_KIND_OPTIONS,
+  GlossedOption,
+  SOURCE_KIND_OPTIONS,
+} from "./pickerCopy";
 import { ensureProjectReady } from "./shared";
-import type {
-  AssertionGraphKind,
-  ConfidencePolicy,
-  EvidenceRole,
-  EvidenceSourceKind,
-  ExplicitAssertionStatus,
-  GraphPayload,
-} from "../session/types";
-
-const GRAPH_KINDS: readonly AssertionGraphKind[] = ["node", "edge"];
-const SOURCE_KINDS: readonly EvidenceSourceKind[] = [
-  "document",
-  "observation",
-  "graph_node",
-  "graph_edge",
-];
-const EVIDENCE_ROLES: readonly EvidenceRole[] = [
-  "supports",
-  "contradicts",
-  "context",
-];
-const CONFIDENCE_POLICIES: readonly ConfidencePolicy[] = [
-  "explicit",
-  "conservative_min",
-];
-const EXPLICIT_STATUSES: readonly ExplicitAssertionStatus[] = [
-  "hypothesis",
-  "supported",
-  "refuted",
-  "disputed",
-  "retracted",
-  "superseded",
-];
+import type { GraphPayload } from "../session/types";
 
 /** Truncate a long string for display in a quick pick / detail line. */
 function truncate(text: string, max = 80): string {
@@ -42,15 +18,20 @@ function truncate(text: string, max = 80): string {
   return collapsed.length > max ? `${collapsed.slice(0, max)}…` : collapsed;
 }
 
-/** `showQuickPick` over a literal-union array without losing the literal type. */
+/**
+ * `showQuickPick` over a glossed literal-union option list (#40): the raw
+ * engine token stays as the label, with one line of plain-language `detail`
+ * per option, without losing the literal type.
+ */
 async function pickFrom<T extends string>(
-  items: readonly T[],
+  items: readonly GlossedOption<T>[],
   title: string,
 ): Promise<T | undefined> {
-  const picked = await vscode.window.showQuickPick([...items], {
-    title: `GraphForge: ${title}`,
-  });
-  return picked as T | undefined;
+  const picked = await vscode.window.showQuickPick(
+    items.map((item) => ({ ...item })),
+    { title: `GraphForge: ${title}` },
+  );
+  return picked?.label;
 }
 
 function isUuidish(value: string): boolean {
@@ -183,7 +164,7 @@ async function runCreateAssertion(
     return;
   }
 
-  const subjectKind = await pickFrom(GRAPH_KINDS, "Create Assertion (3/3) — Subject kind");
+  const subjectKind = await pickFrom(GRAPH_KIND_OPTIONS, "Create Assertion (3/3) — Subject kind");
   if (!subjectKind) {
     return;
   }
@@ -335,11 +316,11 @@ async function runAttachEvidence(session: GraphForgeSession): Promise<void> {
   if (!sourceUuid) {
     return;
   }
-  const sourceKind = await pickFrom(SOURCE_KINDS, "Attach Evidence — Source kind");
+  const sourceKind = await pickFrom(SOURCE_KIND_OPTIONS, "Attach Evidence — Source kind");
   if (!sourceKind) {
     return;
   }
-  const role = await pickFrom(EVIDENCE_ROLES, "Attach Evidence — Role");
+  const role = await pickFrom(EVIDENCE_ROLE_OPTIONS, "Attach Evidence — Role");
   if (!role) {
     return;
   }
@@ -362,7 +343,7 @@ async function runAssessConfidence(session: GraphForgeSession): Promise<void> {
   if (!assertionUuid) {
     return;
   }
-  const policy = await pickFrom(CONFIDENCE_POLICIES, "Assess Confidence — Policy");
+  const policy = await pickFrom(CONFIDENCE_POLICY_OPTIONS, "Assess Confidence — Policy");
   if (!policy) {
     return;
   }
@@ -407,7 +388,7 @@ async function runRecordAssertionStatus(
   if (!assertionUuid) {
     return;
   }
-  const status = await pickFrom(EXPLICIT_STATUSES, "Record Status — Status");
+  const status = await pickFrom(EXPLICIT_STATUS_OPTIONS, "Record Status — Status");
   if (!status) {
     return;
   }
