@@ -36,10 +36,10 @@ jobs:
       vsix_name: ${{ steps.package.outputs.vsix_name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
@@ -65,7 +65,7 @@ jobs:
           echo "vsix_name=$(basename "$vsix_name")" >> "$GITHUB_OUTPUT"
 
       - name: Upload .vsix artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: graphforge-vsix
           path: "*.vsix"
@@ -79,10 +79,10 @@ jobs:
     environment: production
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
@@ -91,7 +91,7 @@ jobs:
         run: npm ci
 
       - name: Download .vsix artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: graphforge-vsix
 
