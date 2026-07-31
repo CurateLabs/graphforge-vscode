@@ -17,22 +17,39 @@ import { engineErrorCode, errorMessage } from "./shared";
  * menus. `Setup Python Binding` is registered separately (`setupPython.ts`)
  * but shares this module's environment report.
  */
+/** Optional args for `graphforge.checkEnvironment`. */
+export interface CheckEnvironmentArgs {
+  /**
+   * Skip the info-message toast and the opened JSON document. The command
+   * always returns the `EnvironmentReport` regardless of this flag, so a
+   * coding agent calling `executeCommand("graphforge.checkEnvironment", {
+   * silent: true })` gets structured data without any editor UI side effects.
+   */
+  silent?: boolean;
+}
+
 export function registerSetup(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
   refreshTrees: () => void,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("graphforge.checkEnvironment", async () => {
-      const report = await buildEnvironmentReport(session);
-      void vscode.window.showInformationMessage(formatSummaryLines(report).join("\n"));
+    vscode.commands.registerCommand(
+      "graphforge.checkEnvironment",
+      async (args?: CheckEnvironmentArgs): Promise<EnvironmentReport> => {
+        const report = await buildEnvironmentReport(session);
+        if (!args?.silent) {
+          void vscode.window.showInformationMessage(formatSummaryLines(report).join("\n"));
 
-      const doc = await vscode.workspace.openTextDocument({
-        content: JSON.stringify(report, null, 2),
-        language: "json",
-      });
-      await vscode.window.showTextDocument(doc, { preview: true });
-    }),
+          const doc = await vscode.workspace.openTextDocument({
+            content: JSON.stringify(report, null, 2),
+            language: "json",
+          });
+          await vscode.window.showTextDocument(doc, { preview: true });
+        }
+        return report;
+      },
+    ),
 
     vscode.commands.registerCommand("graphforge.setupNativeBinding", async () => {
       await runSetupNativeBinding(session);

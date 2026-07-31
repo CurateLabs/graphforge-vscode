@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { AnalystVerb } from "../session/types";
+import { AnalystVerb, QueryResult } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import { errorMessage, nextSetupAction, SetupRecovery } from "./shared";
 
 const CATALOG_VERBS: Array<Exclude<AnalystVerb, "find">> = [
   "rank",
@@ -45,7 +46,7 @@ export function registerAnalystVerbs(
   for (const verb of verbs) {
     context.subscriptions.push(
       vscode.commands.registerCommand(`graphforge.${verb}`, async () => {
-        await runVerb(context, session, verb, false);
+        return runVerb(context, session, verb, false);
       }),
     );
   }
@@ -55,25 +56,38 @@ export function registerAnalystVerbs(
   for (const verb of CATALOG_VERBS) {
     context.subscriptions.push(
       vscode.commands.registerCommand(`graphforge.${verb}Advanced`, async () => {
-        await runVerb(context, session, verb, true);
+        return runVerb(context, session, verb, true);
       }),
     );
   }
 }
+
+/**
+ * Structured outcome of a verb command, returned to `executeCommand` callers.
+ * Verb commands (`rank`, `cluster`, `paths`, `analyze`, `similar`, `find`,
+ * and their `*Advanced` variants) still gather `label`/`by`/etc. via
+ * QuickPick — there is no args-based bypass yet (see
+ * `docs/experience/agent-interop.md` gaps) — but every invocation now
+ * returns agent-copyable JSON instead of `void`.
+ */
+type VerbOutcome =
+  | SetupRecovery
+  | { cancelled: true }
+  | { error: string }
+  | (QueryResult & { verb: AnalystVerb; by?: string; label?: string });
 
 async function runVerb(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
   verb: AnalystVerb,
   advanced: boolean,
-): Promise<void> {
+): Promise<VerbOutcome> {
   try {
     await session.ensureProject();
   } catch (err) {
-    void vscode.window.showErrorMessage(
-      err instanceof Error ? err.message : String(err),
-    );
-    return;
+    const message = errorMessage(err);
+    void vscode.window.showErrorMessage(message);
+    return { error: message, nextAction: await nextSetupAction(session) };
   }
 
   const title = VERB_TITLE[verb] + (advanced ? " (Advanced)" : "");
@@ -94,7 +108,7 @@ async function runVerb(
         defaultLabel,
       )) ?? undefined;
     if (!label) {
-      return;
+      return { cancelled: true };
     }
   } else if (verb === "find") {
     label =
@@ -122,7 +136,7 @@ async function runVerb(
         defaultBy ?? catalog.items[0],
       )) ?? undefined;
     if (!by) {
-      return;
+      return { cancelled: true };
     }
   }
 
@@ -141,7 +155,7 @@ async function runVerb(
       prompt: "Text / hybrid search query",
     });
     if (query === undefined) {
-      return;
+      return { cancelled: true };
     }
     const kRaw = await vscode.window.showInputBox({
       title: "Limit",
@@ -247,10 +261,11 @@ async function runVerb(
     void vscode.window.showInformationMessage(
       `GraphForge ${verb}: ${result.rowCount} row(s)`,
     );
+    return { ...result, verb, by, label };
   } catch (err) {
-    void vscode.window.showErrorMessage(
-      `GraphForge ${verb} failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    const message = errorMessage(err);
+    void vscode.window.showErrorMessage(`GraphForge ${verb} failed: ${message}`);
+    return { error: message };
   }
 }
 
