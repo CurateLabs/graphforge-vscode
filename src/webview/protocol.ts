@@ -4,6 +4,7 @@ import type {
   OntologyDoc,
   OntologyMode,
 } from "../session/types";
+import type { GetStartedState } from "../views/getStartedView";
 
 export type HostToWebview =
   | { type: "graphforge/graph"; payload: GraphPayload }
@@ -13,6 +14,7 @@ export type HostToWebview =
       ontology?: OntologyDoc;
       projectName?: string;
     }
+  | { type: "graphforge/getStarted"; state: GetStartedState }
   | { type: "graphforge/status"; message: string };
 
 export type WebviewToHost =
@@ -21,7 +23,8 @@ export type WebviewToHost =
   | { type: "graphforge/selectEdge"; id: string }
   | { type: "graphforge/requestReload" }
   | { type: "graphforge/explainMode" }
-  | { type: "graphforge/openOntologyFile" };
+  | { type: "graphforge/openOntologyFile" }
+  | { type: "graphforge/runCommand"; command: string };
 
 /** Extension-owned palette (product has no official colors). */
 export const EPISTEMIC_COLORS: Record<EpistemicStatus, string> = {

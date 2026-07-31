@@ -6,7 +6,8 @@ import { isGraphForgeProject } from "../session/projectDetector";
 import type { QueryResult } from "../session/types";
 import { OntologyPanel } from "../webview/ontologyPanel";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
-import { ensureProjectOrRecover, errorMessage, offerSetupRecovery } from "./shared";
+import { GetStartedViewProvider, revealGetStarted } from "../views/getStartedView";
+import { ensureProjectOrRecover, errorMessage } from "./shared";
 
 export function registerOpenViews(
   context: vscode.ExtensionContext,
@@ -106,17 +107,22 @@ export function registerOpenViews(
       ResultGraphPanel.show(context.extensionUri, payload);
     }),
 
+    vscode.commands.registerCommand("graphforge.getStarted", async () => {
+      const provider = GetStartedViewProvider.instance;
+      if (provider) {
+        await revealGetStarted(provider);
+      } else {
+        await vscode.commands.executeCommand("workbench.view.extension.graphforge");
+        await vscode.commands.executeCommand("graphforge.getStarted.focus");
+      }
+    }),
+
     vscode.commands.registerCommand("graphforge.statusBarClick", async () => {
       if (session.project && session.activeRuntime) {
         await vscode.commands.executeCommand("graphforge.showCapabilities");
         return;
       }
-      const hasRuntime = await session.hasUsableRuntime();
-      if (!hasRuntime) {
-        await offerSetupRecovery(session, new Error("No usable GraphForge runtime."));
-        return;
-      }
-      await offerSetupRecovery(session, new Error("No GraphForge project open."));
+      await vscode.commands.executeCommand("graphforge.getStarted");
     }),
 
     vscode.commands.registerCommand("graphforge.showCapabilities", async () => {

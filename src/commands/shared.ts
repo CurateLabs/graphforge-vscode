@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
+import { GetStartedViewProvider, revealGetStarted } from "../views/getStartedView";
 
 /** Extract the engine fault-domain code (e.g. `GF_UNSUPPORTED_PROJECT_FORMAT`) when present. */
 export function engineErrorCode(err: unknown): string | undefined {
@@ -65,16 +66,9 @@ export async function nextSetupAction(session: GraphForgeSession): Promise<strin
 }
 
 /**
- * Show a setup/project-open failure with a next-step action button instead of
- * a dead-end toast (per #2/#3 UX doctrine: never a vague failure), and return
- * a structured `SetupRecovery` describing the failure and next action.
- *
- * The notification itself is fire-and-forget: callers (including
- * `vscode.commands.executeCommand` from another extension or a coding agent)
- * must not block on a human dismissing a dialog, so the returned promise
- * resolves immediately with the structured recovery info while the
- * notification and its follow-up command (if any) resolve in the
- * background.
+ * Open the Get Started sidebar (primary human recovery surface) and return
+ * structured recovery info for agents. Toasts are omitted — the panel has
+ * the same actions with room for short copy, not stack traces.
  */
 export async function offerSetupRecovery(
   session: GraphForgeSession,
@@ -82,32 +76,12 @@ export async function offerSetupRecovery(
 ): Promise<SetupRecovery> {
   const code = engineErrorCode(err);
   const message = errorMessage(err);
-  const toast = recoveryToastMessage(err);
-  const hasRuntime = await session.hasUsableRuntime();
-  const primary = hasRuntime ? RECOVERY_OPEN_PROJECT : RECOVERY_SETUP_NATIVE;
-  const buttons = hasRuntime
-    ? [primary, RECOVERY_INIT_PROJECT, RECOVERY_CHECK_ENV]
-    : [primary, RECOVERY_SETUP_PYTHON, RECOVERY_CHECK_ENV];
-  // Fire-and-forget: callers (including `executeCommand` from another
-  // extension or a coding agent) must not block on a human dismissing a
-  // dialog, so this resolves immediately with the structured recovery info
-  // while the notification and its follow-up command (if any) resolve in
-  // the background.
-  void vscode.window
-    .showErrorMessage(`GraphForge: ${toast}${code ? ` [${code}]` : ""}`, ...buttons)
-    .then((choice) => {
-      if (choice === RECOVERY_SETUP_NATIVE) {
-        void vscode.commands.executeCommand("graphforge.setupNativeBinding");
-      } else if (choice === RECOVERY_SETUP_PYTHON) {
-        void vscode.commands.executeCommand("graphforge.setupPythonBinding");
-      } else if (choice === RECOVERY_OPEN_PROJECT) {
-        void vscode.commands.executeCommand("graphforge.openProject");
-      } else if (choice === RECOVERY_INIT_PROJECT) {
-        void vscode.commands.executeCommand("graphforge.initializeProjectHere");
-      } else if (choice === RECOVERY_CHECK_ENV) {
-        void vscode.commands.executeCommand("graphforge.checkEnvironment");
-      }
-    });
+  const provider = GetStartedViewProvider.instance;
+  if (provider) {
+    await revealGetStarted(provider);
+  } else {
+    void vscode.commands.executeCommand("graphforge.getStarted");
+  }
   return { error: message, code, nextAction: await nextSetupAction(session) };
 }
 
