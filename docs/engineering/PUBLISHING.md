@@ -36,11 +36,11 @@ this tree.
 
 1. Ensure the `CurateLabs` Marketplace publisher exists
    ([Publisher management](https://marketplace.visualstudio.com/manage)) and an Azure DevOps
-   Personal Access Token (scope: **Marketplace → Manage**) is available as a repo/CI secret
-   (e.g. `VSCE_PAT`).
+   Personal Access Token (scope: **Marketplace → Manage**) is available to CI as `VSCE_PAT` —
+   stored in the Pulumi ESC environment, not as a raw GitHub secret (see "CI publishing" below).
 2. Ensure a matching Open VSX namespace (`CurateLabs`) and access token exist
    ([open-vsx.org namespace docs](https://github.com/eclipse/openvsx/wiki/Publishing-Extensions))
-   as a secret (e.g. `OVSX_PAT`).
+   as `OVSX_PAT`, likewise stored in the ESC environment.
 3. `npx vsce login CurateLabs` locally once (or rely on `VSCE_PAT` in CI — `vsce` reads it from
    the environment, no interactive login needed in CI).
 
@@ -120,21 +120,23 @@ live in a Pulumi ESC environment, not as long-lived GitHub Actions secrets:
 - **ESC environment:** `curatelabs/graphforge-vscode/production`
 - **Values it must define:** `VSCE_PAT` (Azure DevOps PAT, Marketplace → Manage scope) and
   `OVSX_PAT` (Open VSX access token), each marked `fn::secret`, exported as
-  `environmentVariables` so `pulumi env run` injects them into the process environment.
-- **The only literal GitHub Actions secret required:** `PULUMI_ACCESS_TOKEN` — a Pulumi Cloud
-  access token with read access to the environment above. This is what lets
-  `pulumi env run curatelabs/graphforge-vscode/production -- ...` project `VSCE_PAT`/`OVSX_PAT`
-  into the `publish` job at run time. No org-wide OIDC trust between GitHub and Pulumi Cloud is
-  documented for this pattern in any CurateLabs sibling repo today, so this workflow uses the
-  same `PULUMI_ACCESS_TOKEN`-based CLI login every other CurateLabs GitHub Actions workflow uses
-  (`startops-nextjs/.github/workflows/preview-deployment.yml`,
-  `.../posthog-definitions.yml`). Revisit this if/when a sibling repo adopts Pulumi's GitHub
-  OIDC login instead of a static token.
+  `environmentVariables` so opening the environment injects them into the job environment.
+- **No literal GitHub Actions secret is required.** The `publish` job authenticates to Pulumi
+  Cloud with **GitHub OIDC**: the job has `permissions: id-token: write`, and
+  [`pulumi/auth-actions`](https://github.com/pulumi/auth-actions) exchanges the job's
+  short-lived GitHub identity token for a short-lived Pulumi Cloud organization access token.
+  [`pulumi/esc-action`](https://github.com/pulumi/esc-action) then opens
+  `curatelabs/graphforge-vscode/production` and injects `VSCE_PAT`/`OVSX_PAT` into the job
+  environment (values are masked in logs). There is nothing long-lived to rotate or leak, and
+  the trust can be scoped in Pulumi Cloud to this repo. The earlier iteration of this workflow
+  used a long-lived `PULUMI_ACCESS_TOKEN` repo secret with `pulumi env run`; that was replaced
+  per the hardening recommendation on issue #20 — if a `PULUMI_ACCESS_TOKEN` secret still
+  exists on the repo, it is stale and should be deleted.
 
-If `PULUMI_ACCESS_TOKEN` is unset, or the ESC environment doesn't define `VSCE_PAT`/`OVSX_PAT`
-yet, the `publish` job logs a warning and skips the actual `vsce publish`/`ovsx publish` calls
-instead of failing — the `build` job's artifact is still produced. This lets the workflow merge
-and run safely before secrets exist.
+If the OIDC trust isn't configured yet, the ESC environment doesn't exist, or it doesn't define
+`VSCE_PAT`/`OVSX_PAT`, the `publish` job logs a warning and skips the actual
+`vsce publish`/`ovsx publish` calls instead of failing — the `build` job's artifact is still
+produced. This lets the workflow merge and run safely before the one-time setup below is done.
 
 ### One-time setup for David
 
@@ -172,20 +174,32 @@ and run safely before secrets exist.
    pulumi env run curatelabs/graphforge-vscode/production -- bash -c 'test -n "$VSCE_PAT" && test -n "$OVSX_PAT" && echo ok'
    ```
 
-3. **Mint a `PULUMI_ACCESS_TOKEN`** for CI: Pulumi Cloud → Settings → Access Tokens → create a
-   token scoped to the `curatelabs` org (or a token belonging to a service account with access
-   to the `graphforge-vscode/production` environment only, if CurateLabs later adopts scoped
-   service accounts). Add it as a GitHub Actions repo secret:
+3. **Register GitHub Actions as an OIDC issuer in Pulumi Cloud** (one-time, replaces minting a
+   long-lived `PULUMI_ACCESS_TOKEN`). In Pulumi Cloud, as a `curatelabs` org admin:
+
+   1. Go to **Organization settings → OIDC issuers → Register issuer** (docs:
+      [Configuring OpenID Connect for GitHub](https://www.pulumi.com/docs/administration/access-identity/oidc-issuers/github/)).
+   2. Name it (e.g. `github-actions`) and set the issuer URL to
+      `https://token.actions.githubusercontent.com`.
+   3. Add an authorization policy: **Decision** `Allow`, **Token type** `Organization`,
+      **Aud** `urn:pulumi:org:curatelabs`, **Sub** `repo:CurateLabs/graphforge-vscode:*`.
+      The `Sub` claim scopes the trust to this repo only; tighten it further to
+      `repo:CurateLabs/graphforge-vscode:environment:production` if you want tokens issued
+      only to jobs running in the `production` GitHub Environment (the publish job qualifies).
+
+   No `gh secret set` is needed — the workflow's `pulumi/auth-actions` step exchanges the
+   job's OIDC token for a short-lived Pulumi token at run time. If a `PULUMI_ACCESS_TOKEN`
+   repo secret was previously added, delete it once the OIDC path is verified:
 
    ```bash
-   gh secret set PULUMI_ACCESS_TOKEN --repo CurateLabs/graphforge-vscode
+   gh secret delete PULUMI_ACCESS_TOKEN --repo CurateLabs/graphforge-vscode
    ```
 
 4. **Create the `production` GitHub Environment** (Settings → Environments → New environment,
    name it `production`) so the `publish` job's `environment: production` reference resolves.
    Optionally add required reviewers or restrict deployment to the `main` branch/`v*` tags for
    an extra approval gate before a real Marketplace/Open VSX publish.
-5. **Never** print `VSCE_PAT`/`OVSX_PAT`/`PULUMI_ACCESS_TOKEN` values in logs, PRs, or issues —
+5. **Never** print `VSCE_PAT`/`OVSX_PAT` (or any Pulumi token) values in logs, PRs, or issues —
    only secret *names* and the ESC environment *path* should ever appear in this repo.
 
 ### Triggering a release

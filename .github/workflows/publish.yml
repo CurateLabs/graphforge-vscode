@@ -5,10 +5,13 @@ name: Publish Extension
 # linking only swaps runner infra, see docs/engineering/PUBLISHING.md).
 #
 # Publish credentials (VSCE_PAT, OVSX_PAT) are never stored as raw GitHub secrets.
-# They live in the Pulumi ESC environment curatelabs/graphforge-vscode/production
-# and are projected into the job with `pulumi env run`, authenticated by the
-# PULUMI_ACCESS_TOKEN repo secret. See docs/engineering/PUBLISHING.md for the
-# one-time setup David needs to do in the Pulumi Cloud and GitHub dashboards.
+# They live in the Pulumi ESC environment curatelabs/graphforge-vscode/production.
+# The publish job authenticates to Pulumi Cloud with GitHub OIDC
+# (pulumi/auth-actions exchanges the job's id-token for a short-lived Pulumi
+# access token — no long-lived PULUMI_ACCESS_TOKEN secret), then pulumi/esc-action
+# opens the ESC environment and injects its environmentVariables into the job.
+# See docs/engineering/PUBLISHING.md for the one-time OIDC trust setup David
+# needs to do in the Pulumi Cloud and GitHub dashboards.
 
 on:
   push:
@@ -77,6 +80,11 @@ jobs:
     if: github.event_name == 'push' || github.event.inputs.dry_run == 'false'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: production
+    permissions:
+      contents: read
+      # Required for pulumi/auth-actions to exchange the job's GitHub OIDC
+      # id-token for a short-lived Pulumi Cloud access token.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -95,49 +103,62 @@ jobs:
         with:
           name: graphforge-vsix
 
+      # Both Pulumi steps use continue-on-error so a missing OIDC trust or ESC
+      # environment degrades to a package-only run (warnings below) instead of
+      # failing the workflow before the one-time setup in PUBLISHING.md is done.
+      - name: Authenticate to Pulumi Cloud (GitHub OIDC)
+        id: pulumi-auth
+        continue-on-error: true
+        uses: pulumi/auth-actions@v2
+        with:
+          organization: curatelabs
+          requested-token-type: urn:pulumi:token-type:access_token:organization
+
+      - name: Open Pulumi ESC environment
+        id: esc-open
+        if: steps.pulumi-auth.outcome == 'success'
+        continue-on-error: true
+        uses: pulumi/esc-action@v3
+        with:
+          environment: curatelabs/graphforge-vscode/production
+
       - name: Check Pulumi ESC access
         id: esc
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
         run: |
-          if [ -z "${PULUMI_ACCESS_TOKEN:-}" ]; then
-            echo "::warning::PULUMI_ACCESS_TOKEN repo secret is not set; this run will package only and skip publishing. See docs/engineering/PUBLISHING.md."
+          if [ "${{ steps.pulumi-auth.outcome }}" != "success" ]; then
+            echo "::warning::GitHub OIDC exchange with Pulumi Cloud failed (is the OIDC issuer trust configured for this repo? See docs/engineering/PUBLISHING.md). This run will package only and skip publishing."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.esc-open.outcome }}" != "success" ]; then
+            echo "::warning::Could not open ESC environment curatelabs/graphforge-vscode/production (does it exist and is it readable by the OIDC token? See docs/engineering/PUBLISHING.md). This run will package only and skip publishing."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install Pulumi CLI
-        if: steps.esc.outputs.skip != 'true'
-        run: |
-          curl -fsSL https://get.pulumi.com | sh
-          echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
-
       - name: Publish via Pulumi ESC secrets
         if: steps.esc.outputs.skip != 'true'
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          # VSCE_PAT / OVSX_PAT are injected into the job env by esc-action
+          # (from the ESC environment's environmentVariables) and masked in logs.
           VSIX_FILE: ${{ needs.build.outputs.vsix_name }}
         run: |
-          pulumi env run curatelabs/graphforge-vscode/production -- bash -c '
-            set -euo pipefail
-            published=false
-            if [ -n "${VSCE_PAT:-}" ]; then
-              npx vsce publish --packagePath "$VSIX_FILE" --pat "$VSCE_PAT"
-              published=true
-            else
-              echo "::warning::VSCE_PAT not found in curatelabs/graphforge-vscode/production; skipping Marketplace publish."
-            fi
-            if [ -n "${OVSX_PAT:-}" ]; then
-              npx ovsx publish "$VSIX_FILE" --pat "$OVSX_PAT"
-              published=true
-            else
-              echo "::warning::OVSX_PAT not found in curatelabs/graphforge-vscode/production; skipping Open VSX publish."
-            fi
-            if [ "$published" = false ]; then
-              echo "::warning::No publish PATs found in the ESC environment; this run only produced the .vsix artifact."
-            fi
-          '
+          set -euo pipefail
+          published=false
+          if [ -n "${VSCE_PAT:-}" ]; then
+            npx vsce publish --packagePath "$VSIX_FILE" --pat "$VSCE_PAT"
+            published=true
+          else
+            echo "::warning::VSCE_PAT not found in curatelabs/graphforge-vscode/production; skipping Marketplace publish."
+          fi
+          if [ -n "${OVSX_PAT:-}" ]; then
+            npx ovsx publish "$VSIX_FILE" --pat "$OVSX_PAT"
+            published=true
+          else
+            echo "::warning::OVSX_PAT not found in curatelabs/graphforge-vscode/production; skipping Open VSX publish."
+          fi
+          if [ "$published" = false ]; then
+            echo "::warning::No publish PATs found in the ESC environment; this run only produced the .vsix artifact."
+          fi
 
       - name: Publish summary
         run: |
