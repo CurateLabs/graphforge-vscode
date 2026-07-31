@@ -1,9 +1,8 @@
 import * as vscode from "vscode";
 import { decodeTable } from "../session/arrowCodec";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { UnsupportedByBindingError } from "../session/graphForgeSession";
 import type { QueryResult, TableRow } from "../session/types";
-import { ensureProjectReady, errorMessage } from "./shared";
+import { ensureProjectReady, reportEngineError } from "./shared";
 
 const DIFF_SCOPES = [
   "summary",
@@ -113,14 +112,6 @@ async function showResultDoc(title: string, result: QueryResult): Promise<void> 
   });
 }
 
-async function reportCheckpointError(err: unknown): Promise<void> {
-  if (err instanceof UnsupportedByBindingError) {
-    void vscode.window.showWarningMessage(`GraphForge: ${err.message}`);
-    return;
-  }
-  void vscode.window.showErrorMessage(`GraphForge: ${errorMessage(err)}`);
-}
-
 async function runCreateCheckpoint(session: GraphForgeSession): Promise<void> {
   if (!(await ensureReady(session))) {
     return;
@@ -143,7 +134,7 @@ async function runCreateCheckpoint(session: GraphForgeSession): Promise<void> {
       `GraphForge: checkpoint "${name}" created.`,
     );
   } catch (err) {
-    await reportCheckpointError(err);
+    reportEngineError("Create Checkpoint failed", err);
   }
 }
 
@@ -158,7 +149,7 @@ async function runListCheckpoints(session: GraphForgeSession): Promise<void> {
       `GraphForge: ${result.rowCount} checkpoint(s).`,
     );
   } catch (err) {
-    await reportCheckpointError(err);
+    reportEngineError("List Checkpoints failed", err);
   }
 }
 
@@ -199,7 +190,7 @@ async function runOpenCheckpoint(session: GraphForgeSession): Promise<void> {
           await showResultDoc(`Open Checkpoint "${name}" — query`, result);
         }
   } catch (err) {
-    await reportCheckpointError(err);
+    reportEngineError("Open Checkpoint failed", err);
   }
 }
 
@@ -240,7 +231,7 @@ async function runDiffCheckpoints(session: GraphForgeSession): Promise<void> {
       `GraphForge: diff produced ${result.rowCount} row(s).`,
     );
   } catch (err) {
-    await reportCheckpointError(err);
+    reportEngineError("Diff Checkpoints failed", err);
   }
 }
 
@@ -267,7 +258,7 @@ async function runDeleteCheckpoint(session: GraphForgeSession): Promise<void> {
       `GraphForge: checkpoint "${name}" deleted.`,
     );
   } catch (err) {
-    await reportCheckpointError(err);
+    reportEngineError("Delete Checkpoint failed", err);
   }
 }
 
@@ -310,6 +301,6 @@ async function runRevertToCheckpoint(session: GraphForgeSession): Promise<void> 
       `GraphForge: reverted to checkpoint "${name}".`,
     );
   } catch (err) {
-    await reportCheckpointError(err);
+    reportEngineError("Revert to Checkpoint failed", err);
   }
 }

@@ -8,6 +8,7 @@ import {
   describeUvInstallCommand as describeUvInstallCommandPure,
   uvInstallCommand as uvInstallCommandPure,
 } from "../session/pythonInstallCommand";
+import { summarizePythonUnavailable } from "../session/runtimeSelection";
 
 const UV_INSTALL_DOCS_URL = "https://docs.astral.sh/uv/getting-started/installation/";
 
@@ -182,8 +183,10 @@ async function applyPythonInterpreterPath(
       `GraphForge: Python runtime ready (${interpreterPath}, graphforge ${status.graphforgeVersion ?? "?"}). Set graphforge.runtime to "python" or "auto" to use it.`,
     );
   } else {
+    // Curated summary (#27/#28): the raw per-interpreter probe blob stays in
+    // Check Environment's JSON report, not in this toast.
     void vscode.window.showWarningMessage(
-      `GraphForge: interpreter set (${interpreterPath}) but graphforge is not importable yet — ${status.error ?? "unknown error"}. Try "${describeUvInstallCommand()}".`,
+      `GraphForge: interpreter set (${interpreterPath}) but ${summarizePythonUnavailable(status.error)}. Try "${describeUvInstallCommand()}".`,
     );
   }
 }

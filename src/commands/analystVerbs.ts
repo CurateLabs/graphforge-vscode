@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { AnalystVerb, QueryResult } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
-import { ensureProjectOrRecover, errorMessage, SetupRecovery } from "./shared";
+import { ensureProjectOrRecover, reportEngineError, SetupRecovery } from "./shared";
 
 const CATALOG_VERBS: Array<Exclude<AnalystVerb, "find">> = [
   "rank",
@@ -260,9 +260,7 @@ async function runVerb(
     );
     return { ...result, verb, by, label };
   } catch (err) {
-    const message = errorMessage(err);
-    void vscode.window.showErrorMessage(`GraphForge ${verb} failed: ${message}`);
-    return { error: message };
+    return reportEngineError(`${verb} failed`, err);
   }
 }
 

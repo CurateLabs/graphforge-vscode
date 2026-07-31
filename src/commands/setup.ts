@@ -9,7 +9,13 @@ import {
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { detectSiblingBindingPath, resetNativeCache } from "../session/nativeLoader";
 import { classifyInitTarget } from "../session/projectDetector";
-import { engineErrorCode, errorMessage, RECOVERY_SETUP_NATIVE, RECOVERY_SETUP_PYTHON } from "./shared";
+import { summarizeNodeUnavailable } from "../session/runtimeSelection";
+import {
+  errorMessage,
+  RECOVERY_SETUP_NATIVE,
+  RECOVERY_SETUP_PYTHON,
+  reportEngineError,
+} from "./shared";
 
 /**
  * Registers Setup UX commands (#2, extended by #12 for Python): `Check
@@ -174,8 +180,11 @@ async function applyNativeModulePath(
       `GraphForge: native binding linked (${modulePath}). Run Query is now available.`,
     );
   } else {
+    // Curated summary (#27/#28): the raw loader diagnostics stay in Check
+    // Environment's JSON report, not in this toast.
     void vscode.window.showWarningMessage(
-      `GraphForge: still unavailable after setting nativeModulePath — ${session.bindingError}`,
+      `GraphForge: still unavailable after setting nativeModulePath — ` +
+        `${summarizeNodeUnavailable(session.bindingError)}. Run "GraphForge: Check Environment" for full diagnostics.`,
     );
   }
 }
@@ -263,10 +272,7 @@ async function runInitializeProjectHere(
       `GraphForge project initialized: ${project.rootPath}`,
     );
   } catch (err) {
-    const code = engineErrorCode(err);
-    void vscode.window.showErrorMessage(
-      `GraphForge: initialize failed${code ? ` [${code}]` : ""} — ${errorMessage(err)}`,
-    );
+    reportEngineError("initialize failed", err);
   }
 }
 

@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { UnsupportedByBindingError } from "../session/graphForgeSession";
-import { ensureProjectReady, errorMessage } from "./shared";
+import { ensureProjectReady, reportEngineError } from "./shared";
 
 /**
  * Advanced, flat Index commands (#8) — never cascaded off `Find`. Each is a
@@ -117,7 +116,7 @@ async function runIndexText(
       `GraphForge: text index built for label "${label}".`,
     );
   } catch (err) {
-    void reportIndexError(err);
+    reportEngineError("Index Text failed", err);
   }
 }
 
@@ -169,7 +168,7 @@ async function runIndexVector(session: GraphForgeSession): Promise<void> {
       `GraphForge: vector upserted for node ${node}.`,
     );
   } catch (err) {
-    void reportIndexError(err);
+    reportEngineError("Index Vector failed", err);
   }
 }
 
@@ -185,7 +184,7 @@ async function runInspectTextIndex(session: GraphForgeSession): Promise<void> {
     const result = session.inspectTextIndex(label);
     await showJsonResult("Inspect Text Index", result);
   } catch (err) {
-    void reportIndexError(err);
+    reportEngineError("Inspect Text Index failed", err);
   }
 }
 
@@ -210,14 +209,7 @@ async function runAdjacencyOp(
       );
     }
   } catch (err) {
-    void reportIndexError(err);
+    reportEngineError(`Adjacency (${op}) failed`, err);
   }
 }
 
-async function reportIndexError(err: unknown): Promise<void> {
-  if (err instanceof UnsupportedByBindingError) {
-    void vscode.window.showWarningMessage(`GraphForge: ${err.message}`);
-    return;
-  }
-  void vscode.window.showErrorMessage(`GraphForge: ${errorMessage(err)}`);
-}

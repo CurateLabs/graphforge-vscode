@@ -8,7 +8,7 @@ import { OntologyPanel } from "../webview/ontologyPanel";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
 import { SettingsPanel } from "../webview/settingsPanel";
 import { GetStartedViewProvider, revealGetStarted } from "../views/getStartedView";
-import { ensureProjectOrRecover, errorMessage } from "./shared";
+import { ensureProjectOrRecover, presentError, reportEngineError } from "./shared";
 
 export function registerOpenViews(
   context: vscode.ExtensionContext,
@@ -45,9 +45,7 @@ export function registerOpenViews(
             `Opened GraphForge project: ${rootPath}`,
           );
         } catch (err) {
-          void vscode.window.showErrorMessage(
-            err instanceof Error ? err.message : String(err),
-          );
+          reportEngineError("open project failed", err);
         }
       },
     ),
@@ -153,7 +151,7 @@ export function registerOpenViews(
       } catch (err) {
         if (!(err instanceof UnsupportedByBindingError)) {
           void vscode.window.showWarningMessage(
-            `GraphForge: could not fetch live capabilities (${errorMessage(err)}), falling back to manifest.`,
+            `GraphForge: could not fetch live capabilities (${presentError(err).message}), falling back to manifest.`,
           );
         }
         liveCaps = undefined;
@@ -216,9 +214,7 @@ export function registerOpenViews(
         });
         void vscode.window.showInformationMessage(`Loaded ontology: ${file}`);
       } catch (err) {
-        void vscode.window.showErrorMessage(
-          `Load ontology failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        reportEngineError("load ontology failed", err);
       }
     }),
 

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { decodeTable, resolveIpcBuffer, stringField } from "./arrowCodec";
+import { NodeOnlyFeatureError, UnsupportedByBindingError } from "./errors";
 import { aggregateStatusCounts } from "./knowledgeStatus";
 import { NodeEngineBackend } from "./nodeEngineBackend";
 import {
@@ -85,33 +86,9 @@ function isEpistemicStatus(value: unknown): value is EpistemicStatus {
   return typeof value === "string" && (ALL_EPISTEMIC_STATUSES as string[]).includes(value);
 }
 
-/** Raised when the loaded @graphforge/node binding predates a given method. */
-export class UnsupportedByBindingError extends Error {
-  constructor(methodName: string) {
-    super(
-      `This @graphforge/node binding does not expose \`${methodName}()\` yet. ` +
-        "The engine API may still be moving — update the binding or check the method name.",
-    );
-    this.name = "UnsupportedByBindingError";
-  }
-}
-
-/**
- * Raised when an advanced Node-only surface (checkpoints, embedding spaces,
- * indexing, invocation descriptors, composite transactions, knowledge-ledger
- * writes) is invoked while the active session is backed by the Python
- * runtime (#12). These surfaces are deliberately out of scope for the
- * runtime-agnostic {@link EngineBackend} facade.
- */
-export class NodeOnlyFeatureError extends Error {
-  constructor(methodName: string) {
-    super(
-      `\`${methodName}\` requires the Node runtime (@graphforge/node). ` +
-        'Switch `graphforge.runtime` to "node" (or "auto" with a Node binding available) to use this feature.',
-    );
-    this.name = "NodeOnlyFeatureError";
-  }
-}
+// Defined in `errors.ts` (vscode-free) so error-presentation logic can be
+// unit tested under plain mocha; re-exported here for existing import sites.
+export { NodeOnlyFeatureError, UnsupportedByBindingError } from "./errors";
 
 export class GraphForgeSession implements vscode.Disposable {
   private backend: EngineBackend | undefined;

@@ -51,9 +51,52 @@ export function chooseRuntime(
 }
 
 /**
+ * Curated one-phrase summary of why the Node binding is unavailable (#27).
+ * Raw loader diagnostics (`Cannot find module … Require stack:` dumps, the
+ * joined multi-candidate `Tried: …` list) never surface here — they stay
+ * available in full via "GraphForge: Check Environment" (JSON).
+ */
+export function summarizeNodeUnavailable(error: string | undefined): string {
+  if (!error) {
+    return "binding not detected";
+  }
+  if (error.includes("no GraphForge export")) {
+    return "installed module has no GraphForge export";
+  }
+  if (error.includes("Cannot find module") || error.includes("Require stack:")) {
+    return "@graphforge/node is not installed or linked";
+  }
+  return "binding failed to load";
+}
+
+/**
+ * Curated one-phrase summary of why the Python runtime is unavailable (#27,
+ * audit follow-up): the raw `python.error` joins every candidate
+ * interpreter's probe failure into one blob, which must never reach the
+ * status-bar tooltip or a toast.
+ */
+export function summarizePythonUnavailable(error: string | undefined): string {
+  if (!error) {
+    return "no interpreter";
+  }
+  if (error.startsWith("No Python interpreter detected")) {
+    return "no Python interpreter detected";
+  }
+  if (error.includes("graphforge not importable")) {
+    return "graphforge is not installed in the detected interpreter(s)";
+  }
+  return "runtime failed to load";
+}
+
+/**
  * Single actionable, fail-closed message covering both setup paths (#12
  * requirement: "errors must explain both paths"). Used whether the chosen
  * preference's runtime is missing or neither runtime is usable.
+ *
+ * Curated to at most 3 short lines (#27): what is missing per runtime plus
+ * the named recovery command — never raw `require()` / interpreter-probe
+ * diagnostics. Full diagnostics remain available via "GraphForge: Check
+ * Environment" (JSON report).
  */
 export function describeRuntimeUnavailable(
   preference: RuntimePreference,
@@ -62,9 +105,13 @@ export function describeRuntimeUnavailable(
 ): string {
   const nodePart = node.available
     ? "Node: ok"
-    : `Node: unavailable — ${node.error ?? "no binding"}. Run "GraphForge: Setup Native Binding".`;
+    : `Node: ${summarizeNodeUnavailable(node.error)} — run "GraphForge: Setup Native Binding".`;
   const pythonPart = python.available
     ? `Python: ok (${python.interpreter ?? "interpreter"})`
-    : `Python: unavailable — ${python.error ?? "no interpreter"}. Run "GraphForge: Setup Python Binding".`;
-  return `No usable GraphForge runtime for preference "${preference}". ${nodePart} ${pythonPart}`;
+    : `Python: ${summarizePythonUnavailable(python.error)} — run "GraphForge: Setup Python Binding".`;
+  return [
+    `No usable GraphForge runtime (preference "${preference}") — full diagnostics: "GraphForge: Check Environment".`,
+    nodePart,
+    pythonPart,
+  ].join("\n");
 }
