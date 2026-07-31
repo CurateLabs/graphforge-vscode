@@ -1,42 +1,16 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { GetStartedViewProvider, revealGetStarted } from "../views/getStartedView";
+import { engineErrorCode, errorMessage, presentError } from "./errorPresentation";
 
-/** Extract the engine fault-domain code (e.g. `GF_UNSUPPORTED_PROJECT_FORMAT`) when present. */
-export function engineErrorCode(err: unknown): string | undefined {
-  if (err && typeof err === "object" && "code" in err) {
-    const code = (err as { code?: unknown }).code;
-    if (typeof code === "string" && code.startsWith("GF_")) {
-      return code;
-    }
-  }
-  return undefined;
-}
-
-export function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
+// Pure helpers live in `errorPresentation.ts` (vscode-free, unit tested);
+// re-exported here so existing command imports keep working.
+export { engineErrorCode, errorMessage, presentError } from "./errorPresentation";
 
 /** Short, single-line, whitespace-collapsed preview of a query for error toasts. */
 export function querySnippet(text: string, max = 80): string {
   const trimmed = text.trim().replace(/\s+/g, " ");
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
-}
-
-/**
- * One-line toast copy for setup recovery. Full diagnostics belong in Check
- * Environment (JSON) or the status-bar tooltip — not in `showErrorMessage`.
- */
-export function recoveryToastMessage(err: unknown, max = 120): string {
-  const message = errorMessage(err);
-  if (message.startsWith("No usable GraphForge runtime")) {
-    return "No usable GraphForge runtime.";
-  }
-  if (message.includes("Cannot find module") || message.includes("Require stack:")) {
-    return "No usable GraphForge runtime.";
-  }
-  const oneLine = message.split(/\r?\n/)[0]?.trim() ?? message;
-  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
 }
 
 /** Short labels for `showErrorMessage` action buttons (toast space is tight). */
@@ -45,6 +19,90 @@ export const RECOVERY_SETUP_PYTHON = "Setup Python";
 export const RECOVERY_OPEN_PROJECT = "Open Project";
 export const RECOVERY_INIT_PROJECT = "Initialize";
 export const RECOVERY_CHECK_ENV = "$(refresh)";
+export const SHOW_ERROR_DETAILS = "Show Details";
+
+let errorChannel: vscode.OutputChannel | undefined;
+
+/** Lazily created channel that keeps full raw diagnostics out of toasts without losing them. */
+function errorOutput(): vscode.OutputChannel {
+  errorChannel ??= vscode.window.createOutputChannel("GraphForge Errors");
+  return errorChannel;
+}
+
+/** Append full raw diagnostics for a failure to the error output channel. */
+export function logErrorDetail(what: string, err: unknown, extraDetail?: string): void {
+  const presented = presentError(err);
+  const channel = errorOutput();
+  channel.appendLine(
+    `[${new Date().toISOString()}] ${what}${presented.code ? ` [${presented.code}]` : ""}`,
+  );
+  if (extraDetail) {
+    channel.appendLine(extraDetail);
+  }
+  channel.appendLine(presented.detail);
+}
+
+/**
+ * Single curated error reporter for command catch blocks (#28):
+ *
+ * - Warning-class errors (`UnsupportedByBindingError`, `NodeOnlyFeatureError`
+ *   — policy facts that name their own fix, #38) get a soft
+ *   `showWarningMessage`, never a red error toast.
+ * - Setup/runtime failures get a short toast with the existing recovery
+ *   action buttons (Setup Native / Setup Python).
+ * - Everything else (query/user-input failures) gets a concise one-line
+ *   toast with a "Show Details" button; the full raw message goes to the
+ *   "GraphForge Errors" output channel.
+ *
+ * Returns the structured `{ error, code }` shape — with the *full* raw
+ * message, not the curated one — so command handlers stay agent-copyable.
+ * Toasts are fire-and-forget: never awaited, so headless runs can't hang.
+ */
+export function reportEngineError(
+  what: string,
+  err: unknown,
+  extraDetail?: string,
+): { error: string; code?: string } {
+  const presented = presentError(err);
+  logErrorDetail(what, err, extraDetail);
+
+  if (presented.severity === "warning") {
+    void vscode.window.showWarningMessage(`GraphForge: ${presented.message}`);
+    return { error: presented.detail, code: presented.code };
+  }
+
+  if (presented.setup) {
+    void vscode.window
+      .showErrorMessage(
+        `GraphForge: ${what} — ${presented.message}`,
+        RECOVERY_SETUP_NATIVE,
+        RECOVERY_SETUP_PYTHON,
+      )
+      .then((action) => {
+        if (action === RECOVERY_SETUP_NATIVE) {
+          return vscode.commands.executeCommand("graphforge.setupNativeBinding");
+        }
+        if (action === RECOVERY_SETUP_PYTHON) {
+          return vscode.commands.executeCommand("graphforge.setupPythonBinding");
+        }
+        return undefined;
+      });
+    return { error: presented.detail, code: presented.code };
+  }
+
+  void vscode.window
+    .showErrorMessage(
+      `GraphForge: ${what} — ${presented.message}${presented.code ? ` [${presented.code}]` : ""}`,
+      SHOW_ERROR_DETAILS,
+    )
+    .then((action) => {
+      if (action === SHOW_ERROR_DETAILS) {
+        errorOutput().show(true);
+      }
+      return undefined;
+    });
+  return { error: presented.detail, code: presented.code };
+}
 
 /**
  * Structured, agent-copyable failure shape returned by command handlers when

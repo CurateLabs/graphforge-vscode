@@ -3,10 +3,10 @@ import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { QueryResult } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
 import {
-  engineErrorCode,
   ensureProjectOrRecover,
   errorMessage,
   querySnippet,
+  reportEngineError,
   SetupRecovery,
 } from "./shared";
 
@@ -144,11 +144,9 @@ async function executeAndShowResult(
     void vscode.window.showInformationMessage(`GraphForge: ${result.rowCount} row(s)`);
     return result;
   } catch (err) {
-    const message = errorMessage(err);
-    void vscode.window.showErrorMessage(
-      `GraphForge query failed: ${message} — query: ${querySnippet(cypher)}`,
-    );
-    return { error: message, code: engineErrorCode(err) };
+    // Curated toast (#28); the query echo and full raw engine message go to
+    // the error output channel and the structured result, not the toast.
+    return reportEngineError("query failed", err, `query: ${querySnippet(cypher)}`);
   }
 }
 

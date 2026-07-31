@@ -1,8 +1,7 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { UnsupportedByBindingError } from "../session/graphForgeSession";
 import { ANALYZE_BY, AnalystVerb, CLUSTER_BY, RANK_BY, SIMILAR_BY, WriteMode, WRITE_MODES } from "../session/types";
-import { ensureProjectReady, errorMessage } from "./shared";
+import { ensureProjectReady, errorMessage, reportEngineError } from "./shared";
 
 const COMPOSITE_DOCS_URL =
   "https://docs.graphforge.sh/reference/composite-transactions";
@@ -78,14 +77,6 @@ async function showJson(title: string, value: unknown): Promise<void> {
   });
 }
 
-async function reportError(err: unknown): Promise<void> {
-  if (err instanceof UnsupportedByBindingError) {
-    void vscode.window.showWarningMessage(`GraphForge: ${err.message}`);
-    return;
-  }
-  void vscode.window.showErrorMessage(`GraphForge: ${errorMessage(err)}`);
-}
-
 async function runEnableCapability(session: GraphForgeSession): Promise<void> {
   if (!(await ensureReady(session))) {
     return;
@@ -126,7 +117,7 @@ async function runEnableCapability(session: GraphForgeSession): Promise<void> {
       `GraphForge: capability "${capabilityId}" v${version} enabled.`,
     );
   } catch (err) {
-    await reportError(err);
+    reportEngineError("Enable Capability failed", err);
   }
 }
 
@@ -166,7 +157,7 @@ async function runOpenWithWriteMode(session: GraphForgeSession): Promise<void> {
       `GraphForge: reopened with write mode "${mode}".`,
     );
   } catch (err) {
-    await reportError(err);
+    reportEngineError("Open with Write Mode failed", err);
   }
 }
 
@@ -238,7 +229,7 @@ async function runExportInvocationDescriptor(
       });
     }
   } catch (err) {
-    await reportError(err);
+    reportEngineError("Export Invocation Descriptor failed", err);
   }
 }
 
@@ -254,7 +245,7 @@ async function runListAlgorithmRuns(session: GraphForgeSession): Promise<void> {
       rows: result.rows,
     });
   } catch (err) {
-    await reportError(err);
+    reportEngineError("List Algorithm Runs failed", err);
   }
 }
 
@@ -324,6 +315,6 @@ async function runPublishCompositeTransaction(
       "GraphForge: composite transaction published.",
     );
   } catch (err) {
-    await reportError(err);
+    reportEngineError("Publish Composite Transaction failed", err);
   }
 }

@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { UnsupportedByBindingError } from "../session/graphForgeSession";
-import { ensureProjectReady, errorMessage } from "./shared";
+import { ensureProjectReady, errorMessage, reportEngineError } from "./shared";
 
 /**
  * Embedding space commands (#10). The primary `Embedding Spaces` list is an
@@ -70,14 +69,6 @@ async function showJson(title: string, value: unknown): Promise<void> {
   });
 }
 
-async function reportError(err: unknown): Promise<void> {
-  if (err instanceof UnsupportedByBindingError) {
-    void vscode.window.showWarningMessage(`GraphForge: ${err.message}`);
-    return;
-  }
-  void vscode.window.showErrorMessage(`GraphForge: ${errorMessage(err)}`);
-}
-
 function spaceName(space: unknown): string | undefined {
   if (space && typeof space === "object") {
     const rec = space as Record<string, unknown>;
@@ -129,7 +120,7 @@ async function runListEmbeddingSpaces(session: GraphForgeSession): Promise<void>
       `GraphForge: ${spaces.length} embedding space(s).`,
     );
   } catch (err) {
-    await reportError(err);
+    reportEngineError("Embedding Spaces failed", err);
   }
 }
 
@@ -193,7 +184,7 @@ async function runPublishCallerEmbeddings(session: GraphForgeSession): Promise<v
       `GraphForge: published embedding space "${name}" (${compatibilityId}).`,
     );
   } catch (err) {
-    await reportError(err);
+    reportEngineError("Publish Caller Embeddings failed", err);
   }
 }
 
@@ -246,7 +237,7 @@ async function runBindEmbeddingSpaceAlias(session: GraphForgeSession): Promise<v
       `GraphForge: alias "${alias}" bound.`,
     );
   } catch (err) {
-    await reportError(err);
+    reportEngineError("Bind Embedding Space Alias failed", err);
   }
 }
 
@@ -267,7 +258,7 @@ async function runSetDefaultEmbeddingSpace(session: GraphForgeSession): Promise<
         : "GraphForge: default embedding space cleared.",
     );
   } catch (err) {
-    await reportError(err);
+    reportEngineError("Set Default Embedding Space failed", err);
   }
 }
 
@@ -294,7 +285,7 @@ async function runDeleteEmbeddingSpace(session: GraphForgeSession): Promise<void
       `GraphForge: embedding space "${name}" ${removed ? "deleted" : "was not found"}.`,
     );
   } catch (err) {
-    await reportError(err);
+    reportEngineError("Delete Embedding Space failed", err);
   }
 }
 
@@ -307,6 +298,6 @@ async function runInspectFreshness(session: GraphForgeSession): Promise<void> {
     const freshness = session.inspectEmbeddingSpaceFreshness(name || undefined);
     await showJson("Inspect Embedding Space Freshness", freshness);
   } catch (err) {
-    await reportError(err);
+    reportEngineError("Inspect Embedding Space Freshness failed", err);
   }
 }
