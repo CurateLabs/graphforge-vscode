@@ -57,6 +57,12 @@ publishing — it should **not** contain `dist/test/**`, `src/**`, `.map` files,
 (enforced by `.vscodeignore`; re-check that file if the package looks bloated or the runtime
 `dist/extension.js` is missing).
 
+`.github/workflows/ci.yml`'s `package` job already runs `npx vsce package --no-dependencies` as
+a packaging gate on every PR/push to `main` (see `TESTING.md`) and uploads the `.vsix` as a
+build artifact — it does **not** publish. A separate release workflow (tag- or
+dispatch-triggered) is expected to handle `vsce publish` / `ovsx publish` using the same
+Blacksmith runner convention; land it alongside or as a follow-up to `ci.yml`.
+
 ## Publish
 
 ```bash
