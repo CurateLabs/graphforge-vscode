@@ -88,3 +88,113 @@ republishing an existing version.
   `GraphForge: Check Environment` to confirm activation and command registration work outside
   the dev tree.
 - Tag the release in git (`vX.Y.Z`) and note the published version in the tracking issue.
+
+## CI publishing (Blacksmith runners + Pulumi ESC)
+
+`.github/workflows/publish.yml` automates the package/publish steps above. It has two jobs:
+
+1. **`build`** — always runs on `push` of a `v*` tag or manual `workflow_dispatch`. Runs
+   `npm ci`, `npm run check`, `npm run compile`, `npm run test:unit`, then `vsce package` and
+   uploads the `.vsix` as a workflow artifact. This job needs no secrets and is safe to run at
+   any time (package-only dry run).
+2. **`publish`** — runs after `build` when triggered by a `v*` tag push, or by
+   `workflow_dispatch` with `dry_run: false`. Uses the GitHub `production` environment for
+   optional required-reviewer protection.
+
+Both jobs run on Blacksmith's `blacksmith-4vcpu-ubuntu-2404` runner label, matching the other
+CurateLabs repos (`startops-nextjs`, etc.). **Blacksmith has no separate "linked publishing"
+product** — linking is just installing the Blacksmith GitHub App for the `CurateLabs` org at
+[app.blacksmith.sh](https://app.blacksmith.sh) so `runs-on: blacksmith-*` labels resolve to
+Blacksmith-hosted runners instead of GitHub-hosted ones. Once an org is linked, every repo in it
+can use Blacksmith labels; there is no additional per-repo "enable publishing" toggle to click.
+If the org is not yet linked, `publish.yml` will simply queue and fail to find a runner —
+link the org first (one-time, David/admin only).
+
+### Secrets are sourced from Pulumi ESC, not raw GitHub secrets
+
+Following the pattern used by `startops-nextjs` (see
+`docs/engineering/pulumi-esc-vercel-clerk-convex.md` in that repo) and the
+`use-pulumi-for-platform-iac` ADR used across CurateLabs repos, the Marketplace/Open VSX PATs
+live in a Pulumi ESC environment, not as long-lived GitHub Actions secrets:
+
+- **ESC environment:** `curatelabs/graphforge-vscode/production`
+- **Values it must define:** `VSCE_PAT` (Azure DevOps PAT, Marketplace → Manage scope) and
+  `OVSX_PAT` (Open VSX access token), each marked `fn::secret`, exported as
+  `environmentVariables` so `pulumi env run` injects them into the process environment.
+- **The only literal GitHub Actions secret required:** `PULUMI_ACCESS_TOKEN` — a Pulumi Cloud
+  access token with read access to the environment above. This is what lets
+  `pulumi env run curatelabs/graphforge-vscode/production -- ...` project `VSCE_PAT`/`OVSX_PAT`
+  into the `publish` job at run time. No org-wide OIDC trust between GitHub and Pulumi Cloud is
+  documented for this pattern in any CurateLabs sibling repo today, so this workflow uses the
+  same `PULUMI_ACCESS_TOKEN`-based CLI login every other CurateLabs GitHub Actions workflow uses
+  (`startops-nextjs/.github/workflows/preview-deployment.yml`,
+  `.../posthog-definitions.yml`). Revisit this if/when a sibling repo adopts Pulumi's GitHub
+  OIDC login instead of a static token.
+
+If `PULUMI_ACCESS_TOKEN` is unset, or the ESC environment doesn't define `VSCE_PAT`/`OVSX_PAT`
+yet, the `publish` job logs a warning and skips the actual `vsce publish`/`ovsx publish` calls
+instead of failing — the `build` job's artifact is still produced. This lets the workflow merge
+and run safely before secrets exist.
+
+### One-time setup for David
+
+1. **Link Blacksmith** (if not already done for another repo's CI): sign in at
+   [app.blacksmith.sh](https://app.blacksmith.sh) with a `CurateLabs` org member, install the
+   Blacksmith GitHub App on the `CurateLabs` org (or just this repo), and grant it access to
+   `graphforge-vscode`.
+2. **Create the Pulumi ESC environment** (requires the Pulumi CLI and a `curatelabs` Pulumi
+   Cloud org login):
+
+   ```bash
+   esc env init curatelabs/graphforge-vscode/production
+   esc env edit curatelabs/graphforge-vscode/production
+   ```
+
+   Paste (adjust org name if `curatelabs` differs from what's already used for other CurateLabs
+   Pulumi environments):
+
+   ```yaml
+   values:
+     vsce:
+       pat:
+         fn::secret: "<paste the Azure DevOps Marketplace PAT>"
+     ovsx:
+       pat:
+         fn::secret: "<paste the Open VSX access token>"
+     environmentVariables:
+       VSCE_PAT: ${vsce.pat}
+       OVSX_PAT: ${ovsx.pat}
+   ```
+
+   Verify the projection locally before trusting CI with it:
+
+   ```bash
+   pulumi env run curatelabs/graphforge-vscode/production -- bash -c 'test -n "$VSCE_PAT" && test -n "$OVSX_PAT" && echo ok'
+   ```
+
+3. **Mint a `PULUMI_ACCESS_TOKEN`** for CI: Pulumi Cloud → Settings → Access Tokens → create a
+   token scoped to the `curatelabs` org (or a token belonging to a service account with access
+   to the `graphforge-vscode/production` environment only, if CurateLabs later adopts scoped
+   service accounts). Add it as a GitHub Actions repo secret:
+
+   ```bash
+   gh secret set PULUMI_ACCESS_TOKEN --repo CurateLabs/graphforge-vscode
+   ```
+
+4. **Create the `production` GitHub Environment** (Settings → Environments → New environment,
+   name it `production`) so the `publish` job's `environment: production` reference resolves.
+   Optionally add required reviewers or restrict deployment to the `main` branch/`v*` tags for
+   an extra approval gate before a real Marketplace/Open VSX publish.
+5. **Never** print `VSCE_PAT`/`OVSX_PAT`/`PULUMI_ACCESS_TOKEN` values in logs, PRs, or issues —
+   only secret *names* and the ESC environment *path* should ever appear in this repo.
+
+### Triggering a release
+
+- **Automatic:** push a `vX.Y.Z` tag matching the `package.json` version. The `build` job packages,
+  and `publish` runs immediately after (gated only by the `production` environment's protection
+  rules, if any).
+- **Manual dry run:** run the `Publish Extension` workflow via `workflow_dispatch` with
+  `dry_run: true` (the default) to exercise `check`/`compile`/`test:unit`/`vsce package` and
+  download the `.vsix` artifact without touching the Marketplace or Open VSX.
+- **Manual publish:** run `workflow_dispatch` with `dry_run: false` to publish outside of a tag
+  push (e.g. re-publishing after a failed run).
