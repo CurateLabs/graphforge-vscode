@@ -17,6 +17,7 @@ Every command below is a stable ID, invokable from the Command Palette or progra
 | GraphForge: Refresh Explorer | `graphforge.refreshExplorer` | Refreshes the Projects Activity Bar view. |
 | GraphForge: Get Started | `graphforge.getStarted` | Opens the Get Started sidebar (Welcome mode picker on first use, then the runtime → project → query checklist). |
 | GraphForge: Choose Experience Mode… | `graphforge.chooseExperienceMode` | Reopens the Welcome mode picker (Guided/Autonomous) inside Get Started. |
+| GraphForge: Settings | `graphforge.openSettings` | Opens the GraphForge Settings panel — left-nav categories (Runtime / Experience / Advanced) over the same `graphforge.*` settings as the VS Code Settings UI. |
 
 ## Cypher
 

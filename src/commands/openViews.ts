@@ -6,6 +6,7 @@ import { isGraphForgeProject } from "../session/projectDetector";
 import type { QueryResult } from "../session/types";
 import { OntologyPanel } from "../webview/ontologyPanel";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import { SettingsPanel } from "../webview/settingsPanel";
 import { GetStartedViewProvider, revealGetStarted } from "../views/getStartedView";
 import { ensureProjectOrRecover, errorMessage } from "./shared";
 
@@ -105,6 +106,10 @@ export function registerOpenViews(
       });
       const payload = await session.lastGraphPayload();
       ResultGraphPanel.show(context.extensionUri, payload);
+    }),
+
+    vscode.commands.registerCommand("graphforge.openSettings", () => {
+      SettingsPanel.show(context.extensionUri);
     }),
 
     vscode.commands.registerCommand("graphforge.getStarted", async () => {

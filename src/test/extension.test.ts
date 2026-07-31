@@ -23,6 +23,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.checkEnvironment",
   "graphforge.getStarted",
   "graphforge.chooseExperienceMode",
+  "graphforge.openSettings",
   "graphforge.setupNativeBinding",
   "graphforge.setupPythonBinding",
   "graphforge.initializeProjectHere",
@@ -187,6 +188,12 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
   test("getStarted does not throw when no runtime is available", async () => {
     await assert.doesNotReject(
       Promise.resolve(vscode.commands.executeCommand("graphforge.getStarted")),
+    );
+  });
+
+  test("openSettings opens the Settings webview panel without prompting", async () => {
+    await assert.doesNotReject(
+      Promise.resolve(vscode.commands.executeCommand("graphforge.openSettings")),
     );
   });
 
