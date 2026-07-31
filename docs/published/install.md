@@ -8,9 +8,18 @@
 ## Quick start
 
 1. Install **GraphForge** from the Marketplace (or Open VSX).
-2. Open a folder. Run **`GraphForge: Check Environment`** from the Command Palette.
-3. Follow the single next step it reports — it always names exactly one command to run next,
-   whether that's setting up a runtime or opening/initializing a project.
+2. Open a folder, then click the **GraphForge icon** in the Activity Bar. The **Get Started**
+   view opens with a short setup checklist.
+3. First visit only: the **Welcome** step asks how you want to work — **Guided** (confirms
+   before changes) or **Autonomous** (fewer prompts, auto-opens results). Pick one and press
+   **Continue**; change it anytime via **Change mode** or `graphforge.experienceMode`.
+4. Work down the checklist: **set up a runtime** (Node or Python — the primary button matches
+   your workspace), **open or initialize a project**, then **run your first query**. Each step
+   surfaces the right command as a button.
+
+Prefer the Command Palette, or driving the extension from an agent? Run
+**`GraphForge: Check Environment`** — it reports both runtimes' full diagnostics and always
+names exactly one command to run next.
 
 ## Choosing a runtime: Node vs. Python
 

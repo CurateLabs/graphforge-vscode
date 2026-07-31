@@ -20,7 +20,7 @@ graph.
 
 | Surface | What it does |
 |---|---|
-| **Setup** | `GraphForge: Check Environment` and the two `Setup … Binding` commands are the palette-first, no-dead-end entry point — see [`install.md`](install.md). |
+| **Setup** | A **Get Started** sidebar (Welcome mode picker, then a runtime → project → query checklist) walks new users in; `GraphForge: Check Environment` and the two `Setup … Binding` commands remain the palette/agent path — see [`install.md`](install.md). |
 | **Cypher** | `.cypher` / `.cql` language support with syntax highlighting, plus **Run Query** (and **Run Query with Parameters…**). |
 | **Analyst verbs** | Rank, Cluster, Paths, Analyze, Similar, Find — QuickPick-driven, each with an **Advanced…** variant for optional parameters. |
 | **Projects** | An Activity Bar explorer that lists folders containing a valid GraphForge `FORMAT` marker. |

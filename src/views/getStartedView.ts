@@ -7,6 +7,7 @@ import {
 } from "../session/experienceMode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { HostToWebview, WebviewToHost } from "../webview/protocol";
+import { renderModeCardsHtml, runtimeStepActions } from "./getStartedContent";
 
 export type GetStartedStepStatus = "pending" | "done" | "current";
 export type GetStartedScreen = "welcome" | "checklist";
@@ -132,7 +133,7 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
       `style-src ${webview.cspSource} 'unsafe-inline'`,
       `script-src ${webview.cspSource} 'unsafe-inline'`,
     ].join("; ");
-    const cardsJson = JSON.stringify(EXPERIENCE_MODE_CARDS);
+    const cardsHtml = renderModeCardsHtml(EXPERIENCE_MODE_CARDS, "guided");
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -178,6 +179,10 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
     .card.selected {
       border-color: var(--gf-accent);
       box-shadow: 0 0 0 1px var(--gf-accent) inset;
+    }
+    .card:focus-visible {
+      outline: 2px solid var(--vscode-focusBorder, var(--gf-accent));
+      outline-offset: 2px;
     }
     .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
     .radio {
@@ -253,8 +258,8 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
     <p class="subhead" id="subhead"></p>
   </div>
   <div id="banner"></div>
-  <div id="cards"></div>
-  <div id="continue"></div>
+  <div id="cards" class="cards" role="radiogroup" aria-label="Choose how you want to work">${cardsHtml}</div>
+  <div id="continue"><button class="primary full" id="continue-btn">Continue</button></div>
   <div id="steps"></div>
   <div class="footer">
     <button class="link" id="refresh">Check Environment</button>
@@ -262,7 +267,6 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
   </div>
   <script>
     const vscode = acquireVsCodeApi();
-    const CARDS = ${cardsJson};
     let selectedMode = 'guided';
 
     document.getElementById('refresh').addEventListener('click', () =>
@@ -284,30 +288,43 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
       );
     }
 
-    function renderCards(mode) {
+    // Mode cards are an ARIA radio group (rendered host-side): the script
+    // only moves the selection — aria-checked + roving tabindex — so
+    // keyboard and screen-reader users can operate it.
+    const modeCards = Array.from(document.querySelectorAll('#cards .card'));
+
+    function setSelectedMode(mode, focus) {
       selectedMode = mode;
-      const cardsEl = document.getElementById('cards');
-      cardsEl.innerHTML = CARDS.map((card) =>
-        '<div class="card' + (card.mode === selectedMode ? ' selected' : '') + '" data-mode="' + card.mode + '">' +
-          '<div class="card-head"><div class="radio"></div><p class="card-title">' + card.title + '</p></div>' +
-          '<p class="card-tagline">' + card.tagline + '</p>' +
-          '<ul>' + card.bullets.map((b) => '<li>' + b + '</li>').join('') + '</ul>' +
-        '</div>'
-      ).join('');
-      cardsEl.querySelectorAll('.card').forEach((el) => {
-        el.addEventListener('click', () => {
-          selectedMode = el.getAttribute('data-mode');
-          cardsEl.querySelectorAll('.card').forEach((c) =>
-            c.classList.toggle('selected', c.getAttribute('data-mode') === selectedMode)
-          );
-        });
+      modeCards.forEach((card) => {
+        const isSelected = card.getAttribute('data-mode') === mode;
+        card.classList.toggle('selected', isSelected);
+        card.setAttribute('aria-checked', String(isSelected));
+        card.setAttribute('tabindex', isSelected ? '0' : '-1');
+        if (isSelected && focus) card.focus();
       });
-      document.getElementById('continue').innerHTML =
-        '<button class="primary full" id="continue-btn">Continue</button>';
-      document.getElementById('continue-btn').addEventListener('click', () =>
-        vscode.postMessage({ type: 'graphforge/selectExperienceMode', mode: selectedMode })
-      );
     }
+
+    modeCards.forEach((card, i) => {
+      card.addEventListener('click', () =>
+        setSelectedMode(card.getAttribute('data-mode'), false)
+      );
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          setSelectedMode(modeCards[(i + 1) % modeCards.length].getAttribute('data-mode'), true);
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          setSelectedMode(modeCards[(i - 1 + modeCards.length) % modeCards.length].getAttribute('data-mode'), true);
+        } else if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          setSelectedMode(card.getAttribute('data-mode'), false);
+        }
+      });
+    });
+
+    document.getElementById('continue-btn').addEventListener('click', () =>
+      vscode.postMessage({ type: 'graphforge/selectExperienceMode', mode: selectedMode })
+    );
 
     function renderSteps(steps) {
       const stepsEl = document.getElementById('steps');
@@ -346,7 +363,7 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
       document.getElementById('continue').style.display = isWelcome ? '' : 'none';
       document.getElementById('steps').style.display = isWelcome ? 'none' : '';
       if (isWelcome) {
-        renderCards(state.mode);
+        setSelectedMode(state.mode, false);
       } else {
         renderBanner(state.mode);
         renderSteps(state.steps);
@@ -400,12 +417,9 @@ export async function buildGetStartedState(
       ? `Active: ${activeRuntime ?? snapshot.active ?? "auto"}. ${nodeLine}; ${pythonLine}.`
       : `${nodeLine}. ${pythonLine}. Link @graphforge/node or install graphforge with uv.`,
     status: runtimeReady ? "done" : "current",
-    primaryAction: runtimeReady
-      ? undefined
-      : { label: "Setup Native (Node)", command: "graphforge.setupNativeBinding" },
-    secondaryAction: runtimeReady
-      ? { label: "Setup Python", command: "graphforge.setupPythonBinding" }
-      : { label: "Setup Python", command: "graphforge.setupPythonBinding" },
+    // Done step → no setup actions (#29); otherwise the primary CTA follows
+    // the workspace's project kind, mirroring chooseRuntime (FR-18, #37).
+    ...runtimeStepActions(runtimeReady, snapshot.projectKind),
   };
 
   const projectStep: GetStartedStep = {
