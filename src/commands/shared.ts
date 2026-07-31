@@ -62,7 +62,7 @@ export async function offerSetupRecovery(
   const hasRuntime = await session.hasUsableRuntime();
   const primary = hasRuntime ? "Open Project" : "Setup Native Binding";
   const buttons = hasRuntime
-    ? [primary, "Check Environment"]
+    ? [primary, "Initialize Project Here", "Check Environment"]
     : [primary, "Setup Python Binding", "Check Environment"];
   // Fire-and-forget: callers (including `executeCommand` from another
   // extension or a coding agent) must not block on a human dismissing a
@@ -78,9 +78,28 @@ export async function offerSetupRecovery(
         void vscode.commands.executeCommand("graphforge.setupPythonBinding");
       } else if (choice === "Open Project") {
         void vscode.commands.executeCommand("graphforge.openProject");
+      } else if (choice === "Initialize Project Here") {
+        void vscode.commands.executeCommand("graphforge.initializeProjectHere");
       } else if (choice === "Check Environment") {
         void vscode.commands.executeCommand("graphforge.checkEnvironment");
       }
     });
   return { error: message, code, nextAction: await nextSetupAction(session) };
+}
+
+/** Gate commands that need an open project; returns structured recovery on failure. */
+export async function ensureProjectOrRecover(
+  session: GraphForgeSession,
+): Promise<SetupRecovery | undefined> {
+  try {
+    await session.ensureProject();
+    return undefined;
+  } catch (err) {
+    return offerSetupRecovery(session, err);
+  }
+}
+
+/** Boolean gate for handlers that only need to know whether a project is ready. */
+export async function ensureProjectReady(session: GraphForgeSession): Promise<boolean> {
+  return (await ensureProjectOrRecover(session)) === undefined;
 }

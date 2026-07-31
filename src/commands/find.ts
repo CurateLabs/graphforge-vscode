@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { QueryResult } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
-import { engineErrorCode, errorMessage } from "./shared";
+import { ensureProjectOrRecover, engineErrorCode, errorMessage } from "./shared";
 
 /**
  * `GraphForge: Find` (#8) — palette-first hybrid text/vector search.
@@ -26,10 +26,8 @@ async function runFind(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
 ): Promise<void> {
-  try {
-    await session.ensureProject();
-  } catch (err) {
-    void vscode.window.showErrorMessage(errorMessage(err));
+  const recovery = await ensureProjectOrRecover(session);
+  if (recovery) {
     return;
   }
 
