@@ -118,6 +118,15 @@ export interface KnowledgeSummary {
   capabilityAvailable: boolean;
   assertionCount: number;
   statusCounts: Partial<Record<EpistemicStatus, number>>;
+  /**
+   * True when per-assertion status lookup succeeded (Node binding with
+   * `assertionStatus()`). False = `statusCounts` is empty because statuses
+   * are *unavailable*, not because the ledger is statusless — surfaces must
+   * say so rather than render an empty breakdown (#35).
+   */
+  statusAvailable: boolean;
+  /** Why statuses are unavailable (or only partially resolved), for honest display. */
+  statusNote?: string;
   assertions: AssertionRow[];
   note?: string;
 }
@@ -125,6 +134,8 @@ export interface KnowledgeSummary {
 export interface AssertionRow {
   assertionUuid: string;
   claim: string;
+  /** Current explicit status; "statusless" when the ledger has no status event. Unset = lookup unavailable. */
+  status?: EpistemicStatus;
   [key: string]: unknown;
 }
 

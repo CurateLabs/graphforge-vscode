@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { decodeTable, resolveIpcBuffer, stringField } from "./arrowCodec";
+import { aggregateStatusCounts } from "./knowledgeStatus";
 import { NodeEngineBackend } from "./nodeEngineBackend";
 import {
   discoverProjects,
@@ -878,6 +879,7 @@ export class GraphForgeSession implements vscode.Disposable {
         capabilityAvailable: false,
         assertionCount: 0,
         statusCounts: {},
+        statusAvailable: false,
         assertions: [],
         note: "No GraphForge session open.",
       };
@@ -887,6 +889,7 @@ export class GraphForgeSession implements vscode.Disposable {
         capabilityAvailable: false,
         assertionCount: 0,
         statusCounts: {},
+        statusAvailable: false,
         assertions: [],
         note:
           this.backend.runtime === "node"
@@ -898,25 +901,101 @@ export class GraphForgeSession implements vscode.Disposable {
     }
     try {
       const result = await this.listAssertions({ limit: 50 });
+      const assertions = rowsToAssertions(result);
+      const resolution = await this.resolveAssertionStatuses(
+        assertions.map((a) => a.assertionUuid),
+      );
+      if (resolution.available) {
+        for (const assertion of assertions) {
+          const status = resolution.statuses.get(assertion.assertionUuid);
+          if (status) {
+            assertion.status = status;
+          }
+        }
+      }
       return {
         capabilityAvailable: true,
         assertionCount: result.rowCount,
-        statusCounts: {},
-        assertions: rowsToAssertions(result),
-        note:
-          result.rowCount === 0
-            ? undefined
-            : "Status breakdown pending per-assertion status lookup; see assertion detail.",
+        statusCounts: aggregateStatusCounts(assertions.map((a) => a.status)),
+        statusAvailable: resolution.available,
+        statusNote: resolution.note,
+        assertions,
       };
     } catch (err) {
       return {
         capabilityAvailable: true,
         assertionCount: 0,
         statusCounts: {},
+        statusAvailable: false,
         assertions: [],
         note: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  /**
+   * Best-effort current-status lookup for a page of assertion UUIDs, for the
+   * Knowledge view (#35). Mirrors {@link resolveEpistemicStatuses}'
+   * fallbacks: Node-only, requires the binding's `assertionStatus()`, an
+   * empty status table is a legitimate "statusless", per-item failures are
+   * swallowed, and total unavailability degrades to `{ available: false }`
+   * with an honest note — never a thrown error, never an invented status.
+   */
+  private async resolveAssertionStatuses(
+    assertionUuids: string[],
+  ): Promise<{ available: boolean; statuses: Map<string, EpistemicStatus>; note?: string }> {
+    const empty = new Map<string, EpistemicStatus>();
+    if (assertionUuids.length === 0) {
+      return { available: true, statuses: empty };
+    }
+    if (!(this.backend instanceof NodeEngineBackend)) {
+      return {
+        available: false,
+        statuses: empty,
+        note: "Assertion status lookup requires the Node runtime — status unavailable.",
+      };
+    }
+    const assertionStatus = this.backend.native.assertionStatus;
+    if (typeof assertionStatus !== "function") {
+      return {
+        available: false,
+        statuses: empty,
+        note: "This @graphforge/node binding does not expose assertionStatus() — status unavailable.",
+      };
+    }
+
+    const statuses = new Map<string, EpistemicStatus>();
+    let failures = 0;
+    const resolveOne = async (uuid: string): Promise<void> => {
+      try {
+        const table = decodeTable(await resolveIpcBuffer(assertionStatus(uuid)));
+        const raw = table.rowCount > 0 ? stringField(table.rows[0], "status") : undefined;
+        statuses.set(uuid, isEpistemicStatus(raw) ? raw : "statusless");
+      } catch {
+        failures += 1;
+      }
+    };
+
+    const concurrency = 6;
+    for (let i = 0; i < assertionUuids.length; i += concurrency) {
+      await Promise.all(assertionUuids.slice(i, i + concurrency).map(resolveOne));
+    }
+
+    if (statuses.size === 0 && failures > 0) {
+      return {
+        available: false,
+        statuses: empty,
+        note: "Status lookup failed for every assertion — status unavailable.",
+      };
+    }
+    return {
+      available: true,
+      statuses,
+      note:
+        failures > 0
+          ? `${failures} assertion(s) failed status lookup (shown without status).`
+          : undefined,
+    };
   }
 
   /** List a page of immutable assertions (`listAssertions`); works on either runtime via {@link EngineBackend}. */
@@ -940,18 +1019,33 @@ export class GraphForgeSession implements vscode.Disposable {
    * usable there too as long as `listAssertions` works.
    */
   async getAssertion(assertionUuid: string): Promise<AssertionRow | undefined> {
+    let row: AssertionRow | undefined;
     if (this.backend instanceof NodeEngineBackend) {
       const forge = this.backend.native;
       if (typeof forge.assertion === "function") {
         const buf = await resolveIpcBuffer(forge.assertion(assertionUuid));
         const result = decodeTable(buf);
-        return rowsToAssertions(result)[0];
+        row = rowsToAssertions(result)[0];
       }
     }
-    const result = await this.listAssertions({ limit: 200 });
-    return rowsToAssertions(result).find(
-      (a) => a.assertionUuid === assertionUuid,
-    );
+    if (!row) {
+      const result = await this.listAssertions({ limit: 200 });
+      row = rowsToAssertions(result).find(
+        (a) => a.assertionUuid === assertionUuid,
+      );
+    }
+    if (!row) {
+      return undefined;
+    }
+    // Detail JSON names the current explicit status (#35) — or says honestly
+    // why it can't, instead of omitting the field silently.
+    const resolution = await this.resolveAssertionStatuses([assertionUuid]);
+    if (resolution.available) {
+      row.status = resolution.statuses.get(assertionUuid) ?? "statusless";
+    } else {
+      row.statusNote = resolution.note;
+    }
+    return row;
   }
 
   /** Graph node/edge references for one assertion (subject/object/context), for "show on graph". Node-only. */
