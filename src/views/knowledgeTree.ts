@@ -1,13 +1,67 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import type { AssertionRow } from "../session/types";
+import {
+  STATUS_TREE_DISPLAY,
+  statusBreakdownEntries,
+} from "../session/knowledgeStatus";
+import type { AssertionRow, EpistemicStatus, KnowledgeSummary } from "../session/types";
 
 type Node =
   | { kind: "summary"; label: string; description?: string }
   | { kind: "group"; label: string; children: Node[] }
-  | { kind: "assertion"; uuid: string; claim: string }
-  | { kind: "note"; label: string; description?: string; icon?: string }
+  | { kind: "assertion"; uuid: string; claim: string; status?: EpistemicStatus }
+  | {
+      kind: "note";
+      label: string;
+      description?: string;
+      icon?: string;
+      /** Theme color id applied to the icon (used for status-breakdown rows). */
+      themeColor?: string;
+    }
   | { kind: "action"; label: string; command: string; icon: string };
+
+/** ThemeIcon for one epistemic status, colored per {@link STATUS_TREE_DISPLAY}. */
+function statusThemeIcon(status: EpistemicStatus): vscode.ThemeIcon {
+  const display = STATUS_TREE_DISPLAY[status];
+  return new vscode.ThemeIcon(
+    display.icon,
+    display.themeColor ? new vscode.ThemeColor(display.themeColor) : undefined,
+  );
+}
+
+/**
+ * Status-breakdown node for the tree root: real per-status counts when the
+ * lookup worked, otherwise an explicit "unavailable" row — never an empty
+ * breakdown that could read as "no statuses recorded" (#35).
+ */
+function statusBreakdownNode(summary: KnowledgeSummary): Node {
+  if (!summary.statusAvailable) {
+    return {
+      kind: "note",
+      label: "Status unavailable",
+      description:
+        summary.statusNote ??
+        "Assertion status lookup is unavailable with this binding.",
+      icon: "warning",
+    };
+  }
+  const entries = statusBreakdownEntries(summary.statusCounts);
+  return {
+    kind: "group",
+    label: "Status breakdown",
+    children: entries.length
+      ? entries.map(
+          ({ status, count }): Node => ({
+            kind: "note",
+            label: status,
+            description: String(count),
+            icon: STATUS_TREE_DISPLAY[status].icon,
+            themeColor: STATUS_TREE_DISPLAY[status].themeColor,
+          }),
+        )
+      : [{ kind: "note", label: "No statuses resolved", icon: "info" }],
+  };
+}
 
 function truncate(text: string, max = 64): string {
   const collapsed = text.trim().replace(/\s+/g, " ");
@@ -48,8 +102,17 @@ export class KnowledgeTreeProvider
         truncate(element.claim || "(empty claim)"),
         vscode.TreeItemCollapsibleState.None,
       );
-      item.description = element.uuid.slice(0, 8);
-      item.iconPath = new vscode.ThemeIcon("law");
+      // Epistemic status is always named (#35): show it in the description and
+      // color the icon per status. When the status could not be resolved,
+      // fall back to the neutral ledger icon with no status text — the root
+      // "Status unavailable" row explains why.
+      const shortUuid = element.uuid.slice(0, 8);
+      item.description = element.status
+        ? `${element.status} · ${shortUuid}`
+        : shortUuid;
+      item.iconPath = element.status
+        ? statusThemeIcon(element.status)
+        : new vscode.ThemeIcon("law");
       item.command = {
         command: "graphforge.showAssertion",
         title: "Show Assertion",
@@ -76,7 +139,10 @@ export class KnowledgeTreeProvider
       item.iconPath = new vscode.ThemeIcon("book");
     } else {
       item.description = element.description;
-      item.iconPath = new vscode.ThemeIcon(element.icon ?? "info");
+      item.iconPath = new vscode.ThemeIcon(
+        element.icon ?? "info",
+        element.themeColor ? new vscode.ThemeColor(element.themeColor) : undefined,
+      );
     }
     return item;
   }
@@ -147,11 +213,13 @@ export class KnowledgeTreeProvider
         label: `Assertions: ${summary.assertionCount}`,
         description: "knowledge@1 ledger",
       },
+      statusBreakdownNode(summary),
       ...summary.assertions.map(
         (a: AssertionRow): Node => ({
           kind: "assertion",
           uuid: a.assertionUuid,
           claim: a.claim,
+          status: a.status,
         }),
       ),
       {
@@ -162,6 +230,9 @@ export class KnowledgeTreeProvider
       },
     ];
 
+    if (summary.statusAvailable && summary.statusNote) {
+      nodes.push({ kind: "note", label: summary.statusNote, icon: "info" });
+    }
     if (summary.note) {
       nodes.push({ kind: "note", label: summary.note, icon: "info" });
     }

@@ -199,6 +199,117 @@ suite("GraphForgeSession.toGraphPayload styling", () => {
   });
 });
 
+suite("GraphForgeSession.knowledgeSummary status counts", () => {
+  /** Ledger fixture covering the full epistemic model: six explicit statuses + one statusless. */
+  const LEDGER: Array<{ uuid: string; status?: string }> = [
+    { uuid: "a1", status: "hypothesis" },
+    { uuid: "a2", status: "supported" },
+    { uuid: "a3", status: "refuted" },
+    { uuid: "a4", status: "disputed" },
+    { uuid: "a5", status: "retracted" },
+    { uuid: "a6", status: "superseded" },
+    { uuid: "a7" }, // no status event recorded → statusless
+  ];
+
+  const listAssertionsStub = async () =>
+    encodeSimpleTable(
+      ["assertion_uuid", "claim"],
+      LEDGER.map((a) => ({ assertion_uuid: a.uuid, claim: `claim ${a.uuid}` })),
+    );
+
+  const assertionStatusStub = async (assertionUuid: string) => {
+    const status = LEDGER.find((a) => a.uuid === assertionUuid)?.status;
+    return encodeSimpleTable(
+      status ? ["status"] : [],
+      status ? [{ status }] : [],
+    );
+  };
+
+  test("aggregates real per-assertion statuses across the full model", async () => {
+    const session = new GraphForgeSession();
+    injectForge(
+      session,
+      makeStubForge({
+        listAssertions: listAssertionsStub,
+        assertionStatus: assertionStatusStub,
+      }),
+    );
+    const summary = await session.knowledgeSummary();
+    assert.equal(summary.capabilityAvailable, true);
+    assert.equal(summary.statusAvailable, true);
+    assert.deepEqual(summary.statusCounts, {
+      hypothesis: 1,
+      supported: 1,
+      refuted: 1,
+      disputed: 1,
+      retracted: 1,
+      superseded: 1,
+      statusless: 1,
+    });
+    assert.equal(
+      summary.assertions.find((a) => a.assertionUuid === "a2")?.status,
+      "supported",
+    );
+    assert.equal(
+      summary.assertions.find((a) => a.assertionUuid === "a7")?.status,
+      "statusless",
+    );
+    session.dispose();
+  });
+
+  test("degrades honestly when the binding lacks assertionStatus()", async () => {
+    const session = new GraphForgeSession();
+    injectForge(session, makeStubForge({ listAssertions: listAssertionsStub }));
+    const summary = await session.knowledgeSummary();
+    assert.equal(summary.capabilityAvailable, true);
+    assert.equal(summary.statusAvailable, false);
+    assert.deepEqual(summary.statusCounts, {});
+    assert.ok(summary.statusNote?.includes("assertionStatus"));
+    // Assertions still list — only the statuses are unavailable.
+    assert.equal(summary.assertions.length, LEDGER.length);
+    for (const assertion of summary.assertions) {
+      assert.equal(assertion.status, undefined);
+    }
+    session.dispose();
+  });
+
+  test("degrades honestly when the binding lacks listAssertions()", async () => {
+    const session = new GraphForgeSession();
+    injectForge(session, makeStubForge());
+    const summary = await session.knowledgeSummary();
+    assert.equal(summary.statusAvailable, false);
+    assert.deepEqual(summary.statusCounts, {});
+    assert.equal(summary.assertions.length, 0);
+    assert.ok(summary.note?.includes("listAssertions"));
+    session.dispose();
+  });
+
+  test("getAssertion detail includes the current explicit status", async () => {
+    const session = new GraphForgeSession();
+    injectForge(
+      session,
+      makeStubForge({
+        listAssertions: listAssertionsStub,
+        assertionStatus: assertionStatusStub,
+      }),
+    );
+    const supported = await session.getAssertion("a2");
+    assert.equal(supported?.status, "supported");
+    const statusless = await session.getAssertion("a7");
+    assert.equal(statusless?.status, "statusless");
+    session.dispose();
+  });
+
+  test("getAssertion detail names status unavailability instead of omitting it", async () => {
+    const session = new GraphForgeSession();
+    injectForge(session, makeStubForge({ listAssertions: listAssertionsStub }));
+    const row = await session.getAssertion("a2");
+    assert.equal(row?.status, undefined);
+    assert.ok(String(row?.statusNote).includes("assertionStatus"));
+    session.dispose();
+  });
+});
+
 /** Encodes a tiny Arrow IPC table from plain string-valued rows, matching decodeTable's expectations. */
 function encodeSimpleTable(columns: string[], rows: Record<string, string>[]): Buffer {
   const arrays: Record<string, string[]> = {};

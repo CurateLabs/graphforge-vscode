@@ -442,7 +442,7 @@
     "check": "tsc --noEmit && tsc --noEmit -p webview-ui",
     "lint": "npm run check",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/knowledgeStatus.test.js",
     "package": "vsce package"
   },
   "dependencies": {
