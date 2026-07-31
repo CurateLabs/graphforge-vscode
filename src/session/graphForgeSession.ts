@@ -7,6 +7,7 @@ import {
   readManifestCapabilities,
   readWorkspaceOntology,
 } from "./projectDetector";
+import { detectWorkspaceProjectKind, type ProjectKind } from "./projectKindDetector";
 import {
   chooseRuntime,
   describeRuntimeUnavailable,
@@ -63,6 +64,8 @@ export interface RuntimeEnvironmentSnapshot {
   preference: RuntimePreference;
   node: NodeBindingStatus;
   python: PythonRuntimeStatus;
+  /** What kind of workspace this looks like (Python-first, Node-ish, or ambiguous); see `projectKind.ts`. */
+  projectKind: ProjectKind;
   /** Runtime actually backing the open session, if any. */
   active: RuntimeKind | undefined;
 }
@@ -162,7 +165,9 @@ export class GraphForgeSession implements vscode.Disposable {
   /** True when the configured `graphforge.runtime` preference can resolve to a usable backend. */
   async hasUsableRuntime(): Promise<boolean> {
     const snapshot = await this.environmentSnapshot();
-    return chooseRuntime(snapshot.preference, snapshot.node, snapshot.python) !== undefined;
+    return (
+      chooseRuntime(snapshot.preference, snapshot.node, snapshot.python, snapshot.projectKind) !== undefined
+    );
   }
 
   /** Full Node + Python runtime status for Check Environment (#12) and status bar. */
@@ -170,7 +175,8 @@ export class GraphForgeSession implements vscode.Disposable {
     const preference = runtimePreference();
     const node = nodeBindingStatus();
     const python = await pythonRuntimeStatus();
-    return { preference, node, python, active: this.backend?.runtime };
+    const projectKind = await detectWorkspaceProjectKind(vscode.workspace.workspaceFolders, python.available);
+    return { preference, node, python, projectKind, active: this.backend?.runtime };
   }
 
   async listProjects(): Promise<DetectedProject[]> {
@@ -1323,7 +1329,8 @@ export class GraphForgeSession implements vscode.Disposable {
     }
 
     const snapshot = await this.environmentSnapshot();
-    const usable = chooseRuntime(snapshot.preference, snapshot.node, snapshot.python) !== undefined;
+    const usable =
+      chooseRuntime(snapshot.preference, snapshot.node, snapshot.python, snapshot.projectKind) !== undefined;
     if (!usable) {
       this.statusBar.text = "$(warning) GraphForge: no runtime";
       this.statusBar.tooltip = describeRuntimeUnavailable(

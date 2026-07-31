@@ -19,7 +19,8 @@ Requires `@vscode/test-electron` ≥ 3.1.0 on macOS (VS Code 1.110+ ships `Code`
 | Project detection | `src/test/projectDetector.test.ts` | Exact FORMAT bytes; CURRENT parse |
 | Activation | `src/test/extension.test.ts` | Extension id, core commands (incl. `setupPythonBinding`), `cypher` language |
 | Environment reporting | `src/test/environmentReport.test.ts` | Dual-runtime next-action logic + 3-line summary format |
-| Runtime selection | `src/test/runtimeSelection.test.ts` | `chooseRuntime` auto/node/python precedence; `describeRuntimeUnavailable` mentions both setup paths |
+| Runtime selection | `src/test/runtimeSelection.test.ts` | `chooseRuntime` auto/node/python precedence incl. project-kind bias; `describeRuntimeUnavailable` mentions both setup paths |
+| Project-kind detection | `src/test/projectKind.test.ts` | `detectProjectKind` heuristic (Python/Node/ambiguous markers, both-present tie-break) and `isNotebookDominant` |
 | Python interpreter probe | `src/test/pythonProbe.test.ts` | Nonexistent interpreter, `graphforge` not importable, and (when the sibling `graphforge/.venv` dev venv exists) a real successful import + version |
 | Python bridge protocol | `src/test/pythonBridge.test.ts` | Framing/id-correlation/error-marshalling against a fake Node-run host (`fixtures/fakeGraphforgeHost.js`); `PythonEngineBackend` contract |
 
@@ -51,6 +52,11 @@ Requires `@vscode/test-electron` ≥ 3.1.0 on macOS (VS Code 1.110+ ships `Code`
 - Automated Python interpreter-detection tests (`collectPythonCandidates`,
   `detectPythonExtensionInterpreter`) require the `vscode` API and are only exercised by manual
   Extension Development Host runs today, not `npm run test:unit`
+- Same gap for `projectKindDetector.ts`'s `detectWorkspaceProjectKind`/`collectProjectKindSignals`
+  (filesystem probing is fine under plain mocha, but it calls the `vscode`-dependent
+  `detectPythonExtensionInterpreter` for the "interpreter selected" signal) — the pure
+  classification logic it delegates to (`detectProjectKind`, `isNotebookDominant` in
+  `projectKind.ts`) has full unit coverage instead
 
 ## CI recommendation
 

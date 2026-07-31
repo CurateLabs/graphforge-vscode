@@ -53,9 +53,34 @@ analyst verbs, `labels`/`relationshipTypes`, `ontologyMode`, `loadOntology`, and
 `runtime.ts` reads `graphforge.runtime` (`auto` | `node` | `python`, default `auto`), checks
 Node-binding and Python-interpreter availability, and calls `chooseRuntime` (in the
 `vscode`-free `runtimeSelection.ts`, so the selection logic is unit-testable without an
-extension host) to decide which backend `openEngineBackend()` constructs. `auto` always prefers
-Node; Python is only chosen when Node is unavailable and `graphforge` is importable in a
-detected interpreter. An explicit `node` or `python` preference never falls back to the other.
+extension host) to decide which backend `openEngineBackend()` constructs. In `auto`, **Node is
+the global default**, with one exception: a Python-first workspace (see "Project-kind detection"
+below) prefers Python even when Node is available. An explicit `node` or `python` preference
+never falls back to the other, and never consults project kind.
+
+### Project-kind detection (auto Python-prefer rule)
+
+`projectKind.ts` (pure, `vscode`-free — same testing convention as `runtimeSelection.ts`)
+classifies the workspace as `"python"`, `"node"`, or `"ambiguous"` from static signals gathered
+by `projectKindDetector.ts`:
+
+- **Python markers:** `pyproject.toml`, `requirements.txt`, `uv.lock`, `.python-version`,
+  `Pipfile`, `environment.yml`/`.yaml`, `setup.py`, a notebook-dominant workspace root
+  (`*.ipynb` files at least as common as `.ts`/`.tsx`/`.js`/`.jsx`/`.py` files), or the VS Code
+  Python extension reporting an explicitly selected interpreter.
+- **Node markers:** a `package.json` at the workspace root.
+- **Both present:** Python wins only on a *strong* signal — `pyproject.toml`/`uv.lock` (a real
+  uv/Python project manifest, not just a stray `requirements.txt`), or Python `graphforge`
+  already being importable in a detected interpreter. Otherwise the workspace is `"ambiguous"`.
+- **Neither present:** `"ambiguous"`.
+
+`chooseRuntime(preference, node, python, projectKind)` only consults `projectKind` when
+`preference === "auto"`: if `projectKind === "python"` and Python is usable, Python is chosen
+even though Node is also available; otherwise the pre-existing Node-first `auto` behavior applies
+unchanged. This means `"node"` and `"ambiguous"` project kinds are handled identically — Node
+stays the default — matching the product rule "Node remains the global default only when the
+repo is Node-ish or ambiguous." `graphforge.runtime` set explicitly to `node` or `python`
+overrides this detection entirely.
 
 ### Python bridge protocol
 
@@ -133,6 +158,11 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
   no runtime is usable, the message and recovery actions cover **both** Setup commands (#12).
 - **Configuration:** `graphforge.nativeModulePath`, `graphforge.openResultGraphOnQuery`,
   `graphforge.runtime`, `graphforge.pythonInterpreterPath`.
+- **Package manager policy:** Python package installs use **`uv` only, never `pip`** —
+  `GraphForge: Setup Python Binding`'s install choice runs `uv add graphforge` in a uv-managed
+  project (`pyproject.toml`/`uv.lock` present) or `uv pip install --python <interpreter>
+  graphforge` otherwise. If `uv` is not on `PATH`, the command tells the user to install uv first
+  and does not fall back to `pip install` (`setupPython.ts`).
 - **Security:** Webview CSP restrictive; scripts only for panel UI; no remote project trust
   beyond workspace folders. The Python bridge only ever spawns the extension-bundled
   `graphforge_host.py` (never a workspace-local script) with a user-selected interpreter.
@@ -153,6 +183,15 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 - `EngineBackend` is scoped to what `GraphForgeSession` actually calls today, not the full (and
   still-moving) `GraphForgeNative` surface — checkpoints/embeddings/invocation-descriptor APIs
   (#8–#11) are Node-only until those issues define their own cross-runtime contract.
+- `auto` prefers Python over an available Node binding in Python-first workspaces (product
+  feedback on #12): a fast, in-process Node binding is still the better default absent other
+  signals, but a repo that is clearly Python's (has `pyproject.toml`, `uv.lock`, etc. and no
+  `package.json`) should not force analysts to also set up a Node binding they don't otherwise
+  need. `graphforge.runtime` set explicitly always overrides this.
+- Python package installs standardize on `uv` (product feedback on #12): `pip` has no lockfile,
+  no project-aware `add`, and mixing it with `uv`-managed environments causes drift; requiring
+  `uv` end-to-end (install-uv-first, no fallback) keeps Setup Python Binding's guidance
+  unambiguous.
 
 ## Risks & trade-offs
 

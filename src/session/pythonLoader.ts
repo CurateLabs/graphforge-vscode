@@ -145,8 +145,12 @@ function pathExecutableNames(): string[] {
  * Use the Microsoft Python extension's API when present to find the
  * currently selected interpreter, degrading gracefully across API shapes
  * and when the extension is absent or inactive.
+ *
+ * Exported (in addition to being used internally) so `projectKindDetector.ts`
+ * can reuse it as a "VS Code Python interpreter set" project-kind signal
+ * without re-implementing the extension-API probing.
  */
-async function detectPythonExtensionInterpreter(): Promise<string | undefined> {
+export async function detectPythonExtensionInterpreter(): Promise<string | undefined> {
   const ext = vscode.extensions.getExtension("ms-python.python");
   if (!ext) {
     return undefined;
