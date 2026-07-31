@@ -1,21 +1,18 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import type { EpistemicStatus } from "../session/types";
+import type { AssertionRow } from "../session/types";
 
 type Node =
   | { kind: "summary"; label: string; description?: string }
-  | { kind: "status"; status: EpistemicStatus; count: number }
-  | { kind: "note"; label: string };
+  | { kind: "group"; label: string; children: Node[] }
+  | { kind: "assertion"; uuid: string; claim: string }
+  | { kind: "note"; label: string; description?: string; icon?: string }
+  | { kind: "action"; label: string; command: string; icon: string };
 
-const STATUS_ORDER: EpistemicStatus[] = [
-  "supported",
-  "hypothesis",
-  "disputed",
-  "refuted",
-  "retracted",
-  "superseded",
-  "statusless",
-];
+function truncate(text: string, max = 64): string {
+  const collapsed = text.trim().replace(/\s+/g, " ");
+  return collapsed.length > max ? `${collapsed.slice(0, max)}…` : collapsed;
+}
 
 export class KnowledgeTreeProvider
   implements vscode.TreeDataProvider<Node>, vscode.Disposable
@@ -38,54 +35,135 @@ export class KnowledgeTreeProvider
   }
 
   getTreeItem(element: Node): vscode.TreeItem {
+    if (element.kind === "group") {
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.Expanded,
+      );
+      item.iconPath = new vscode.ThemeIcon("symbol-namespace");
+      return item;
+    }
+    if (element.kind === "assertion") {
+      const item = new vscode.TreeItem(
+        truncate(element.claim || "(empty claim)"),
+        vscode.TreeItemCollapsibleState.None,
+      );
+      item.description = element.uuid.slice(0, 8);
+      item.iconPath = new vscode.ThemeIcon("law");
+      item.command = {
+        command: "graphforge.showAssertion",
+        title: "Show Assertion",
+        arguments: [element.uuid],
+      };
+      item.contextValue = "graphforge.assertion";
+      return item;
+    }
+    if (element.kind === "action") {
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.None,
+      );
+      item.iconPath = new vscode.ThemeIcon(element.icon);
+      item.command = { command: element.command, title: element.label };
+      return item;
+    }
     const item = new vscode.TreeItem(
-      element.kind === "status"
-        ? element.status
-        : element.label,
+      element.label,
       vscode.TreeItemCollapsibleState.None,
     );
-    if (element.kind === "status") {
-      item.description = String(element.count);
-      item.iconPath = new vscode.ThemeIcon("circle-filled");
-    } else if (element.kind === "summary") {
+    if (element.kind === "summary") {
       item.description = element.description;
       item.iconPath = new vscode.ThemeIcon("book");
-      item.command = {
-        command: "graphforge.showResultGraph",
-        title: "Show Result Graph",
-      };
     } else {
-      item.iconPath = new vscode.ThemeIcon("info");
+      item.description = element.description;
+      item.iconPath = new vscode.ThemeIcon(element.icon ?? "info");
     }
     return item;
   }
 
-  getChildren(element?: Node): Node[] {
+  async getChildren(element?: Node): Promise<Node[]> {
+    if (element?.kind === "group") {
+      return element.children;
+    }
     if (element) {
       return [];
     }
+
     if (!this.session.project) {
-      return [{ kind: "note", label: "Open a project to inspect knowledge" }];
+      return [
+        {
+          kind: "note",
+          label: "Open a project to inspect knowledge",
+          icon: "info",
+        },
+        {
+          kind: "action",
+          label: "Open Project…",
+          command: "graphforge.openProject",
+          icon: "folder-opened",
+        },
+      ];
     }
 
-    const summary = this.session.knowledgeSummary();
+    const summary = await this.session.knowledgeSummary();
+
+    if (!summary.capabilityAvailable) {
+      return [
+        {
+          kind: "note",
+          label: "Knowledge ledger unavailable",
+          description: summary.note,
+          icon: "warning",
+        },
+        {
+          kind: "action",
+          label: "Check Environment…",
+          command: "graphforge.checkEnvironment",
+          icon: "pulse",
+        },
+      ];
+    }
+
+    if (summary.assertionCount === 0) {
+      return [
+        {
+          kind: "note",
+          label: "No assertions yet",
+          description: "The knowledge ledger is empty for this project.",
+          icon: "law",
+        },
+        {
+          kind: "action",
+          label: "Create Assertion…",
+          command: "graphforge.createAssertion",
+          icon: "add",
+        },
+      ];
+    }
+
     const nodes: Node[] = [
       {
         kind: "summary",
         label: `Assertions: ${summary.assertionCount}`,
         description: "knowledge@1 ledger",
       },
+      ...summary.assertions.map(
+        (a: AssertionRow): Node => ({
+          kind: "assertion",
+          uuid: a.assertionUuid,
+          claim: a.claim,
+        }),
+      ),
+      {
+        kind: "action",
+        label: "Create Assertion…",
+        command: "graphforge.createAssertion",
+        icon: "add",
+      },
     ];
 
-    for (const status of STATUS_ORDER) {
-      const count = summary.statusCounts[status] ?? 0;
-      if (count > 0 || status === "statusless") {
-        nodes.push({ kind: "status", status, count });
-      }
-    }
-
     if (summary.note) {
-      nodes.push({ kind: "note", label: summary.note });
+      nodes.push({ kind: "note", label: summary.note, icon: "info" });
     }
 
     return nodes;

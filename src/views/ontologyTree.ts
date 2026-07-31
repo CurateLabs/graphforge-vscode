@@ -5,7 +5,8 @@ import { readWorkspaceOntology } from "../session/projectDetector";
 type Node =
   | { kind: "mode"; label: string }
   | { kind: "group"; label: string; children: Node[] }
-  | { kind: "item"; label: string; description?: string };
+  | { kind: "item"; label: string; description?: string }
+  | { kind: "action"; label: string; command: string; icon: string };
 
 export class OntologyTreeProvider
   implements vscode.TreeDataProvider<Node>, vscode.Disposable
@@ -34,6 +35,15 @@ export class OntologyTreeProvider
         vscode.TreeItemCollapsibleState.Expanded,
       );
       item.iconPath = new vscode.ThemeIcon("symbol-namespace");
+      return item;
+    }
+    if (element.kind === "action") {
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.None,
+      );
+      item.iconPath = new vscode.ThemeIcon(element.icon);
+      item.command = { command: element.command, title: element.label };
       return item;
     }
     const item = new vscode.TreeItem(
@@ -68,6 +78,12 @@ export class OntologyTreeProvider
           kind: "mode",
           label: "No project open",
         },
+        {
+          kind: "action",
+          label: "Open Project…",
+          command: "graphforge.openProject",
+          icon: "folder-opened",
+        },
       ];
     }
 
@@ -93,6 +109,30 @@ export class OntologyTreeProvider
       }),
     );
 
+    const loadAction: Node = {
+      kind: "action",
+      label: "Load Ontology…",
+      command: "graphforge.loadOntology",
+      icon: "cloud-upload",
+    };
+
+    if (!ontology) {
+      // Exploratory mode with no ontology loaded yet is a valid, common state —
+      // not an error — so the empty state must explain that and offer the fix.
+      return [
+        { kind: "mode", label: `Mode: ${mode}` },
+        {
+          kind: "item",
+          label: "No ontology loaded yet",
+          description:
+            mode === "exploratory"
+              ? "Exploratory mode works without one — load one anytime to add structure."
+              : "Load one to see entity/relation types here.",
+        },
+        loadAction,
+      ];
+    }
+
     return [
       { kind: "mode", label: `Mode: ${mode}` },
       {
@@ -109,6 +149,7 @@ export class OntologyTreeProvider
           ? relations
           : [{ kind: "item", label: "(none)" }],
       },
+      loadAction,
     ];
   }
 }

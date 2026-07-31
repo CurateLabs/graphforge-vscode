@@ -123,7 +123,45 @@
       },
       {
         "command": "graphforge.loadOntology",
-        "title": "GraphForge: Load Ontology…"
+        "title": "GraphForge: Load Ontology…",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "graphforge.openOntologyFile",
+        "title": "GraphForge: Open ontology.json"
+      },
+      {
+        "command": "graphforge.explainOntologyMode",
+        "title": "GraphForge: Explain Ontology Mode"
+      },
+      {
+        "command": "graphforge.listAssertions",
+        "title": "GraphForge: List Assertions"
+      },
+      {
+        "command": "graphforge.createAssertion",
+        "title": "GraphForge: Create Assertion…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "graphforge.showAssertion",
+        "title": "GraphForge: Show Assertion…"
+      },
+      {
+        "command": "graphforge.showAssertionOnGraph",
+        "title": "GraphForge: Show Assertion on Graph…"
+      },
+      {
+        "command": "graphforge.attachEvidence",
+        "title": "GraphForge: Attach Evidence… (Advanced)"
+      },
+      {
+        "command": "graphforge.assessConfidence",
+        "title": "GraphForge: Assess Confidence… (Advanced)"
+      },
+      {
+        "command": "graphforge.recordAssertionStatus",
+        "title": "GraphForge: Record Assertion Status… (Advanced)"
       }
     ],
     "menus": {
@@ -153,6 +191,11 @@
         {
           "command": "graphforge.loadOntology",
           "when": "view == graphforge.ontology",
+          "group": "navigation"
+        },
+        {
+          "command": "graphforge.createAssertion",
+          "when": "view == graphforge.knowledge",
           "group": "navigation"
         }
       ]
@@ -205,7 +248,7 @@
     "check": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js",
     "package": "vsce package"
   },
   "dependencies": {

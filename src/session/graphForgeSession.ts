@@ -1,5 +1,5 @@
-import { tableFromIPC, type Table } from "apache-arrow";
 import * as vscode from "vscode";
+import { decodeTable, resolveIpcBuffer, stringField } from "./arrowCodec";
 import { getNativeLoadError, loadGraphForgeModule } from "./nativeLoader";
 import {
   discoverProjects,
@@ -7,21 +7,26 @@ import {
   readManifestCapabilities,
   readWorkspaceOntology,
 } from "./projectDetector";
+import { randomOperationId, uuidv7 } from "./uuid";
 import {
-  AlgorithmDescriptorContractNative,
   AnalystVerb,
-  CheckpointViewNative,
+  AssertionRow,
+  AssessConfidenceInput,
+  AttachEvidenceInput,
+  CreateAssertionInput,
   DetectedProject,
   EpistemicStatus,
   GraphEdge,
   GraphForgeNative,
   GraphNode,
   GraphPayload,
-  InvocationDescriptorNative,
   KnowledgeSummary,
+  ListAssertionsInput,
+  ListAssertionStatusInput,
   OntologyDoc,
   ProjectCapabilities,
   QueryResult,
+  RecordAssertionStatusInput,
   TableRow,
   WriteMode,
 } from "./types";
@@ -63,6 +68,10 @@ export class GraphForgeSession implements vscode.Disposable {
 
   get project(): DetectedProject | undefined {
     return this.activeProject;
+  }
+
+  get writeMode(): WriteMode {
+    return this.activeWriteMode;
   }
 
   get bindingAvailable(): boolean {
@@ -202,7 +211,14 @@ export class GraphForgeSession implements vscode.Disposable {
         buf = forge.similar(args.label ?? "", args.by ?? "node_similarity", args.k);
         break;
       case "find":
-        buf = forge.find(args.query, args.label, args.k ?? 10);
+        buf = forge.find(
+          args.query,
+          args.label,
+          undefined,
+          undefined,
+          undefined,
+          args.k ?? 10,
+        );
         break;
       default:
         throw new Error(`Unknown verb: ${verb}`);
@@ -263,30 +279,192 @@ export class GraphForgeSession implements vscode.Disposable {
     this._onDidChange.fire();
   }
 
-  knowledgeSummary(): KnowledgeSummary {
-    if (!this.forge?.listAssertions) {
+  /** True once the current binding exposes the knowledge (assertions) surface at all. */
+  knowledgeCapabilityAvailable(): boolean {
+    return typeof this.forge?.listAssertions === "function";
+  }
+
+  async knowledgeSummary(): Promise<KnowledgeSummary> {
+    if (!this.knowledgeCapabilityAvailable()) {
       return {
+        capabilityAvailable: false,
         assertionCount: 0,
         statusCounts: {},
+        assertions: [],
         note: this.bindingAvailable
-          ? "Knowledge ledger APIs not yet wired in this scaffold."
+          ? "This @graphforge/node binding does not expose listAssertions() yet."
           : getNativeLoadError(),
       };
     }
     try {
-      const result = decodeTable(this.forge.listAssertions());
+      const result = await this.listAssertions({ limit: 50 });
       return {
+        capabilityAvailable: true,
         assertionCount: result.rowCount,
         statusCounts: {},
-        note: "Assertion rows loaded; epistemic projection pending.",
+        assertions: rowsToAssertions(result),
+        note:
+          result.rowCount === 0
+            ? undefined
+            : "Status breakdown pending per-assertion status lookup; see assertion detail.",
       };
     } catch (err) {
       return {
+        capabilityAvailable: true,
         assertionCount: 0,
         statusCounts: {},
+        assertions: [],
         note: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  /** List a page of immutable assertions (`listAssertions`), defensively. */
+  async listAssertions(request?: ListAssertionsInput): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.listAssertions !== "function") {
+      throw new UnsupportedByBindingError("listAssertions");
+    }
+    const buf = await resolveIpcBuffer(
+      forge.listAssertions({
+        graphUuid: request?.graphUuid,
+        limit: request?.limit,
+        after: request?.after,
+      }),
+    );
+    return decodeTable(buf);
+  }
+
+  /** Fetch one assertion by UUID; falls back to a filtered list page if `assertion()` is absent. */
+  async getAssertion(assertionUuid: string): Promise<AssertionRow | undefined> {
+    const forge = this.requireForge();
+    if (typeof forge.assertion === "function") {
+      const buf = await resolveIpcBuffer(forge.assertion(assertionUuid));
+      const result = decodeTable(buf);
+      return rowsToAssertions(result)[0];
+    }
+    const result = await this.listAssertions({ limit: 200 });
+    return rowsToAssertions(result).find(
+      (a) => a.assertionUuid === assertionUuid,
+    );
+  }
+
+  /** Graph node/edge references for one assertion (subject/object/context), for "show on graph". */
+  async assertionGraphRefs(assertionUuid: string): Promise<TableRow[]> {
+    const forge = this.requireForge();
+    if (typeof forge.assertionGraphRefs !== "function") {
+      throw new UnsupportedByBindingError("assertionGraphRefs");
+    }
+    const buf = await resolveIpcBuffer(forge.assertionGraphRefs(assertionUuid));
+    return decodeTable(buf).rows;
+  }
+
+  /**
+   * Create one immutable assertion with minimal required fields (claim + at
+   * least one graph reference). Identity UUIDs are minted here (UUIDv7) so the
+   * analyst never has to paste one in for the primary Create Assertion path.
+   */
+  async createAssertion(input: {
+    claim: string;
+    graphRefs: CreateAssertionInput["graphRefs"];
+    actorUuid?: string;
+  }): Promise<{ assertionUuid: string; result: QueryResult }> {
+    const forge = this.requireForge();
+    if (typeof forge.createAssertion !== "function") {
+      throw new UnsupportedByBindingError("createAssertion");
+    }
+    if (!input.graphRefs.length) {
+      throw new Error("Create Assertion requires at least one graph reference.");
+    }
+    const assertionUuid = uuidv7();
+    const buf = await resolveIpcBuffer(
+      forge.createAssertion({
+        operationUuid: randomOperationId(),
+        assertionUuid,
+        claim: input.claim,
+        graphRefs: input.graphRefs,
+        actorUuid: input.actorUuid,
+      }),
+    );
+    const result = decodeTable(buf);
+    this._onDidChange.fire();
+    return { assertionUuid, result };
+  }
+
+  /** Advanced: attach one immutable evidence link to an existing assertion. */
+  async attachEvidence(
+    input: Omit<AttachEvidenceInput, "operationUuid" | "evidenceUuid">,
+  ): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.attachEvidence !== "function") {
+      throw new UnsupportedByBindingError("attachEvidence");
+    }
+    const buf = await resolveIpcBuffer(
+      forge.attachEvidence({
+        operationUuid: randomOperationId(),
+        evidenceUuid: uuidv7(),
+        ...input,
+      }),
+    );
+    const result = decodeTable(buf);
+    this._onDidChange.fire();
+    return result;
+  }
+
+  /** Advanced: record one immutable confidence assessment for an assertion. */
+  async assessConfidence(
+    input: Omit<AssessConfidenceInput, "operationUuid" | "confidenceUuid">,
+  ): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.assessConfidence !== "function") {
+      throw new UnsupportedByBindingError("assessConfidence");
+    }
+    const buf = await resolveIpcBuffer(
+      forge.assessConfidence({
+        operationUuid: randomOperationId(),
+        confidenceUuid: uuidv7(),
+        ...input,
+      }),
+    );
+    const result = decodeTable(buf);
+    this._onDidChange.fire();
+    return result;
+  }
+
+  /** Advanced: record one explicit assertion-status event (requires an existing provenance UUID). */
+  async recordAssertionStatus(
+    input: Omit<RecordAssertionStatusInput, "operationUuid" | "statusEventUuid">,
+  ): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.recordAssertionStatus !== "function") {
+      throw new UnsupportedByBindingError("recordAssertionStatus");
+    }
+    const buf = await resolveIpcBuffer(
+      forge.recordAssertionStatus({
+        operationUuid: randomOperationId(),
+        statusEventUuid: uuidv7(),
+        ...input,
+      }),
+    );
+    const result = decodeTable(buf);
+    this._onDidChange.fire();
+    return result;
+  }
+
+  /** Status event history, optionally filtered to one assertion. */
+  async listAssertionStatus(request?: ListAssertionStatusInput): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.listAssertionStatus !== "function") {
+      throw new UnsupportedByBindingError("listAssertionStatus");
+    }
+    const buf = await resolveIpcBuffer(
+      forge.listAssertionStatus({
+        assertionUuid: request?.assertionUuid,
+        limit: request?.limit,
+        after: request?.after,
+      }),
+    );
+    return decodeTable(buf);
   }
 
   /** Build a graph payload from tabular results + optional epistemic/class tags. */
@@ -418,57 +596,13 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 }
 
-function decodeTable(buf: Buffer): QueryResult {
-  const table = tableFromIPC(buf) as Table;
-  const columns = table.schema.fields.map((f) => f.name);
-  const rows: TableRow[] = [];
-  for (let i = 0; i < table.numRows; i++) {
-    const row: TableRow = {};
-    for (const col of columns) {
-      const child = table.getChild(col);
-      row[col] = normalizeCell(child?.get(i));
-    }
-    rows.push(row);
-  }
-  const algorithm = table.schema.metadata?.get("graphforge.algorithm");
-  return {
-    columns,
-    rows,
-    rowCount: table.numRows,
-    algorithm: algorithm ?? undefined,
-  };
-}
-
-function normalizeCell(value: unknown): unknown {
-  if (value == null) {
-    return value;
-  }
-  if (Buffer.isBuffer(value)) {
-    return bufferToUuid(value) ?? value.toString("hex");
-  }
-  if (value instanceof Uint8Array) {
-    return bufferToUuid(Buffer.from(value)) ?? Buffer.from(value).toString("hex");
-  }
-  if (typeof value === "bigint") {
-    return value.toString();
-  }
-  return value;
-}
-
-function bufferToUuid(buf: Buffer): string | undefined {
-  if (buf.length !== 16) {
-    return undefined;
-  }
-  const hex = buf.toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-function stringField(row: TableRow, key: string): string | undefined {
-  const v = row[key];
-  if (v == null) {
-    return undefined;
-  }
-  return String(v);
+function rowsToAssertions(result: QueryResult): AssertionRow[] {
+  return result.rows.map((row) => ({
+    assertionUuid:
+      stringField(row, "assertion_uuid") ?? stringField(row, "uuid") ?? "",
+    claim: stringField(row, "claim") ?? "",
+    ...row,
+  }));
 }
 
 function labelsFromRow(row: TableRow, prefix = ""): string[] {

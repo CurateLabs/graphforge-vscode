@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { isGraphForgeProject } from "../session/projectDetector";
@@ -131,6 +132,68 @@ export function registerOpenViews(
           `Load ontology failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
+    }),
+
+    vscode.commands.registerCommand("graphforge.openOntologyFile", async () => {
+      const project = session.project;
+      const generationUuid = project?.current?.generation_uuid;
+      if (!project || !generationUuid) {
+        const choice = await vscode.window.showInformationMessage(
+          "No committed ontology file for this project yet.",
+          "Load Ontology…",
+        );
+        if (choice === "Load Ontology…") {
+          await vscode.commands.executeCommand("graphforge.loadOntology");
+        }
+        return;
+      }
+      const ontologyPath = path.join(
+        project.rootPath,
+        "generations",
+        generationUuid,
+        "participants",
+        "workspace",
+        "ontology.json",
+      );
+      try {
+        const doc = await vscode.workspace.openTextDocument(ontologyPath);
+        await vscode.window.showTextDocument(doc, { preview: true });
+      } catch {
+        const choice = await vscode.window.showInformationMessage(
+          "No committed ontology.json in this generation's workspace participant yet.",
+          "Load Ontology…",
+        );
+        if (choice === "Load Ontology…") {
+          await vscode.commands.executeCommand("graphforge.loadOntology");
+        }
+      }
+    }),
+
+    vscode.commands.registerCommand("graphforge.explainOntologyMode", async () => {
+      const mode = session.ontologyMode();
+      const doc = await vscode.workspace.openTextDocument({
+        content: [
+          `# GraphForge Ontology Modes`,
+          "",
+          `Current project mode: **${mode}**`,
+          "",
+          "GraphForge's ontology is progressive — you are never required to define",
+          "a schema up front. Modes tighten enforcement as a project matures:",
+          "",
+          "- **exploratory** — no ontology required. Any labels/relationship types",
+          "  are accepted as-is. This is the default for new/empty projects.",
+          "- **advisory** — a committed ontology exists and is used for display",
+          "  and hints (e.g. abstract/parent types), but writes outside it are",
+          "  still allowed.",
+          "- **strict** — writes that do not conform to the committed ontology",
+          "  are rejected by the engine.",
+          "",
+          "Use **GraphForge: Load Ontology…** to commit an ontology document and",
+          "move a project from exploratory towards advisory/strict.",
+        ].join("\n"),
+        language: "markdown",
+      });
+      await vscode.window.showTextDocument(doc, { preview: true });
     }),
   );
 }

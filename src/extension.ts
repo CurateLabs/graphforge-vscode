@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { registerAnalystVerbs } from "./commands/analystVerbs";
+import { registerKnowledgeCommands } from "./commands/knowledgeCommands";
 import { registerOpenViews } from "./commands/openViews";
 import { registerRunQuery } from "./commands/runQuery";
 import { registerSetup } from "./commands/setup";
@@ -34,6 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerAnalystVerbs(context, session);
   registerOpenViews(context, session, refreshTrees);
   registerSetup(context, session, refreshTrees);
+  registerKnowledgeCommands(context, session, refreshTrees);
 
   void projects.refresh();
 

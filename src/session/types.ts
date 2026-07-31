@@ -101,9 +101,84 @@ export interface WorkspaceOntology {
 }
 
 export interface KnowledgeSummary {
+  /** True once the underlying `@graphforge/node` binding exposes the knowledge API at all. */
+  capabilityAvailable: boolean;
   assertionCount: number;
   statusCounts: Partial<Record<EpistemicStatus, number>>;
+  assertions: AssertionRow[];
   note?: string;
+}
+
+export interface AssertionRow {
+  assertionUuid: string;
+  claim: string;
+  [key: string]: unknown;
+}
+
+export type AssertionGraphKind = "node" | "edge";
+export type AssertionGraphRole = "subject" | "object" | "context";
+export type ExplicitAssertionStatus = Exclude<EpistemicStatus, "statusless">;
+export type EvidenceSourceKind = "document" | "observation" | "graph_node" | "graph_edge";
+export type EvidenceRole = "supports" | "contradicts" | "context";
+export type ConfidencePolicy = "explicit" | "conservative_min";
+
+export interface AssertionGraphRefInput {
+  graphUuid: string;
+  graphKind: AssertionGraphKind;
+  role: AssertionGraphRole;
+  ordinal: number;
+}
+
+export interface CreateAssertionInput {
+  operationUuid: string;
+  assertionUuid: string;
+  claim: string;
+  graphRefs: AssertionGraphRefInput[];
+  actorUuid?: string;
+}
+
+export interface ListAssertionsInput {
+  graphUuid?: string;
+  limit?: number;
+  after?: string;
+}
+
+export interface AttachEvidenceInput {
+  operationUuid: string;
+  evidenceUuid: string;
+  assertionUuid: string;
+  sourceUuid: string;
+  sourceKind: EvidenceSourceKind;
+  role: EvidenceRole;
+  weight?: number;
+  actorUuid?: string;
+}
+
+export interface AssessConfidenceInput {
+  operationUuid: string;
+  confidenceUuid: string;
+  assertionUuid: string;
+  policy: ConfidencePolicy;
+  value?: number;
+  inputConfidenceUuids?: string[];
+  actorUuid?: string;
+}
+
+export interface RecordAssertionStatusInput {
+  operationUuid: string;
+  statusEventUuid: string;
+  assertionUuid: string;
+  status: ExplicitAssertionStatus;
+  provenanceUuid: string;
+  confidenceUuid?: string;
+  reasoningUuid?: string;
+  actorUuid?: string;
+}
+
+export interface ListAssertionStatusInput {
+  assertionUuid?: string;
+  limit?: number;
+  after?: string;
 }
 
 export interface ProjectCapabilities {
@@ -332,7 +407,22 @@ export interface GraphForgeNative {
   labels(): string[];
   relationshipTypes(): string[];
   loadOntology(path: string): void;
-  listAssertions?(request?: unknown): Buffer;
+  /**
+   * Knowledge ledger surface. Optional and defensively typed: the sibling
+   * `@graphforge/node` binding is a separate, moving project and these methods
+   * may be absent, renamed, or return a Promise instead of a Buffer (they are
+   * currently async `AsyncTask`s on the Node side). Always feature-detect with
+   * `typeof forge.xxx === "function"` before calling and resolve the return
+   * value through `resolveIpcBuffer`.
+   */
+  listAssertions?(request?: unknown): Buffer | Promise<Buffer>;
+  assertion?(assertionUuid: string): Buffer | Promise<Buffer>;
+  assertionGraphRefs?(assertionUuid: string, request?: unknown): Buffer | Promise<Buffer>;
+  createAssertion?(request: unknown): Buffer | Promise<Buffer>;
+  attachEvidence?(request: unknown): Buffer | Promise<Buffer>;
+  assessConfidence?(request: unknown): Buffer | Promise<Buffer>;
+  recordAssertionStatus?(request: unknown): Buffer | Promise<Buffer>;
+  listAssertionStatus?(request?: unknown): Buffer | Promise<Buffer>;
 }
 
 export interface GraphForgeModule {
