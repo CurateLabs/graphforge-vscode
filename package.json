@@ -83,6 +83,11 @@
         "title": "GraphForge: Run Query with Parameters…"
       },
       {
+        "command": "graphforge.getStarted",
+        "title": "GraphForge: Get Started",
+        "icon": "$(rocket)"
+      },
+      {
         "command": "graphforge.checkEnvironment",
         "title": "GraphForge: Check Environment"
       },
@@ -307,6 +312,11 @@
       ],
       "view/title": [
         {
+          "command": "graphforge.getStarted",
+          "when": "view == graphforge.getStarted",
+          "group": "navigation"
+        },
+        {
           "command": "graphforge.refreshExplorer",
           "when": "view == graphforge.projects",
           "group": "navigation"
@@ -344,6 +354,12 @@
     },
     "views": {
       "graphforge": [
+        {
+          "type": "webview",
+          "id": "graphforge.getStarted",
+          "name": "Get Started",
+          "icon": "$(rocket)"
+        },
         {
           "id": "graphforge.projects",
           "name": "Projects"

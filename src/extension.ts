@@ -14,6 +14,7 @@ import { GraphForgeSession } from "./session/graphForgeSession";
 import { resetNativeCache } from "./session/nativeLoader";
 import { resetPythonCache } from "./session/pythonLoader";
 import { KnowledgeTreeProvider } from "./views/knowledgeTree";
+import { GetStartedViewProvider } from "./views/getStartedView";
 import { OntologyTreeProvider } from "./views/ontologyTree";
 import { ProjectExplorerProvider } from "./views/projectExplorer";
 
@@ -30,6 +31,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider("graphforge.projects", projects),
     vscode.window.registerTreeDataProvider("graphforge.ontology", ontology),
     vscode.window.registerTreeDataProvider("graphforge.knowledge", knowledge),
+    vscode.window.registerWebviewViewProvider(
+      "graphforge.getStarted",
+      new GetStartedViewProvider(context.extensionUri, session),
+    ),
   );
 
   const refreshTrees = () => {
