@@ -460,10 +460,10 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.13.10",
     "@types/vscode": "^1.96.0",
-    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.3.2",
-    "esbuild": "^0.25.1",
+    "esbuild": "^0.28.1",
     "mocha": "^11.1.0",
     "typescript": "^5.8.2",
     "vite": "^7.3.6"
