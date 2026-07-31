@@ -1,0 +1,98 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Cypher",
+  "scopeName": "source.cypher",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#parameters" },
+    { "include": "#keywords" },
+    { "include": "#functions" },
+    { "include": "#labels" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cypher",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.cypher",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.cypher",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "name": "constant.character.escape.cypher", "match": "\\\\." }
+          ]
+        },
+        {
+          "name": "string.quoted.double.cypher",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "name": "constant.character.escape.cypher", "match": "\\\\." }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.cypher",
+          "match": "\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b"
+        }
+      ]
+    },
+    "parameters": {
+      "patterns": [
+        {
+          "name": "variable.parameter.cypher",
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.cypher",
+          "match": "(?i)\\b(MATCH|OPTIONAL\\s+MATCH|WHERE|WITH|RETURN|ORDER\\s+BY|SKIP|LIMIT|CREATE|MERGE|SET|DELETE|DETACH\\s+DELETE|REMOVE|FOREACH|UNWIND|CALL|YIELD|UNION(\\s+ALL)?|CASE|WHEN|THEN|ELSE|END|AS|DISTINCT|ASC|DESC|OR|AND|XOR|NOT|IN|STARTS\\s+WITH|ENDS\\s+WITH|CONTAINS|IS\\s+NULL|IS\\s+NOT\\s+NULL|TRUE|FALSE|NULL|ON\\s+CREATE|ON\\s+MATCH|USING\\s+INDEX|USING\\s+JOIN|USING\\s+SCAN)\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "support.function.cypher",
+          "match": "(?i)\\b(count|sum|avg|min|max|collect|size|length|type|id|labels|keys|properties|coalesce|head|last|tail|range|toString|toInteger|toFloat|toBoolean|substring|replace|trim|lTrim|rTrim|toLower|toUpper|split|reverse|abs|ceil|floor|round|sign|rand|sqrt|log|log10|exp|sin|cos|tan|asin|acos|atan|atan2|pi|e|timestamp|datetime|date|time|localdatetime|localtime|duration|point|distance|exists|nodes|relationships|startNode|endNode)\\b(?=\\s*\\()"
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.type.cypher",
+          "match": ":[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.cypher",
+          "match": "=|<>|<|>|<=|>=|\\+|\\-|\\*|/|%|\\^|\\|\\|"
+        }
+      ]
+    }
+  }
+}

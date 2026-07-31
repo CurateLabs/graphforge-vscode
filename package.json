@@ -1,0 +1,425 @@
+{
+  "name": "graphforge",
+  "displayName": "GraphForge",
+  "description": "Explore GraphForge projects in VS Code — Cypher, analyst verbs, ontology, and epistemic-aware result graphs.",
+  "version": "0.1.0",
+  "publisher": "CurateLabs",
+  "icon": "media/icon.png",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.96.0",
+    "node": ">=20"
+  },
+  "categories": [
+    "Programming Languages",
+    "Data Science",
+    "Other"
+  ],
+  "keywords": [
+    "graphforge",
+    "cypher",
+    "opencypher",
+    "graph",
+    "knowledge-graph",
+    "ontology"
+  ],
+  "activationEvents": [
+    "onLanguage:cypher",
+    "workspaceContains:FORMAT"
+  ],
+  "main": "./dist/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CurateLabs/graphforge-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CurateLabs/graphforge-vscode/issues"
+  },
+  "homepage": "https://github.com/CurateLabs/graphforge-vscode#readme",
+  "galleryBanner": {
+    "color": "#0B1220",
+    "theme": "dark"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "cypher",
+        "aliases": [
+          "Cypher",
+          "openCypher"
+        ],
+        "extensions": [
+          ".cypher",
+          ".cql"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cypher",
+        "scopeName": "source.cypher",
+        "path": "./syntaxes/cypher.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "graphforge.openProject",
+        "title": "GraphForge: Open Project",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "graphforge.refreshExplorer",
+        "title": "GraphForge: Refresh Explorer",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "graphforge.runQuery",
+        "title": "GraphForge: Run Query",
+        "icon": "$(play)"
+      },
+      {
+        "command": "graphforge.runQueryWithParams",
+        "title": "GraphForge: Run Query with Parameters…"
+      },
+      {
+        "command": "graphforge.checkEnvironment",
+        "title": "GraphForge: Check Environment"
+      },
+      {
+        "command": "graphforge.setupNativeBinding",
+        "title": "GraphForge: Setup Native Binding"
+      },
+      {
+        "command": "graphforge.setupPythonBinding",
+        "title": "GraphForge: Setup Python Binding"
+      },
+      {
+        "command": "graphforge.initializeProjectHere",
+        "title": "GraphForge: Initialize Project Here"
+      },
+      {
+        "command": "graphforge.rank",
+        "title": "GraphForge: Rank"
+      },
+      {
+        "command": "graphforge.rankAdvanced",
+        "title": "GraphForge: Rank (Advanced)…"
+      },
+      {
+        "command": "graphforge.cluster",
+        "title": "GraphForge: Cluster"
+      },
+      {
+        "command": "graphforge.clusterAdvanced",
+        "title": "GraphForge: Cluster (Advanced)…"
+      },
+      {
+        "command": "graphforge.paths",
+        "title": "GraphForge: Paths"
+      },
+      {
+        "command": "graphforge.pathsAdvanced",
+        "title": "GraphForge: Paths (Advanced)…"
+      },
+      {
+        "command": "graphforge.analyze",
+        "title": "GraphForge: Analyze"
+      },
+      {
+        "command": "graphforge.analyzeAdvanced",
+        "title": "GraphForge: Analyze (Advanced)…"
+      },
+      {
+        "command": "graphforge.similar",
+        "title": "GraphForge: Similar"
+      },
+      {
+        "command": "graphforge.similarAdvanced",
+        "title": "GraphForge: Similar (Advanced)…"
+      },
+      {
+        "command": "graphforge.find",
+        "title": "GraphForge: Find"
+      },
+      {
+        "command": "graphforge.indexText",
+        "title": "GraphForge: Index Text…"
+      },
+      {
+        "command": "graphforge.indexVector",
+        "title": "GraphForge: Index Vector…"
+      },
+      {
+        "command": "graphforge.inspectTextIndex",
+        "title": "GraphForge: Inspect Text Index…"
+      },
+      {
+        "command": "graphforge.indexAdjacency",
+        "title": "GraphForge: Index Adjacency"
+      },
+      {
+        "command": "graphforge.inspectAdjacency",
+        "title": "GraphForge: Inspect Adjacency Index"
+      },
+      {
+        "command": "graphforge.rebuildAdjacency",
+        "title": "GraphForge: Rebuild Adjacency Index"
+      },
+      {
+        "command": "graphforge.createCheckpoint",
+        "title": "GraphForge: Create Checkpoint…"
+      },
+      {
+        "command": "graphforge.listCheckpoints",
+        "title": "GraphForge: List Checkpoints"
+      },
+      {
+        "command": "graphforge.openCheckpoint",
+        "title": "GraphForge: Open Checkpoint…"
+      },
+      {
+        "command": "graphforge.diffCheckpoints",
+        "title": "GraphForge: Diff Checkpoints…"
+      },
+      {
+        "command": "graphforge.deleteCheckpoint",
+        "title": "GraphForge: Delete Checkpoint…"
+      },
+      {
+        "command": "graphforge.revertToCheckpoint",
+        "title": "GraphForge: Revert to Checkpoint…"
+      },
+      {
+        "command": "graphforge.embeddingSpaces",
+        "title": "GraphForge: Embedding Spaces"
+      },
+      {
+        "command": "graphforge.publishCallerEmbeddings",
+        "title": "GraphForge: Publish Caller Embeddings…"
+      },
+      {
+        "command": "graphforge.bindEmbeddingSpaceAlias",
+        "title": "GraphForge: Bind Embedding Space Alias…"
+      },
+      {
+        "command": "graphforge.setDefaultEmbeddingSpace",
+        "title": "GraphForge: Set Default Embedding Space…"
+      },
+      {
+        "command": "graphforge.deleteEmbeddingSpace",
+        "title": "GraphForge: Delete Embedding Space…"
+      },
+      {
+        "command": "graphforge.inspectEmbeddingSpaceFreshness",
+        "title": "GraphForge: Inspect Embedding Space Freshness…"
+      },
+      {
+        "command": "graphforge.enableCapability",
+        "title": "GraphForge: Enable Capability…"
+      },
+      {
+        "command": "graphforge.openWithWriteMode",
+        "title": "GraphForge: Open with Write Mode…"
+      },
+      {
+        "command": "graphforge.exportInvocationDescriptor",
+        "title": "GraphForge: Export Invocation Descriptor…"
+      },
+      {
+        "command": "graphforge.listAlgorithmRuns",
+        "title": "GraphForge: List Algorithm Runs"
+      },
+      {
+        "command": "graphforge.publishCompositeTransaction",
+        "title": "GraphForge: Publish Composite Transaction… (Advanced)"
+      },
+      {
+        "command": "graphforge.showOntology",
+        "title": "GraphForge: Show Ontology Viewer"
+      },
+      {
+        "command": "graphforge.showResultGraph",
+        "title": "GraphForge: Show Result Graph"
+      },
+      {
+        "command": "graphforge.showResultGraphAdvanced",
+        "title": "GraphForge: Result Graph (Advanced)…"
+      },
+      {
+        "command": "graphforge.showCapabilities",
+        "title": "GraphForge: Show Project Capabilities"
+      },
+      {
+        "command": "graphforge.loadOntology",
+        "title": "GraphForge: Load Ontology…",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "graphforge.openOntologyFile",
+        "title": "GraphForge: Open ontology.json"
+      },
+      {
+        "command": "graphforge.explainOntologyMode",
+        "title": "GraphForge: Explain Ontology Mode"
+      },
+      {
+        "command": "graphforge.listAssertions",
+        "title": "GraphForge: List Assertions"
+      },
+      {
+        "command": "graphforge.createAssertion",
+        "title": "GraphForge: Create Assertion…",
+        "icon": "$(add)"
+      },
+      {
+        "command": "graphforge.showAssertion",
+        "title": "GraphForge: Show Assertion…"
+      },
+      {
+        "command": "graphforge.showAssertionOnGraph",
+        "title": "GraphForge: Show Assertion on Graph…"
+      },
+      {
+        "command": "graphforge.attachEvidence",
+        "title": "GraphForge: Attach Evidence… (Advanced)"
+      },
+      {
+        "command": "graphforge.assessConfidence",
+        "title": "GraphForge: Assess Confidence… (Advanced)"
+      },
+      {
+        "command": "graphforge.recordAssertionStatus",
+        "title": "GraphForge: Record Assertion Status… (Advanced)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "graphforge.runQuery",
+          "when": "resourceLangId == cypher",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "graphforge.refreshExplorer",
+          "when": "view == graphforge.projects",
+          "group": "navigation"
+        },
+        {
+          "command": "graphforge.openProject",
+          "when": "view == graphforge.projects",
+          "group": "navigation"
+        },
+        {
+          "command": "graphforge.showOntology",
+          "when": "view == graphforge.ontology",
+          "group": "navigation"
+        },
+        {
+          "command": "graphforge.loadOntology",
+          "when": "view == graphforge.ontology",
+          "group": "navigation"
+        },
+        {
+          "command": "graphforge.createAssertion",
+          "when": "view == graphforge.knowledge",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "graphforge",
+          "title": "GraphForge",
+          "icon": "media/graphforge.svg"
+        }
+      ]
+    },
+    "views": {
+      "graphforge": [
+        {
+          "id": "graphforge.projects",
+          "name": "Projects"
+        },
+        {
+          "id": "graphforge.ontology",
+          "name": "Ontology"
+        },
+        {
+          "id": "graphforge.knowledge",
+          "name": "Knowledge"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "GraphForge",
+      "properties": {
+        "graphforge.nativeModulePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to a built @graphforge/node package (directory containing index.js). Leave empty to resolve from node_modules or sibling monorepo."
+        },
+        "graphforge.openResultGraphOnQuery": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the Result Graph webview after a successful Cypher query or analyst verb."
+        },
+        "graphforge.runtime": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "node",
+            "python"
+          ],
+          "enumDescriptions": [
+            "Prefer @graphforge/node, except in a Python-first workspace (pyproject.toml/uv.lock/etc., no package.json) where Python is preferred when usable; falls back to whichever runtime is available.",
+            "Require @graphforge/node. Never falls back to Python, even if detected.",
+            "Require the Python graphforge bridge. Never falls back to Node, even if available."
+          ],
+          "default": "auto",
+          "description": "Which engine runtime backs Cypher/verb calls. Node is the global default within \"auto\", except a Python-first workspace prefers Python even when @graphforge/node is available."
+        },
+        "graphforge.pythonInterpreterPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to a Python interpreter with `graphforge` installed. Leave empty to auto-detect (VS Code Python extension selection, workspace .venv/venv/env, then python3/python on PATH)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "check": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vscode-test",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "apache-arrow": "^18.0.0"
+  },
+  "peerDependencies": {
+    "@graphforge/node": ">=0.5.0-dev.0"
+  },
+  "peerDependenciesMeta": {
+    "@graphforge/node": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.13.10",
+    "@types/vscode": "^1.96.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.3.2",
+    "esbuild": "^0.25.1",
+    "mocha": "^11.1.0",
+    "typescript": "^5.8.2"
+  }
+}
