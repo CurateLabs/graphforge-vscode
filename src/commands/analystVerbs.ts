@@ -80,7 +80,7 @@ async function runVerb(
   const lastKey = `graphforge.lastUsed.${verb}`;
   const last = context.workspaceState.get<LastUsed>(lastKey, {});
 
-  const labels = session.labels();
+  const labels = await session.labels();
   let label: string | undefined;
   if (verb !== "find" && verb !== "paths") {
     const defaultLabel =
@@ -198,7 +198,7 @@ async function runVerb(
   }
 
   try {
-    const result = session.invokeVerb(verb, {
+    const result = await session.invokeVerb(verb, {
       label,
       by,
       via,

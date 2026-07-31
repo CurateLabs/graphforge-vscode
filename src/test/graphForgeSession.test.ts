@@ -1,8 +1,10 @@
 import * as assert from "node:assert/strict";
 import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { GraphForgeSession } from "../session/graphForgeSession";
+import { NodeEngineBackend } from "../session/nodeEngineBackend";
 import type {
   AlgorithmDescriptorContract,
+  EngineBackend,
   GraphForgeNative,
   QueryResult,
 } from "../session/types";
@@ -26,9 +28,14 @@ function makeStubForge(overrides: Partial<GraphForgeNative> = {}): GraphForgeNat
   };
 }
 
-/** Reach past private fields for test injection — session has no test-only constructor. */
+/**
+ * Reach past private fields for test injection — session has no test-only
+ * constructor. Wraps the stub `GraphForgeNative` in a `NodeEngineBackend`
+ * since the session now talks to the runtime-agnostic `EngineBackend` facade
+ * (#12) rather than a raw native handle.
+ */
 function injectForge(session: GraphForgeSession, forge: GraphForgeNative): void {
-  (session as unknown as { forge: GraphForgeNative }).forge = forge;
+  (session as unknown as { backend: EngineBackend }).backend = new NodeEngineBackend(forge);
 }
 
 function injectCapabilities(session: GraphForgeSession, capabilities: string[]): void {

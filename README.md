@@ -25,11 +25,24 @@ npm run compile
 
 Press **F5** (`Run Extension`) to open an Extension Development Host.
 
-### Native binding (`@graphforge/node`)
+### Runtimes: Node (default) and Python (alternative)
 
-The extension calls the GraphForge Node addon for Cypher and analyst verbs. The package is an **optional peer dependency**.
+The extension can run Cypher and analyst verbs through either engine binding:
 
-Link a local build from the engine monorepo:
+- **Node (`@graphforge/node`)** — the default. Fast, in-process, no subprocess.
+- **Python (`graphforge` on PyPI)** — a first-class alternative for analysts already living in
+  a Python/notebook workflow, or when a native Node binding isn't available for your platform.
+
+Which one is used is controlled by `graphforge.runtime` (`auto` | `node` | `python`, default
+`auto`). In `auto`, Node is always preferred; Python is only used when Node is unavailable and a
+Python interpreter with `graphforge` importable was detected.
+
+Run **`GraphForge: Check Environment`** any time to see both runtimes' status, which one is
+active, and the single next step to fix whichever is missing.
+
+#### Node binding (`@graphforge/node`)
+
+The package is an **optional peer dependency**. Link a local build from the engine monorepo:
 
 ```bash
 # in graphforge/
@@ -40,9 +53,36 @@ cd crates/gf-bindings-node && npm run build
 npm install ../graphforge/crates/gf-bindings-node
 ```
 
-Or set `graphforge.nativeModulePath` to the absolute path of a built `@graphforge/node` package directory.
+Or run **`GraphForge: Setup Native Binding`**, or set `graphforge.nativeModulePath` to the
+absolute path of a built `@graphforge/node` package directory.
 
-Without the binding, commands and trees still register; open/query paths fail closed with a status-bar message.
+#### Python binding (`graphforge`)
+
+Run **`GraphForge: Setup Python Binding`** — a single QuickPick with up to three choices:
+
+1. **Use detected interpreter** — the extension looks for, in order: an explicit
+   `graphforge.pythonInterpreterPath`, the interpreter currently selected in the
+   [Python extension](https://marketplace.visualstudio.com/items?itemName=ms-python.python),
+   a workspace `.venv`/`venv`/`env` folder, then `python3`/`python` on `PATH`.
+2. **Select interpreter…** — browse for a specific `python`/`python3` executable; this sets
+   `graphforge.pythonInterpreterPath`.
+3. **pip install graphforge** — runs `<interpreter> -m pip install graphforge` in a terminal,
+   only after you explicitly confirm (this makes a network request).
+
+Under the hood, a small bundled script (`python/graphforge_host.py`) is spawned once per open
+project as a long-lived subprocess and speaks newline-delimited JSON over stdin/stdout — every
+request is a thin marshal straight to a `graphforge.GraphForge` method call (no engine semantics
+are reimplemented in the extension), and table results come back as Arrow IPC, decoded by the
+same `apache-arrow` path used for the Node binding. See
+[`docs/engineering/ARCHITECTURE.md`](docs/engineering/ARCHITECTURE.md) for the full protocol.
+
+Requires the [`pyarrow`](https://pypi.org/project/pyarrow/) package alongside `graphforge` in
+the selected interpreter (installed automatically as a `graphforge` dependency in most setups).
+
+#### Neither runtime available?
+
+Commands and trees still register; open/query paths fail closed with a status-bar message and an
+error toast that offers both **Setup Native Binding** and **Setup Python Binding**.
 
 Prefer the guided path: run **GraphForge: Setup Native Binding** from the palette. It offers up to three choices in one QuickPick — link a detected sibling engine build, browse to a built `@graphforge/node` folder (sets `graphforge.nativeModulePath`), or run `npm install @graphforge/node` in a terminal once it's published. Setup takes effect immediately; no window reload needed.
 
@@ -84,12 +124,17 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 - `GraphForge: Open ontology.json` / `Explain Ontology Mode`
 - `GraphForge: List Assertions` / `Create Assertion…` / `Show Assertion…` / `Show Assertion on Graph…`
 - `GraphForge: Attach Evidence…` / `Assess Confidence…` / `Record Assertion Status…` (Advanced)
+- `GraphForge: Setup Python Binding` — alternative to `Setup Native Binding` when running on the Python `graphforge` runtime (#12)
 
 ## Knowledge ledger notes
 
 - Identity UUIDs for assertions/evidence/confidence/status events must be UUIDv7 (engine-enforced); the extension mints them client-side (`src/session/uuid.ts`). Operation/idempotency UUIDs accept any version.
 - Every knowledge-ledger native method (`listAssertions`, `createAssertion`, …) is optional on the `@graphforge/node` binding and feature-detected at call time — the sibling engine API is still moving and may change sync/async return shape or method names.
 - `Record Assertion Status…` requires an existing `provenanceUuid`; until there's a provenance picker, paste one in directly.
+
+## Runtimes: Node vs Python (#12)
+
+`graphforge.runtime` (default `auto`) selects which engine backs Cypher/verb calls. `auto` always prefers `@graphforge/node` and only falls back to the Python `graphforge` bridge when Node is unavailable; `node`/`python` pin to one runtime and fail closed (with setup guidance for that path) rather than silently falling back. The Python bridge currently backs `execute` and the analyst verbs; Node-only surfaces (checkpoints, embedding spaces, indexing, invocation descriptors, composite transactions, and the full knowledge-ledger write API) require the Node runtime for now. Run **GraphForge: Check Environment** to see both runtimes' status and the active one, or **GraphForge: Setup Python Binding** to configure the interpreter.
 
 ## License
 

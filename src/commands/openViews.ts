@@ -61,7 +61,7 @@ export function registerOpenViews(
         // still show empty viewer
       }
       OntologyPanel.show(context.extensionUri, {
-        mode: session.ontologyMode(),
+        mode: await session.ontologyMode(),
         ontology: session.workspaceOntology(),
         projectName: session.project?.name,
       });
@@ -129,12 +129,14 @@ export function registerOpenViews(
       }
 
       const caps = session.capabilities();
+      const runtime = session.activeRuntime ?? "none";
       const lines = [
         `Project: ${session.project?.rootPath}`,
         `Generation: ${caps.generationUuid ?? "(none)"}`,
-        `Ontology mode: ${session.ontologyMode()}`,
+        `Ontology mode: ${await session.ontologyMode()}`,
         `Write mode: ${session.writeMode}`,
-        `Binding: ${session.bindingAvailable ? "ok" : session.bindingError}`,
+        `Runtime: ${runtime}`,
+        `Node binding: ${session.bindingAvailable ? "ok" : session.bindingError}`,
         "",
         "Manifest capabilities / participants:",
         ...(caps.capabilities.length
@@ -178,10 +180,10 @@ export function registerOpenViews(
         return;
       }
       try {
-        session.loadOntology(file);
+        await session.loadOntology(file);
         refreshTrees();
         OntologyPanel.show(context.extensionUri, {
-          mode: session.ontologyMode(),
+          mode: await session.ontologyMode(),
           ontology: session.workspaceOntology(),
           projectName: session.project?.name,
         });
@@ -229,7 +231,7 @@ export function registerOpenViews(
     }),
 
     vscode.commands.registerCommand("graphforge.explainOntologyMode", async () => {
-      const mode = session.ontologyMode();
+      const mode = await session.ontologyMode();
       const doc = await vscode.workspace.openTextDocument({
         content: [
           `# GraphForge Ontology Modes`,

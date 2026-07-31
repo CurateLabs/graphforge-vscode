@@ -18,6 +18,7 @@ suite("GraphForge extension", () => {
       "graphforge.openProject",
       "graphforge.checkEnvironment",
       "graphforge.setupNativeBinding",
+      "graphforge.setupPythonBinding",
       "graphforge.initializeProjectHere",
       "graphforge.loadOntology",
       "graphforge.openOntologyFile",

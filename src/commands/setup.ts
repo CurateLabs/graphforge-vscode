@@ -11,9 +11,11 @@ import { classifyInitTarget } from "../session/projectDetector";
 import { engineErrorCode, errorMessage } from "./shared";
 
 /**
- * Registers Setup UX commands (#2): `Check Environment`, `Setup Native
- * Binding`, and `Initialize Project Here`. Each is a single palette command
- * with at most one QuickPick — no cascading menus.
+ * Registers Setup UX commands (#2, extended by #12 for Python): `Check
+ * Environment`, `Setup Native Binding`, and `Initialize Project Here`. Each
+ * is a single palette command with at most one QuickPick — no cascading
+ * menus. `Setup Python Binding` is registered separately (`setupPython.ts`)
+ * but shares this module's environment report.
  */
 export function registerSetup(
   context: vscode.ExtensionContext,
@@ -22,7 +24,7 @@ export function registerSetup(
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("graphforge.checkEnvironment", async () => {
-      const report = buildEnvironmentReport(session);
+      const report = await buildEnvironmentReport(session);
       void vscode.window.showInformationMessage(formatSummaryLines(report).join("\n"));
 
       const doc = await vscode.workspace.openTextDocument({
@@ -42,22 +44,32 @@ export function registerSetup(
   );
 }
 
-export function buildEnvironmentReport(session: GraphForgeSession): EnvironmentReport {
-  const bindingAvailable = session.bindingAvailable;
+/**
+ * Agent- and human-facing dual-runtime status (#12): Node binding, Python
+ * interpreter + `graphforge` import, active runtime, and a single next step.
+ */
+export async function buildEnvironmentReport(session: GraphForgeSession): Promise<EnvironmentReport> {
+  const snapshot = await session.environmentSnapshot();
   const project = session.project;
   const projectOpen = Boolean(project);
+  const active = snapshot.active ?? "none";
   return {
-    binding: {
-      available: bindingAvailable,
-      error: bindingAvailable ? undefined : session.bindingError,
+    runtime: {
+      preference: snapshot.preference,
+      active,
     },
+    nodeBinding: {
+      available: snapshot.node.available,
+      error: snapshot.node.error,
+    },
+    python: snapshot.python,
     project: {
       open: projectOpen,
       path: project?.rootPath,
       name: project?.name,
-      ontologyMode: projectOpen ? session.ontologyMode() : undefined,
+      ontologyMode: projectOpen ? await session.ontologyMode() : undefined,
     },
-    nextAction: computeNextAction(bindingAvailable, projectOpen),
+    nextAction: computeNextAction(snapshot.node.available, snapshot.python.available, projectOpen, active),
     timestamp: new Date().toISOString(),
   };
 }
@@ -153,13 +165,16 @@ async function runInitializeProjectHere(
   session: GraphForgeSession,
   refreshTrees: () => void,
 ): Promise<void> {
-  if (!session.bindingAvailable) {
+  if (!(await session.hasUsableRuntime())) {
     const action = await vscode.window.showErrorMessage(
-      `GraphForge native binding unavailable: ${session.bindingError}`,
+      "GraphForge: no usable runtime (Node binding and Python graphforge both unavailable).",
       "Setup Native Binding",
+      "Setup Python Binding",
     );
-    if (action) {
+    if (action === "Setup Native Binding") {
       await vscode.commands.executeCommand("graphforge.setupNativeBinding");
+    } else if (action === "Setup Python Binding") {
+      await vscode.commands.executeCommand("graphforge.setupPythonBinding");
     }
     return;
   }

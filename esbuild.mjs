@@ -1,5 +1,5 @@
 import * as esbuild from "esbuild";
-import { readdirSync } from "node:fs";
+import { cpSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const watch = process.argv.includes("--watch");
@@ -45,5 +45,12 @@ if (watch) {
   await esbuild.build(extensionOptions);
   if (testFiles.length) {
     await esbuild.build(testOptions);
+    // Non-.test.ts assets (e.g. fake subprocess hosts used by pythonBridge
+    // tests) aren't followed by esbuild's bundler; copy them alongside the
+    // compiled test bundles so `__dirname`-relative lookups still resolve.
+    const fixturesDir = join("src", "test", "fixtures");
+    if (existsSync(fixturesDir)) {
+      cpSync(fixturesDir, join("dist", "test", "fixtures"), { recursive: true });
+    }
   }
 }

@@ -21,15 +21,21 @@ context, and view epistemic-aware result graphs.
 | FR-11 | The Knowledge view shall render list/empty/inspect states: no project, capability unavailable, empty ledger, and a populated assertion list with a **Show Assertion** action per item. | PRODUCT — Knowledge (#6) | Given each state, When the view refreshes, Then it shows a matching, actionable node (not a blank tree). |
 | FR-12 | The Ontology view and viewer shall render a helpful empty state in exploratory mode (not an error) with an obvious **Load Ontology…** action, and refresh both immediately after a load. | PRODUCT — Ontology (#7) | Given exploratory mode with no ontology loaded, When the view/viewer render, Then they explain the mode and offer Load Ontology…; after loading, both refresh to the new ontology. |
 | FR-13 | The Ontology viewer shall expose an **Advanced** section to open the raw `ontology.json` and explain the current progressive mode (exploratory/advisory/strict). | PRODUCT — Ontology (#7) | Given the viewer is open, When Advanced → Open ontology.json / Explain Ontology Mode runs, Then the file or an explanation document opens. |
+| FR-14 | The system shall support a Python `graphforge` runtime as a first-class alternative to `@graphforge/node`, selected via `graphforge.runtime` (default `auto`, which always prefers Node). | Issue #12 | Given `graphforge.runtime` is `python` or `auto` with Node unavailable, When a project is opened, Then Cypher execute and at least one analyst verb (rank) run through the Python bridge with the same result shape as the Node path. |
+| FR-15 | The system shall provide `GraphForge: Check Environment` reporting both Node-binding and Python-interpreter/`graphforge`-import status, which runtime is active, and one next action. | Issue #12 (extends #2) | Given the command runs, When the report is shown, Then it is agent-copyable JSON plus a 3-line human summary covering runtime, project, and next step. |
+| FR-16 | The system shall provide `GraphForge: Setup Python Binding` as a single QuickPick (≤3 choices: use detected interpreter, select interpreter, `pip install graphforge` with explicit consent). | Issue #12 (UX doctrine from #1: palette-first, no cascading menus) | Given the command runs, When a choice is made, Then `graphforge.pythonInterpreterPath` is set and/or a `pip install` runs only after an explicit confirmation dialog. |
+| FR-17 | The system shall detect Python interpreters in priority order: explicit config, VS Code Python extension selection, workspace venv (`.venv`/`venv`/`env`/`.conda`), then PATH. | Issue #12 | Given multiple candidates exist, When resolving, Then the first one with an importable `graphforge` wins. |
 
 ## Non-functional requirements
 
 | ID | Quality attribute | Target / constraint | Why it matters |
 |---|---|---|---|
 | NFR-1 | Compatibility | VS Code `^1.96`, Node `>=20` | Aligns with engine Node bindings. |
-| NFR-2 | Correctness boundary | No reimplementation of Cypher/verb/epistemic semantics in the extension | Engine is source of truth. |
+| NFR-2 | Correctness boundary | No reimplementation of Cypher/verb/epistemic semantics in the extension (Node **or** Python path) | Engine is source of truth. |
 | NFR-3 | Portability | Native addon resolved via optional peer, config path, or sibling monorepo | Dev and CI can work without published npm binary. |
 | NFR-4 | License | Apache-2.0, publisher CurateLabs | Matches GraphForge engine. |
+| NFR-5 | Default runtime | `@graphforge/node` remains the default; Python is opt-in/fallback only, never silently preferred over an available Node binding | Issue #12 constraint from product. |
+| NFR-6 | Fail-closed dual runtime | When neither runtime is usable, error messages and recovery actions must cover both setup paths | Issue #12 — no dead-end failures. |
 
 ## Behavior trace
 
@@ -50,8 +56,10 @@ context, and view epistemic-aware result graphs.
 
 ## Dependencies
 
-- `@graphforge/node` — native engine facade
-- `apache-arrow` — IPC table decode
+- `@graphforge/node` — native engine facade (default runtime)
+- `graphforge` (PyPI) + `pyarrow` — Python engine facade (alternative runtime, #12); resolved in
+  a user-selected interpreter, never bundled with the extension
+- `apache-arrow` — IPC table decode (shared by both runtimes)
 - GraphForge engine project format and ontology participant layout
 
 ## Open questions

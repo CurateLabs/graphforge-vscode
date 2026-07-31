@@ -195,7 +195,7 @@ async function runExportInvocationDescriptor(
     return;
   }
   const descriptorVerb = verb as Exclude<AnalystVerb, "find" | "paths">;
-  const labels = session.labels();
+  const labels = await session.labels();
   const label = await vscode.window.showQuickPick(
     labels.length ? labels : ["Person"],
     { title: "GraphForge: Export Invocation Descriptor — Label" },

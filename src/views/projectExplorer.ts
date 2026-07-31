@@ -89,12 +89,12 @@ export class ProjectExplorerProvider
 
   async getChildren(element?: TreeNode): Promise<TreeNode[]> {
     if (!element) {
-      if (!this.session.bindingAvailable) {
+      if (!(await this.session.hasUsableRuntime())) {
         return [
           {
             kind: "message",
-            label: "Native binding unavailable",
-            description: "See README to link @graphforge/node",
+            label: "No runtime available",
+            description: "Setup Native Binding or Setup Python Binding",
           },
         ];
       }
@@ -143,7 +143,7 @@ export class ProjectExplorerProvider
         return [{ kind: "message", label: uuid }];
       }
       const active = this.session.project?.rootPath === element.project.rootPath;
-      if (!active || !this.session.bindingAvailable) {
+      if (!active) {
         return [
           {
             kind: "message",
@@ -152,11 +152,11 @@ export class ProjectExplorerProvider
         ];
       }
       if (element.section === "labels") {
-        return this.session.labels().map((label) => ({ kind: "label" as const, label }));
+        const labels = await this.session.labels();
+        return labels.map((label) => ({ kind: "label" as const, label }));
       }
-      return this.session
-        .relationshipTypes()
-        .map((label) => ({ kind: "rel" as const, label }));
+      const relationshipTypes = await this.session.relationshipTypes();
+      return relationshipTypes.map((label) => ({ kind: "rel" as const, label }));
     }
 
     return [];

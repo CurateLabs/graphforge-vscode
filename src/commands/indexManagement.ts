@@ -59,7 +59,7 @@ async function pickLabel(
   if (preset) {
     return preset;
   }
-  const labels = session.labels();
+  const labels = await session.labels();
   const picked = await vscode.window.showQuickPick(
     labels.length ? labels : ["Person"],
     { title: "GraphForge: Label", placeHolder: labels[0] ?? "Person" },

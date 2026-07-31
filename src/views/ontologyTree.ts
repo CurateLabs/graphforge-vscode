@@ -63,7 +63,7 @@ export class OntologyTreeProvider
     return item;
   }
 
-  getChildren(element?: Node): Node[] {
+  async getChildren(element?: Node): Promise<Node[]> {
     if (element?.kind === "group") {
       return element.children;
     }
@@ -87,7 +87,7 @@ export class OntologyTreeProvider
       ];
     }
 
-    const mode = this.session.ontologyMode();
+    const mode = await this.session.ontologyMode();
     const ws = readWorkspaceOntology(
       project.rootPath,
       project.current?.generation_uuid,

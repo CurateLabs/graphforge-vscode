@@ -42,7 +42,7 @@ async function runFind(
     return;
   }
 
-  const labels = session.labels();
+  const labels = await session.labels();
   const labelPick = await vscode.window.showQuickPick(["(any)", ...labels], {
     title: "GraphForge: Find — Label (optional)",
     placeHolder: "(any)",
@@ -54,7 +54,7 @@ async function runFind(
 
   let result: QueryResult;
   try {
-    result = session.invokeVerb("find", { query, label, k: 10 });
+    result = await session.invokeVerb("find", { query, label, k: 10 });
   } catch (err) {
     await handleFindError(err, label);
     return;

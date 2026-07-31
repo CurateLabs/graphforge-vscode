@@ -1,12 +1,21 @@
 import * as vscode from "vscode";
 import { decodeTable, resolveIpcBuffer, stringField } from "./arrowCodec";
-import { getNativeLoadError, loadGraphForgeModule } from "./nativeLoader";
+import { NodeEngineBackend } from "./nodeEngineBackend";
 import {
   discoverProjects,
   isGraphForgeProject,
   readManifestCapabilities,
   readWorkspaceOntology,
 } from "./projectDetector";
+import {
+  chooseRuntime,
+  describeRuntimeUnavailable,
+  nodeBindingStatus,
+  type NodeBindingStatus,
+  openEngineBackend,
+  pythonRuntimeStatus,
+  runtimePreference,
+} from "./runtime";
 import { randomOperationId, uuidv7 } from "./uuid";
 import {
   AlgorithmDescriptorContract,
@@ -20,6 +29,7 @@ import {
   CreateAssertionInput,
   DEFAULT_BELIEF_POLICY,
   DetectedProject,
+  EngineBackend,
   EpistemicStatus,
   FALLBACK_BY,
   GraphEdge,
@@ -33,8 +43,11 @@ import {
   ListAssertionStatusInput,
   OntologyDoc,
   ProjectCapabilities,
+  PythonRuntimeStatus,
   QueryResult,
   RecordAssertionStatusInput,
+  RuntimeKind,
+  RuntimePreference,
   TableRow,
   WriteMode,
 } from "./types";
@@ -44,6 +57,14 @@ export interface AlgorithmCatalog {
   items: string[];
   source: "contracts" | "fallback";
   note?: string;
+}
+
+export interface RuntimeEnvironmentSnapshot {
+  preference: RuntimePreference;
+  node: NodeBindingStatus;
+  python: PythonRuntimeStatus;
+  /** Runtime actually backing the open session, if any. */
+  active: RuntimeKind | undefined;
 }
 
 const ALL_EPISTEMIC_STATUSES: EpistemicStatus[] = [
@@ -71,8 +92,25 @@ export class UnsupportedByBindingError extends Error {
   }
 }
 
+/**
+ * Raised when an advanced Node-only surface (checkpoints, embedding spaces,
+ * indexing, invocation descriptors, composite transactions, knowledge-ledger
+ * writes) is invoked while the active session is backed by the Python
+ * runtime (#12). These surfaces are deliberately out of scope for the
+ * runtime-agnostic {@link EngineBackend} facade.
+ */
+export class NodeOnlyFeatureError extends Error {
+  constructor(methodName: string) {
+    super(
+      `\`${methodName}\` requires the Node runtime (@graphforge/node). ` +
+        'Switch `graphforge.runtime` to "node" (or "auto" with a Node binding available) to use this feature.',
+    );
+    this.name = "NodeOnlyFeatureError";
+  }
+}
+
 export class GraphForgeSession implements vscode.Disposable {
-  private forge: GraphForgeNative | undefined;
+  private backend: EngineBackend | undefined;
   private activeProject: DetectedProject | undefined;
   private activeWriteMode: WriteMode = "single_writer";
   private algorithmContractsCache: AlgorithmDescriptorContract[] | undefined;
@@ -96,20 +134,43 @@ export class GraphForgeSession implements vscode.Disposable {
   dispose(): void {
     this._onDidChange.dispose();
     this.statusBar.dispose();
-    this.forge = undefined;
+    void this.backend?.dispose();
+    this.backend = undefined;
   }
 
   get project(): DetectedProject | undefined {
     return this.activeProject;
   }
 
+  /** Runtime actually backing the open session, if any (#12). */
+  get activeRuntime(): RuntimeKind | undefined {
+    return this.backend?.runtime;
+  }
+
+  /**
+   * Legacy Node-specific status (issue #2 Setup Native Binding surface).
+   * Prefer {@link environmentSnapshot} for runtime-agnostic reporting (#12).
+   */
   get bindingAvailable(): boolean {
-    return loadGraphForgeModule() !== null;
+    return nodeBindingStatus().available;
   }
 
   get bindingError(): string | undefined {
-    loadGraphForgeModule();
-    return getNativeLoadError();
+    return nodeBindingStatus().error;
+  }
+
+  /** True when the configured `graphforge.runtime` preference can resolve to a usable backend. */
+  async hasUsableRuntime(): Promise<boolean> {
+    const snapshot = await this.environmentSnapshot();
+    return chooseRuntime(snapshot.preference, snapshot.node, snapshot.python) !== undefined;
+  }
+
+  /** Full Node + Python runtime status for Check Environment (#12) and status bar. */
+  async environmentSnapshot(): Promise<RuntimeEnvironmentSnapshot> {
+    const preference = runtimePreference();
+    const node = nodeBindingStatus();
+    const python = await pythonRuntimeStatus();
+    return { preference, node, python, active: this.backend?.runtime };
   }
 
   async listProjects(): Promise<DetectedProject[]> {
@@ -122,7 +183,7 @@ export class GraphForgeSession implements vscode.Disposable {
         `Not a GraphForge project (missing or invalid FORMAT): ${rootPath}`,
       );
     }
-    await this.attachForge(rootPath);
+    await this.attachBackend(rootPath);
   }
 
   /**
@@ -134,42 +195,50 @@ export class GraphForgeSession implements vscode.Disposable {
    * marker, since initializing one is the point.
    */
   async initializeProject(rootPath: string): Promise<DetectedProject> {
-    await this.attachForge(rootPath);
+    await this.attachBackend(rootPath);
     return this.activeProject!;
   }
 
-  /** Reopen the active project under a different write coordination policy (#11 / ADR 0015). */
+  /**
+   * Reopen the active project under a different write coordination policy
+   * (#11 / ADR 0015). Node-only concept — reopening under the Python runtime
+   * always resolves to `single_writer` since the bridge has no equivalent
+   * write-coordination surface yet.
+   */
   async reopenWithWriteMode(writeMode: WriteMode): Promise<void> {
     const project = this.activeProject ?? (await this.ensureProject());
-    await this.attachForge(project.rootPath, writeMode);
+    await this.attachBackend(project.rootPath, writeMode);
   }
 
-  /** Write coordination policy the active session was opened with (default `single_writer`). */
+  /** Write coordination policy the active session was opened with (default `single_writer`; Node-only, #11 / ADR 0015). */
   get writeMode(): WriteMode {
     return this.activeWriteMode;
   }
 
-  private async attachForge(
+  private async attachBackend(
     rootPath: string,
     writeMode: WriteMode = "single_writer",
   ): Promise<void> {
-    const mod = loadGraphForgeModule();
-    if (!mod) {
-      this.refreshStatus();
-      throw new Error(getNativeLoadError() ?? "Native binding unavailable");
-    }
-
+    let backend: EngineBackend;
     try {
-      this.forge = new mod.GraphForge(rootPath, { writeMode });
+      backend = await openEngineBackend(rootPath, writeMode);
     } catch (err) {
-      // In-memory fallback attempt is not appropriate for project open; surface error.
-      this.forge = undefined;
+      this.refreshStatus();
       throw err instanceof Error ? err : new Error(String(err));
     }
+
+    const previous = this.backend;
+    this.backend = backend;
+    if (previous) {
+      void previous.dispose();
+    }
+
     this.algorithmContractsCache = undefined;
     this.lastResult = undefined;
     this.lastResultTitle = undefined;
-    this.activeWriteMode = writeMode;
+    // Write-mode coordination is Node-only; a Python-backed session always
+    // reports the (only meaningful) single-writer default.
+    this.activeWriteMode = backend.runtime === "node" ? writeMode : "single_writer";
 
     const projects = await discoverProjects();
     this.activeProject =
@@ -183,7 +252,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   async ensureProject(): Promise<DetectedProject> {
-    if (this.activeProject && this.forge) {
+    if (this.activeProject && this.backend) {
       return this.activeProject;
     }
     const projects = await this.listProjects();
@@ -196,20 +265,33 @@ export class GraphForgeSession implements vscode.Disposable {
     return this.activeProject!;
   }
 
-  private requireForge(): GraphForgeNative {
-    if (!this.forge) {
+  private requireBackend(): EngineBackend {
+    if (!this.backend) {
       throw new Error("No GraphForge session open. Run GraphForge: Open Project.");
     }
-    return this.forge;
+    return this.backend;
   }
 
-  execute(cypher: string, params?: Record<string, unknown>): QueryResult {
-    const forge = this.requireForge();
-    const buf = params ? forge.execute(cypher, params) : forge.execute(cypher);
+  /**
+   * Escape hatch to the full `@graphforge/node` surface for advanced
+   * Node-only features. Throws {@link NodeOnlyFeatureError} when the active
+   * backend is not Node (e.g. the Python runtime is active, #12).
+   */
+  private requireNodeForge(methodName: string): GraphForgeNative {
+    const backend = this.requireBackend();
+    if (!(backend instanceof NodeEngineBackend)) {
+      throw new NodeOnlyFeatureError(methodName);
+    }
+    return backend.native;
+  }
+
+  async execute(cypher: string, params?: Record<string, unknown>): Promise<QueryResult> {
+    const backend = this.requireBackend();
+    const buf = await backend.execute(cypher, params);
     return decodeTable(buf);
   }
 
-  invokeVerb(
+  async invokeVerb(
     verb: AnalystVerb,
     args: {
       label?: string;
@@ -223,12 +305,12 @@ export class GraphForgeSession implements vscode.Disposable {
       source?: string;
       target?: string;
     },
-  ): QueryResult {
-    const forge = this.requireForge();
+  ): Promise<QueryResult> {
+    const backend = this.requireBackend();
     let buf: Buffer;
     switch (verb) {
       case "rank":
-        buf = forge.rank(
+        buf = await backend.rank(
           args.label ?? "",
           args.by ?? "pagerank",
           args.via,
@@ -237,7 +319,7 @@ export class GraphForgeSession implements vscode.Disposable {
         );
         break;
       case "cluster":
-        buf = forge.cluster(
+        buf = await backend.cluster(
           args.label ?? "",
           args.by ?? "louvain",
           args.via,
@@ -247,7 +329,7 @@ export class GraphForgeSession implements vscode.Disposable {
         );
         break;
       case "paths":
-        buf = forge.paths(
+        buf = await backend.paths(
           args.source ?? null,
           args.target ?? null,
           args.by ?? "bfs",
@@ -257,10 +339,10 @@ export class GraphForgeSession implements vscode.Disposable {
         );
         break;
       case "analyze":
-        buf = forge.analyze(args.label, args.by ?? "spanning_tree", args.via, args.directed);
+        buf = await backend.analyze(args.label, args.by ?? "spanning_tree", args.via, args.directed);
         break;
       case "similar":
-        buf = forge.similar(
+        buf = await backend.similar(
           args.label ?? "",
           args.by ?? "node_similarity",
           args.k,
@@ -269,14 +351,7 @@ export class GraphForgeSession implements vscode.Disposable {
         );
         break;
       case "find":
-        buf = forge.find(
-          args.query,
-          args.label,
-          undefined,
-          undefined,
-          undefined,
-          args.k ?? 10,
-        );
+        buf = await backend.find(args.query, args.label, args.k ?? 10);
         break;
       default:
         throw new Error(`Unknown verb: ${verb}`);
@@ -288,19 +363,22 @@ export class GraphForgeSession implements vscode.Disposable {
    * Live `by=` catalog for one verb from `algorithmDescriptorContracts()`,
    * grouped and de-duplicated by verb. Falls back to the static lists in
    * `types.ts` when the binding is missing, predates the contracts method,
-   * or returns nothing for this verb — callers should show `note` in the UI.
+   * the active runtime isn't Node (#12 — Python has no descriptor-contract
+   * equivalent yet), or returns nothing for this verb — callers should show
+   * `note` in the UI.
    */
   algorithmCatalog(verb: Exclude<AnalystVerb, "find">): AlgorithmCatalog {
     const fallback: AlgorithmCatalog = { items: [...FALLBACK_BY[verb]], source: "fallback" };
-    if (!this.forge) {
+    if (!(this.backend instanceof NodeEngineBackend)) {
       return fallback;
     }
+    const forge = this.backend.native;
     try {
-      if (typeof this.forge.algorithmDescriptorContracts !== "function") {
+      if (typeof forge.algorithmDescriptorContracts !== "function") {
         return fallback;
       }
       if (!this.algorithmContractsCache) {
-        this.algorithmContractsCache = this.forge.algorithmDescriptorContracts();
+        this.algorithmContractsCache = forge.algorithmDescriptorContracts();
       }
       const items = [
         ...new Set(
@@ -329,25 +407,28 @@ export class GraphForgeSession implements vscode.Disposable {
     this.beliefPolicy = { ...this.beliefPolicy, ...policy };
   }
 
-  labels(): string[] {
+  async labels(): Promise<string[]> {
     try {
-      return this.requireForge().labels();
+      return await this.requireBackend().labels();
     } catch {
       return [];
     }
   }
 
-  relationshipTypes(): string[] {
+  async relationshipTypes(): Promise<string[]> {
     try {
-      return this.requireForge().relationshipTypes();
+      return await this.requireBackend().relationshipTypes();
     } catch {
       return [];
     }
   }
 
-  ontologyMode(): string {
+  async ontologyMode(): Promise<string> {
+    if (!this.backend) {
+      return "unknown";
+    }
     try {
-      return this.forge?.ontologyMode ?? "unknown";
+      return await this.backend.ontologyMode();
     } catch {
       return "unknown";
     }
@@ -377,17 +458,17 @@ export class GraphForgeSession implements vscode.Disposable {
     };
   }
 
-  loadOntology(filePath: string): void {
-    this.requireForge().loadOntology(filePath);
+  async loadOntology(filePath: string): Promise<void> {
+    await this.requireBackend().loadOntology(filePath);
     this._onDidChange.fire();
   }
 
   // ======================================================================
-  // Checkpoints (#9 / ADR 0014)
+  // Checkpoints (#9 / ADR 0014) — Node-only
   // ======================================================================
 
   async createCheckpoint(name: string, description?: string): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("checkpoint");
     if (typeof forge.checkpoint !== "function") {
       throw new UnsupportedByBindingError("checkpoint");
     }
@@ -402,7 +483,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   async listCheckpoints(limit?: number, after?: string): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("listCheckpoints");
     if (typeof forge.listCheckpoints !== "function") {
       throw new UnsupportedByBindingError("listCheckpoints");
     }
@@ -412,7 +493,7 @@ export class GraphForgeSession implements vscode.Disposable {
 
   /** Immutable, lease-pinned read handle over one named checkpoint. */
   openCheckpointView(name: string): CheckpointViewNative {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("openCheckpoint");
     if (typeof forge.openCheckpoint !== "function") {
       throw new UnsupportedByBindingError("openCheckpoint");
     }
@@ -420,7 +501,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   async deleteCheckpoint(name: string): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("deleteCheckpoint");
     if (typeof forge.deleteCheckpoint !== "function") {
       throw new UnsupportedByBindingError("deleteCheckpoint");
     }
@@ -439,7 +520,7 @@ export class GraphForgeSession implements vscode.Disposable {
     scope: string,
     detail: string,
   ): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("diffCheckpoints");
     if (typeof forge.diffCheckpoints !== "function") {
       throw new UnsupportedByBindingError("diffCheckpoints");
     }
@@ -449,7 +530,7 @@ export class GraphForgeSession implements vscode.Disposable {
 
   /** Restore a checkpoint as a new committed generation. Destructive — callers must hard-confirm. */
   async revertToCheckpoint(name: string, reason: string): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("revertToCheckpoint");
     if (typeof forge.revertToCheckpoint !== "function") {
       throw new UnsupportedByBindingError("revertToCheckpoint");
     }
@@ -464,12 +545,12 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   // ======================================================================
-  // Capabilities / write coordination (#11 / ADR 0015)
+  // Capabilities / write coordination (#11 / ADR 0015) — Node-only
   // ======================================================================
 
   /** Live capability manifest from the open engine (distinct from the on-disk manifest read in {@link capabilities}). */
   async liveCapabilities(): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("projectCapabilities");
     if (typeof forge.projectCapabilities !== "function") {
       throw new UnsupportedByBindingError("projectCapabilities");
     }
@@ -482,7 +563,7 @@ export class GraphForgeSession implements vscode.Disposable {
     capabilityVersion: number,
     actorUuid?: string,
   ): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("enableCapability");
     if (typeof forge.enableCapability !== "function") {
       throw new UnsupportedByBindingError("enableCapability");
     }
@@ -498,11 +579,11 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   // ======================================================================
-  // Embedding spaces (#10)
+  // Embedding spaces (#10) — Node-only
   // ======================================================================
 
   embeddingSpaces(): unknown[] {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("embeddingSpaces");
     if (typeof forge.embeddingSpaces !== "function") {
       throw new UnsupportedByBindingError("embeddingSpaces");
     }
@@ -510,7 +591,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   embeddingSpace(name?: string): unknown {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("embeddingSpace");
     if (typeof forge.embeddingSpace !== "function") {
       throw new UnsupportedByBindingError("embeddingSpace");
     }
@@ -522,7 +603,7 @@ export class GraphForgeSession implements vscode.Disposable {
     compatibilityId: string,
     replace?: boolean,
   ): unknown {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("bindEmbeddingSpaceAlias");
     if (typeof forge.bindEmbeddingSpaceAlias !== "function") {
       throw new UnsupportedByBindingError("bindEmbeddingSpaceAlias");
     }
@@ -532,7 +613,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   removeEmbeddingSpaceAlias(name: string): boolean {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("removeEmbeddingSpaceAlias");
     if (typeof forge.removeEmbeddingSpaceAlias !== "function") {
       throw new UnsupportedByBindingError("removeEmbeddingSpaceAlias");
     }
@@ -542,7 +623,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   setDefaultEmbeddingSpace(name?: string): unknown {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("setDefaultEmbeddingSpace");
     if (typeof forge.setDefaultEmbeddingSpace !== "function") {
       throw new UnsupportedByBindingError("setDefaultEmbeddingSpace");
     }
@@ -552,7 +633,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   deleteEmbeddingSpace(name?: string): boolean {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("deleteEmbeddingSpace");
     if (typeof forge.deleteEmbeddingSpace !== "function") {
       throw new UnsupportedByBindingError("deleteEmbeddingSpace");
     }
@@ -570,7 +651,7 @@ export class GraphForgeSession implements vscode.Disposable {
       replace?: boolean;
     },
   ): string {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("publishCallerEmbeddings");
     if (typeof forge.publishCallerEmbeddings !== "function") {
       throw new UnsupportedByBindingError("publishCallerEmbeddings");
     }
@@ -580,7 +661,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   inspectEmbeddingSpaceFreshness(name?: string, forceStale?: boolean): unknown {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("inspectEmbeddingSpaceFreshness");
     if (typeof forge.inspectEmbeddingSpaceFreshness !== "function") {
       throw new UnsupportedByBindingError("inspectEmbeddingSpaceFreshness");
     }
@@ -588,11 +669,11 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   // ======================================================================
-  // Find + index management (#8)
+  // Find + index management (#8) — Node-only
   // ======================================================================
 
   buildTextIndex(label: string, properties?: string[], rebuild?: boolean): unknown {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("index");
     if (typeof forge.index !== "function") {
       throw new UnsupportedByBindingError("index");
     }
@@ -610,7 +691,7 @@ export class GraphForgeSession implements vscode.Disposable {
     vector: number[],
     space?: string,
   ): unknown {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("index");
     if (typeof forge.index !== "function") {
       throw new UnsupportedByBindingError("index");
     }
@@ -620,7 +701,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   inspectTextIndex(label: string, properties?: string[]): unknown {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("inspectTextIndex");
     if (typeof forge.inspectTextIndex !== "function") {
       throw new UnsupportedByBindingError("inspectTextIndex");
     }
@@ -628,7 +709,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   buildAdjacencyIndex(): unknown {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("indexAdjacency");
     if (typeof forge.indexAdjacency !== "function") {
       throw new UnsupportedByBindingError("indexAdjacency");
     }
@@ -638,7 +719,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   inspectAdjacencyIndex(): unknown {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("inspectAdjacency");
     if (typeof forge.inspectAdjacency !== "function") {
       throw new UnsupportedByBindingError("inspectAdjacency");
     }
@@ -646,7 +727,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   rebuildAdjacencyIndex(): unknown {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("rebuildAdjacency");
     if (typeof forge.rebuildAdjacency !== "function") {
       throw new UnsupportedByBindingError("rebuildAdjacency");
     }
@@ -656,11 +737,11 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   // ======================================================================
-  // Invocation descriptors / algorithm runs (#11)
+  // Invocation descriptors / algorithm runs (#11) — Node-only
   // ======================================================================
 
   algorithmDescriptorContracts(): AlgorithmDescriptorContractNative[] {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("algorithmDescriptorContracts");
     if (typeof forge.algorithmDescriptorContracts !== "function") {
       throw new UnsupportedByBindingError("algorithmDescriptorContracts");
     }
@@ -681,7 +762,7 @@ export class GraphForgeSession implements vscode.Disposable {
       target?: string;
     },
   ): InvocationDescriptorNative {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("prepareInvocation");
     switch (verb) {
       case "rank":
         if (typeof forge.prepareRankInvocation !== "function") {
@@ -733,7 +814,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   invokeDescriptor(descriptor: InvocationDescriptorNative): QueryResult {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("invokeDescriptor");
     if (typeof forge.invokeDescriptor !== "function") {
       throw new UnsupportedByBindingError("invokeDescriptor");
     }
@@ -742,7 +823,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   async listAlgorithmRuns(algorithm?: string, limit?: number): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("listAlgorithmRuns");
     if (typeof forge.listAlgorithmRuns !== "function") {
       throw new UnsupportedByBindingError("listAlgorithmRuns");
     }
@@ -751,7 +832,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   async algorithmRun(runUuid: string): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("algorithmRun");
     if (typeof forge.algorithmRun !== "function") {
       throw new UnsupportedByBindingError("algorithmRun");
     }
@@ -760,11 +841,11 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   // ======================================================================
-  // Composite transactions (#11, expert/Advanced-only)
+  // Composite transactions (#11, expert/Advanced-only) — Node-only
   // ======================================================================
 
   publishCompositeTransaction(request: unknown): QueryResult {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("publishCompositeTransaction");
     if (typeof forge.publishCompositeTransaction !== "function") {
       throw new UnsupportedByBindingError("publishCompositeTransaction");
     }
@@ -774,21 +855,39 @@ export class GraphForgeSession implements vscode.Disposable {
     return result;
   }
 
-  /** True once the current binding exposes the knowledge (assertions) surface at all. */
+  /**
+   * True once the active backend exposes the knowledge (assertions) surface
+   * at all. `listAssertions` is part of the runtime-agnostic
+   * {@link EngineBackend} facade (#12), so this works for either runtime —
+   * the Node adapter forwards to the native binding's `listAssertions`, and
+   * the Python bridge exposes its own.
+   */
   knowledgeCapabilityAvailable(): boolean {
-    return typeof this.forge?.listAssertions === "function";
+    return typeof this.backend?.listAssertions === "function";
   }
 
   async knowledgeSummary(): Promise<KnowledgeSummary> {
+    if (!this.backend) {
+      return {
+        capabilityAvailable: false,
+        assertionCount: 0,
+        statusCounts: {},
+        assertions: [],
+        note: "No GraphForge session open.",
+      };
+    }
     if (!this.knowledgeCapabilityAvailable()) {
       return {
         capabilityAvailable: false,
         assertionCount: 0,
         statusCounts: {},
         assertions: [],
-        note: this.bindingAvailable
-          ? "This @graphforge/node binding does not expose listAssertions() yet."
-          : getNativeLoadError(),
+        note:
+          this.backend.runtime === "node"
+            ? (this.bindingAvailable
+                ? "This @graphforge/node binding does not expose listAssertions() yet."
+                : this.bindingError)
+            : "Knowledge ledger APIs not yet wired for the Python runtime.",
       };
     }
     try {
@@ -814,29 +913,34 @@ export class GraphForgeSession implements vscode.Disposable {
     }
   }
 
-  /** List a page of immutable assertions (`listAssertions`), defensively. */
+  /** List a page of immutable assertions (`listAssertions`); works on either runtime via {@link EngineBackend}. */
   async listAssertions(request?: ListAssertionsInput): Promise<QueryResult> {
-    const forge = this.requireForge();
-    if (typeof forge.listAssertions !== "function") {
+    const backend = this.requireBackend();
+    if (!backend.listAssertions) {
       throw new UnsupportedByBindingError("listAssertions");
     }
-    const buf = await resolveIpcBuffer(
-      forge.listAssertions({
-        graphUuid: request?.graphUuid,
-        limit: request?.limit,
-        after: request?.after,
-      }),
-    );
+    const buf = await backend.listAssertions({
+      graphUuid: request?.graphUuid,
+      limit: request?.limit,
+      after: request?.after,
+    });
     return decodeTable(buf);
   }
 
-  /** Fetch one assertion by UUID; falls back to a filtered list page if `assertion()` is absent. */
+  /**
+   * Fetch one assertion by UUID; falls back to a filtered list page if
+   * `assertion()` is absent. Node-only: the Python bridge does not expose
+   * per-assertion lookup yet (#12), but the list-page fallback keeps this
+   * usable there too as long as `listAssertions` works.
+   */
   async getAssertion(assertionUuid: string): Promise<AssertionRow | undefined> {
-    const forge = this.requireForge();
-    if (typeof forge.assertion === "function") {
-      const buf = await resolveIpcBuffer(forge.assertion(assertionUuid));
-      const result = decodeTable(buf);
-      return rowsToAssertions(result)[0];
+    if (this.backend instanceof NodeEngineBackend) {
+      const forge = this.backend.native;
+      if (typeof forge.assertion === "function") {
+        const buf = await resolveIpcBuffer(forge.assertion(assertionUuid));
+        const result = decodeTable(buf);
+        return rowsToAssertions(result)[0];
+      }
     }
     const result = await this.listAssertions({ limit: 200 });
     return rowsToAssertions(result).find(
@@ -844,9 +948,9 @@ export class GraphForgeSession implements vscode.Disposable {
     );
   }
 
-  /** Graph node/edge references for one assertion (subject/object/context), for "show on graph". */
+  /** Graph node/edge references for one assertion (subject/object/context), for "show on graph". Node-only. */
   async assertionGraphRefs(assertionUuid: string): Promise<TableRow[]> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("assertionGraphRefs");
     if (typeof forge.assertionGraphRefs !== "function") {
       throw new UnsupportedByBindingError("assertionGraphRefs");
     }
@@ -858,13 +962,14 @@ export class GraphForgeSession implements vscode.Disposable {
    * Create one immutable assertion with minimal required fields (claim + at
    * least one graph reference). Identity UUIDs are minted here (UUIDv7) so the
    * analyst never has to paste one in for the primary Create Assertion path.
+   * Node-only (#12) — knowledge-ledger writes are not yet wired for Python.
    */
   async createAssertion(input: {
     claim: string;
     graphRefs: CreateAssertionInput["graphRefs"];
     actorUuid?: string;
   }): Promise<{ assertionUuid: string; result: QueryResult }> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("createAssertion");
     if (typeof forge.createAssertion !== "function") {
       throw new UnsupportedByBindingError("createAssertion");
     }
@@ -886,11 +991,11 @@ export class GraphForgeSession implements vscode.Disposable {
     return { assertionUuid, result };
   }
 
-  /** Advanced: attach one immutable evidence link to an existing assertion. */
+  /** Advanced: attach one immutable evidence link to an existing assertion. Node-only. */
   async attachEvidence(
     input: Omit<AttachEvidenceInput, "operationUuid" | "evidenceUuid">,
   ): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("attachEvidence");
     if (typeof forge.attachEvidence !== "function") {
       throw new UnsupportedByBindingError("attachEvidence");
     }
@@ -906,11 +1011,11 @@ export class GraphForgeSession implements vscode.Disposable {
     return result;
   }
 
-  /** Advanced: record one immutable confidence assessment for an assertion. */
+  /** Advanced: record one immutable confidence assessment for an assertion. Node-only. */
   async assessConfidence(
     input: Omit<AssessConfidenceInput, "operationUuid" | "confidenceUuid">,
   ): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("assessConfidence");
     if (typeof forge.assessConfidence !== "function") {
       throw new UnsupportedByBindingError("assessConfidence");
     }
@@ -926,11 +1031,11 @@ export class GraphForgeSession implements vscode.Disposable {
     return result;
   }
 
-  /** Advanced: record one explicit assertion-status event (requires an existing provenance UUID). */
+  /** Advanced: record one explicit assertion-status event (requires an existing provenance UUID). Node-only. */
   async recordAssertionStatus(
     input: Omit<RecordAssertionStatusInput, "operationUuid" | "statusEventUuid">,
   ): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("recordAssertionStatus");
     if (typeof forge.recordAssertionStatus !== "function") {
       throw new UnsupportedByBindingError("recordAssertionStatus");
     }
@@ -946,9 +1051,9 @@ export class GraphForgeSession implements vscode.Disposable {
     return result;
   }
 
-  /** Status event history, optionally filtered to one assertion. */
+  /** Status event history, optionally filtered to one assertion. Node-only. */
   async listAssertionStatus(request?: ListAssertionStatusInput): Promise<QueryResult> {
-    const forge = this.requireForge();
+    const forge = this.requireNodeForge("listAssertionStatus");
     if (typeof forge.listAssertionStatus !== "function") {
       throw new UnsupportedByBindingError("listAssertionStatus");
     }
@@ -964,10 +1069,10 @@ export class GraphForgeSession implements vscode.Disposable {
 
   /**
    * Build a graph payload from tabular results, then (when the project has
-   * the `knowledge` + `epistemic` capabilities and the binding exposes the
-   * status APIs) resolve real ledger status for each node UUID. Remembers
-   * the raw result so `GraphForge: Show Result Graph` can refresh/re-resolve
-   * without re-running the query or verb.
+   * the `knowledge` + `epistemic` capabilities, the active backend is Node,
+   * and the binding exposes the status APIs) resolve real ledger status for
+   * each node UUID. Remembers the raw result so `GraphForge: Show Result
+   * Graph` can refresh/re-resolve without re-running the query or verb.
    */
   async toGraphPayload(result: QueryResult, title?: string): Promise<GraphPayload> {
     this.lastResult = result;
@@ -1107,17 +1212,25 @@ export class GraphForgeSession implements vscode.Disposable {
    * Best-effort ledger status resolution for a bounded set of node UUIDs:
    * `listAssertions({ graphUuid })` to find an assertion about the node, then
    * `assertionStatus(assertionUuid)` for its current explicit status (empty
-   * table = legitimately statusless). Defensive throughout — the engine API
-   * may still be moving; any missing method, missing capability, or thrown
-   * error falls back to `{ active: false }` (class-only styling) rather than
-   * inventing a status.
+   * table = legitimately statusless). Node-only — falls back to `{ active:
+   * false }` (class-only styling) on the Python runtime rather than
+   * inventing a status. Defensive throughout otherwise: the engine API may
+   * still be moving; any missing method, missing capability, or thrown error
+   * also falls back to `{ active: false }`.
    */
   private async resolveEpistemicStatuses(
     nodeIds: string[],
   ): Promise<{ active: boolean; statuses: Map<string, EpistemicStatus>; note?: string }> {
     const empty = new Map<string, EpistemicStatus>();
-    if (!this.forge || nodeIds.length === 0) {
+    if (!this.backend || nodeIds.length === 0) {
       return { active: false, statuses: empty };
+    }
+    if (!(this.backend instanceof NodeEngineBackend)) {
+      return {
+        active: false,
+        statuses: empty,
+        note: "Epistemic status resolution requires the Node runtime — class-only styling.",
+      };
     }
     if (!this.beliefPolicy.enabled) {
       return {
@@ -1134,7 +1247,7 @@ export class GraphForgeSession implements vscode.Disposable {
         note: "Knowledge capability not enabled for this project — class-only styling.",
       };
     }
-    const forge = this.forge;
+    const forge = this.backend.native;
     const listAssertions = forge.listAssertions;
     const assertionStatus = forge.assertionStatus;
     if (typeof listAssertions !== "function" || typeof assertionStatus !== "function") {
@@ -1197,19 +1310,31 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   private refreshStatus(): void {
-    if (!this.bindingAvailable) {
-      this.statusBar.text = "$(warning) GraphForge: binding missing";
-      this.statusBar.tooltip = getNativeLoadError();
+    void this.refreshStatusAsync();
+  }
+
+  private async refreshStatusAsync(): Promise<void> {
+    if (this.activeProject && this.backend) {
+      const mode = await this.ontologyMode();
+      const runtimeLabel = this.backend.runtime === "python" ? "Python" : "Node";
+      this.statusBar.text = `$(database) GraphForge: ${this.activeProject.name} (${mode}) · ${runtimeLabel}`;
+      this.statusBar.tooltip = `${this.activeProject.rootPath}\nRuntime: ${runtimeLabel}`;
       return;
     }
-    if (!this.activeProject) {
-      this.statusBar.text = "$(database) GraphForge";
-      this.statusBar.tooltip = "No project open";
+
+    const snapshot = await this.environmentSnapshot();
+    const usable = chooseRuntime(snapshot.preference, snapshot.node, snapshot.python) !== undefined;
+    if (!usable) {
+      this.statusBar.text = "$(warning) GraphForge: no runtime";
+      this.statusBar.tooltip = describeRuntimeUnavailable(
+        snapshot.preference,
+        snapshot.node,
+        snapshot.python,
+      );
       return;
     }
-    const mode = this.ontologyMode();
-    this.statusBar.text = `$(database) GraphForge: ${this.activeProject.name} (${mode})`;
-    this.statusBar.tooltip = this.activeProject.rootPath;
+    this.statusBar.text = "$(database) GraphForge";
+    this.statusBar.tooltip = "No project open";
   }
 }
 

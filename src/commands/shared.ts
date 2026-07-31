@@ -32,16 +32,19 @@ export async function offerSetupRecovery(
 ): Promise<void> {
   const code = engineErrorCode(err);
   const message = errorMessage(err);
-  const primary = session.bindingAvailable
-    ? "Open Project"
-    : "Setup Native Binding";
+  const hasRuntime = await session.hasUsableRuntime();
+  const primary = hasRuntime ? "Open Project" : "Setup Native Binding";
+  const buttons = hasRuntime
+    ? [primary, "Check Environment"]
+    : [primary, "Setup Python Binding", "Check Environment"];
   const choice = await vscode.window.showErrorMessage(
     `GraphForge: ${message}${code ? ` [${code}]` : ""}`,
-    primary,
-    "Check Environment",
+    ...buttons,
   );
   if (choice === "Setup Native Binding") {
     await vscode.commands.executeCommand("graphforge.setupNativeBinding");
+  } else if (choice === "Setup Python Binding") {
+    await vscode.commands.executeCommand("graphforge.setupPythonBinding");
   } else if (choice === "Open Project") {
     await vscode.commands.executeCommand("graphforge.openProject");
   } else if (choice === "Check Environment") {

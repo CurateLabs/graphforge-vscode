@@ -82,6 +82,10 @@
         "title": "GraphForge: Setup Native Binding"
       },
       {
+        "command": "graphforge.setupPythonBinding",
+        "title": "GraphForge: Setup Python Binding"
+      },
+      {
         "command": "graphforge.initializeProjectHere",
         "title": "GraphForge: Initialize Project Here"
       },
@@ -353,6 +357,26 @@
           "type": "boolean",
           "default": true,
           "description": "Open the Result Graph webview after a successful Cypher query or analyst verb."
+        },
+        "graphforge.runtime": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "node",
+            "python"
+          ],
+          "enumDescriptions": [
+            "Prefer @graphforge/node; fall back to Python when Node is unavailable and Python (graphforge) is importable.",
+            "Require @graphforge/node. Never falls back to Python, even if detected.",
+            "Require the Python graphforge bridge. Never falls back to Node, even if available."
+          ],
+          "default": "auto",
+          "description": "Which engine runtime backs Cypher/verb calls. Node remains the preferred default within \"auto\"."
+        },
+        "graphforge.pythonInterpreterPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to a Python interpreter with `graphforge` installed. Leave empty to auto-detect (VS Code Python extension selection, workspace .venv/venv/env, then python3/python on PATH)."
         }
       }
     }
@@ -364,7 +388,7 @@
     "check": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js",
     "package": "vsce package"
   },
   "dependencies": {
