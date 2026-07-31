@@ -40,7 +40,7 @@ flowchart LR
 | `GraphForgeSession` | Open project, execute/verbs, IPC→rows, graph payload | `EngineBackend` + arrow |
 | Tree providers | Projects, Ontology, Knowledge sidebars | Session |
 | Commands | Run Query, verbs, open panels, load ontology, Setup (Native/Python) | Session, webviews |
-| Webviews | Result Graph + Ontology Viewer + Settings + message protocol | Session payloads |
+| Webviews | Result Graph + Ontology Viewer + Settings + message protocol | Session payloads (Result Graph/Ontology); configuration API + `settingsSchema.ts` (Settings) |
 | `webview-ui/` | Vite-built browser bundles for webview panels (currently: Settings) | `src/webview/settingsSchema.ts` |
 
 ### Build tooling (Vite direction, #24)
