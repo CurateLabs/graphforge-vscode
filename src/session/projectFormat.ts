@@ -19,41 +19,6 @@ export function isGraphForgeProject(rootPath: string): boolean {
   }
 }
 
-/** Directory entries, or undefined when the path does not exist / is not a directory. */
-export function readDirSafe(rootPath: string): string[] | undefined {
-  try {
-    return fs.readdirSync(rootPath);
-  } catch {
-    return undefined;
-  }
-}
-
-export type InitSafety =
-  | { kind: "missing" }
-  | { kind: "already-project" }
-  | { kind: "empty" }
-  | { kind: "non-empty"; entries: string[] };
-
-/**
- * Best-effort local classification of whether `graphforge.initializeProjectHere`
- * is likely to succeed. The engine (`open_or_initialize_project`) is the source
- * of truth and fails closed on unsafe roots; this only shapes the confirmation
- * prompt so users are not surprised.
- */
-export function classifyInitTarget(rootPath: string): InitSafety {
-  if (isGraphForgeProject(rootPath)) {
-    return { kind: "already-project" };
-  }
-  const entries = readDirSafe(rootPath);
-  if (entries === undefined) {
-    return { kind: "missing" };
-  }
-  if (entries.length === 0) {
-    return { kind: "empty" };
-  }
-  return { kind: "non-empty", entries };
-}
-
 export function readCurrentPointer(rootPath: string): CurrentPointer | undefined {
   const currentPath = path.join(rootPath, CURRENT_FILE);
   try {

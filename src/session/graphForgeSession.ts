@@ -8,39 +8,23 @@ import {
   readWorkspaceOntology,
 } from "./projectDetector";
 import {
-  AlgorithmDescriptorContractNative,
   AnalystVerb,
-  CheckpointViewNative,
   DetectedProject,
   EpistemicStatus,
   GraphEdge,
   GraphForgeNative,
   GraphNode,
   GraphPayload,
-  InvocationDescriptorNative,
   KnowledgeSummary,
   OntologyDoc,
   ProjectCapabilities,
   QueryResult,
   TableRow,
-  WriteMode,
 } from "./types";
-
-/** Raised when the loaded @graphforge/node binding predates a given method. */
-export class UnsupportedByBindingError extends Error {
-  constructor(methodName: string) {
-    super(
-      `This @graphforge/node binding does not expose \`${methodName}()\` yet. ` +
-        "The engine API may still be moving — update the binding or check the method name.",
-    );
-    this.name = "UnsupportedByBindingError";
-  }
-}
 
 export class GraphForgeSession implements vscode.Disposable {
   private forge: GraphForgeNative | undefined;
   private activeProject: DetectedProject | undefined;
-  private activeWriteMode: WriteMode = "single_writer";
   private readonly statusBar: vscode.StatusBarItem;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
@@ -84,23 +68,7 @@ export class GraphForgeSession implements vscode.Disposable {
         `Not a GraphForge project (missing or invalid FORMAT): ${rootPath}`,
       );
     }
-    await this.attachForge(rootPath);
-  }
 
-  /**
-   * Open `rootPath` via the engine's `open_or_initialize_project` contract:
-   * an empty directory is initialized as the first committed generation, a
-   * valid existing project is opened, and anything else (foreign/non-empty
-   * unsafe dirs) fails closed with the engine's error code. Unlike
-   * {@link openProject}, this does not pre-check for an existing FORMAT
-   * marker, since initializing one is the point.
-   */
-  async initializeProject(rootPath: string): Promise<DetectedProject> {
-    await this.attachForge(rootPath);
-    return this.activeProject!;
-  }
-
-  private async attachForge(rootPath: string): Promise<void> {
     const mod = loadGraphForgeModule();
     if (!mod) {
       this.refreshStatus();

@@ -70,22 +70,6 @@
         "icon": "$(play)"
       },
       {
-        "command": "graphforge.runQueryWithParams",
-        "title": "GraphForge: Run Query with Parameters…"
-      },
-      {
-        "command": "graphforge.checkEnvironment",
-        "title": "GraphForge: Check Environment"
-      },
-      {
-        "command": "graphforge.setupNativeBinding",
-        "title": "GraphForge: Setup Native Binding"
-      },
-      {
-        "command": "graphforge.initializeProjectHere",
-        "title": "GraphForge: Initialize Project Here"
-      },
-      {
         "command": "graphforge.rank",
         "title": "GraphForge: Rank"
       },
@@ -205,7 +189,7 @@
     "check": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js",
     "package": "vsce package"
   },
   "dependencies": {

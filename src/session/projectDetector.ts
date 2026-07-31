@@ -2,20 +2,16 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {
-  classifyInitTarget,
   isGraphForgeProject,
   readCurrentPointer,
-  readDirSafe,
   readManifestCapabilities,
   readWorkspaceOntology,
 } from "./projectFormat";
 import type { DetectedProject } from "./types";
 
 export {
-  classifyInitTarget,
   isGraphForgeProject,
   readCurrentPointer,
-  readDirSafe,
   readManifestCapabilities,
   readWorkspaceOntology,
 };

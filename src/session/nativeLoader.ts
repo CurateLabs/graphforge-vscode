@@ -52,39 +52,6 @@ export function loadGraphForgeModule(): GraphForgeModule | null {
   return null;
 }
 
-/**
- * Detect a locally built `gf-bindings-node` in a sibling `graphforge` engine
- * checkout, either next to the extension install or next to the open
- * workspace. Used by Setup UX to offer a one-click "link sibling build"
- * choice; returns undefined when no sibling build is found.
- */
-export function detectSiblingBindingPath(): string | undefined {
-  for (const candidate of siblingCandidatePaths()) {
-    if (fs.existsSync(path.join(candidate, "index.js"))) {
-      return candidate;
-    }
-  }
-  return undefined;
-}
-
-function siblingCandidatePaths(): string[] {
-  const out: string[] = [];
-
-  // Sibling monorepo: .../graphforge-vscode next to .../graphforge
-  const extensionRoot = path.resolve(__dirname, "..");
-  out.push(
-    path.resolve(extensionRoot, "..", "graphforge", "crates", "gf-bindings-node"),
-  );
-
-  // Also try parent of workspace if opened inside monorepo tools
-  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (ws) {
-    out.push(path.resolve(ws, "..", "graphforge", "crates", "gf-bindings-node"));
-  }
-
-  return [...new Set(out)];
-}
-
 function collectCandidates(): string[] {
   const out: string[] = [];
   const configPath = vscode.workspace
@@ -98,9 +65,26 @@ function collectCandidates(): string[] {
 
   out.push("@graphforge/node");
 
-  const sibling = detectSiblingBindingPath();
-  if (sibling) {
+  // Sibling monorepo: .../graphforge-vscode next to .../graphforge
+  const extensionRoot = path.resolve(__dirname, "..");
+  const sibling = path.resolve(
+    extensionRoot,
+    "..",
+    "graphforge",
+    "crates",
+    "gf-bindings-node",
+  );
+  if (fs.existsSync(path.join(sibling, "index.js"))) {
     out.push(sibling);
+  }
+
+  // Also try parent of workspace if opened inside monorepo tools
+  const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (ws) {
+    const fromWs = path.resolve(ws, "..", "graphforge", "crates", "gf-bindings-node");
+    if (fs.existsSync(path.join(fromWs, "index.js"))) {
+      out.push(fromWs);
+    }
   }
 
   return [...new Set(out)];

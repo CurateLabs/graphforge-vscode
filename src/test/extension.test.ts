@@ -11,14 +11,10 @@ suite("GraphForge extension", () => {
     const commands = await vscode.commands.getCommands(true);
     for (const id of [
       "graphforge.runQuery",
-      "graphforge.runQueryWithParams",
       "graphforge.rank",
       "graphforge.showOntology",
       "graphforge.showResultGraph",
       "graphforge.openProject",
-      "graphforge.checkEnvironment",
-      "graphforge.setupNativeBinding",
-      "graphforge.initializeProjectHere",
     ]) {
       assert.ok(commands.includes(id), `missing command ${id}`);
     }
