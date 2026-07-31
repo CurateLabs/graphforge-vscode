@@ -1,0 +1,149 @@
+name: Publish Extension
+
+# Marketplace/Open VSX release pipeline. Runs on Blacksmith runners (repo must be
+# linked at app.blacksmith.sh — Blacksmith has no separate "publishing" product;
+# linking only swaps runner infra, see docs/engineering/PUBLISHING.md).
+#
+# Publish credentials (VSCE_PAT, OVSX_PAT) are never stored as raw GitHub secrets.
+# They live in the Pulumi ESC environment curatelabs/graphforge-vscode/production
+# and are projected into the job with `pulumi env run`, authenticated by the
+# PULUMI_ACCESS_TOKEN repo secret. See docs/engineering/PUBLISHING.md for the
+# one-time setup David needs to do in the Pulumi Cloud and GitHub dashboards.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Package only; skip Marketplace/Open VSX publish"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-extension-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Check, compile, unit test, package
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      vsix_name: ${{ steps.package.outputs.vsix_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run check
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Package extension
+        id: package
+        run: |
+          npx vsce package --no-dependencies
+          vsix_name="$(ls -1 ./*.vsix | head -n1)"
+          echo "Packaged $vsix_name"
+          echo "vsix_name=$(basename "$vsix_name")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .vsix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphforge-vsix
+          path: "*.vsix"
+          retention-days: 30
+
+  publish:
+    name: Publish to Marketplace + Open VSX
+    needs: build
+    if: github.event_name == 'push' || github.event.inputs.dry_run == 'false'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download .vsix artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: graphforge-vsix
+
+      - name: Check Pulumi ESC access
+        id: esc
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          if [ -z "${PULUMI_ACCESS_TOKEN:-}" ]; then
+            echo "::warning::PULUMI_ACCESS_TOKEN repo secret is not set; this run will package only and skip publishing. See docs/engineering/PUBLISHING.md."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Pulumi CLI
+        if: steps.esc.outputs.skip != 'true'
+        run: |
+          curl -fsSL https://get.pulumi.com | sh
+          echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
+
+      - name: Publish via Pulumi ESC secrets
+        if: steps.esc.outputs.skip != 'true'
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          VSIX_FILE: ${{ needs.build.outputs.vsix_name }}
+        run: |
+          pulumi env run curatelabs/graphforge-vscode/production -- bash -c '
+            set -euo pipefail
+            published=false
+            if [ -n "${VSCE_PAT:-}" ]; then
+              npx vsce publish --packagePath "$VSIX_FILE" --pat "$VSCE_PAT"
+              published=true
+            else
+              echo "::warning::VSCE_PAT not found in curatelabs/graphforge-vscode/production; skipping Marketplace publish."
+            fi
+            if [ -n "${OVSX_PAT:-}" ]; then
+              npx ovsx publish "$VSIX_FILE" --pat "$OVSX_PAT"
+              published=true
+            else
+              echo "::warning::OVSX_PAT not found in curatelabs/graphforge-vscode/production; skipping Open VSX publish."
+            fi
+            if [ "$published" = false ]; then
+              echo "::warning::No publish PATs found in the ESC environment; this run only produced the .vsix artifact."
+            fi
+          '
+
+      - name: Publish summary
+        run: |
+          {
+            echo "### Publish run"
+            echo ""
+            echo "- Artifact: \`${{ needs.build.outputs.vsix_name }}\`"
+            echo "- ESC secrets available: \`${{ steps.esc.outputs.skip == 'true' && 'no (package-only)' || 'yes' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
