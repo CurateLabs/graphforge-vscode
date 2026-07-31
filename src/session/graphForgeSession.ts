@@ -7,6 +7,7 @@ import {
   readManifestCapabilities,
   readWorkspaceOntology,
 } from "./projectDetector";
+import { randomOperationId } from "./uuid";
 import {
   AlgorithmDescriptorContractNative,
   AnalystVerb,
@@ -100,7 +101,21 @@ export class GraphForgeSession implements vscode.Disposable {
     return this.activeProject!;
   }
 
-  private async attachForge(rootPath: string): Promise<void> {
+  /** Reopen the active project under a different write coordination policy (#11 / ADR 0015). */
+  async reopenWithWriteMode(writeMode: WriteMode): Promise<void> {
+    const project = this.activeProject ?? (await this.ensureProject());
+    await this.attachForge(project.rootPath, writeMode);
+  }
+
+  /** Write coordination policy the active session was opened with (default `single_writer`). */
+  get writeMode(): WriteMode {
+    return this.activeWriteMode;
+  }
+
+  private async attachForge(
+    rootPath: string,
+    writeMode: WriteMode = "single_writer",
+  ): Promise<void> {
     const mod = loadGraphForgeModule();
     if (!mod) {
       this.refreshStatus();
@@ -108,12 +123,13 @@ export class GraphForgeSession implements vscode.Disposable {
     }
 
     try {
-      this.forge = new mod.GraphForge(rootPath, { writeMode: "single_writer" });
+      this.forge = new mod.GraphForge(rootPath, { writeMode });
     } catch (err) {
       // In-memory fallback attempt is not appropriate for project open; surface error.
       this.forge = undefined;
       throw err instanceof Error ? err : new Error(String(err));
     }
+    this.activeWriteMode = writeMode;
 
     const projects = await discoverProjects();
     this.activeProject =
@@ -202,7 +218,14 @@ export class GraphForgeSession implements vscode.Disposable {
         buf = forge.similar(args.label ?? "", args.by ?? "node_similarity", args.k);
         break;
       case "find":
-        buf = forge.find(args.query, args.label, args.k ?? 10);
+        buf = forge.find(
+          args.query,
+          args.label,
+          undefined,
+          undefined,
+          undefined,
+          args.k ?? 10,
+        );
         break;
       default:
         throw new Error(`Unknown verb: ${verb}`);
@@ -261,6 +284,398 @@ export class GraphForgeSession implements vscode.Disposable {
   loadOntology(filePath: string): void {
     this.requireForge().loadOntology(filePath);
     this._onDidChange.fire();
+  }
+
+  // ======================================================================
+  // Checkpoints (#9 / ADR 0014)
+  // ======================================================================
+
+  async createCheckpoint(name: string, description?: string): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.checkpoint !== "function") {
+      throw new UnsupportedByBindingError("checkpoint");
+    }
+    const buf = await forge.checkpoint({
+      name,
+      description,
+      idempotencyKey: randomOperationId(),
+    });
+    const result = decodeTable(buf);
+    this._onDidChange.fire();
+    return result;
+  }
+
+  async listCheckpoints(limit?: number, after?: string): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.listCheckpoints !== "function") {
+      throw new UnsupportedByBindingError("listCheckpoints");
+    }
+    const buf = await forge.listCheckpoints({ limit, after });
+    return decodeTable(buf);
+  }
+
+  /** Immutable, lease-pinned read handle over one named checkpoint. */
+  openCheckpointView(name: string): CheckpointViewNative {
+    const forge = this.requireForge();
+    if (typeof forge.openCheckpoint !== "function") {
+      throw new UnsupportedByBindingError("openCheckpoint");
+    }
+    return forge.openCheckpoint(name);
+  }
+
+  async deleteCheckpoint(name: string): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.deleteCheckpoint !== "function") {
+      throw new UnsupportedByBindingError("deleteCheckpoint");
+    }
+    const buf = await forge.deleteCheckpoint({
+      name,
+      idempotencyKey: randomOperationId(),
+    });
+    const result = decodeTable(buf);
+    this._onDidChange.fire();
+    return result;
+  }
+
+  async diffCheckpoints(
+    from: string,
+    to: string,
+    scope: string,
+    detail: string,
+  ): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.diffCheckpoints !== "function") {
+      throw new UnsupportedByBindingError("diffCheckpoints");
+    }
+    const buf = await forge.diffCheckpoints({ from, to, scope, detail });
+    return decodeTable(buf);
+  }
+
+  /** Restore a checkpoint as a new committed generation. Destructive — callers must hard-confirm. */
+  async revertToCheckpoint(name: string, reason: string): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.revertToCheckpoint !== "function") {
+      throw new UnsupportedByBindingError("revertToCheckpoint");
+    }
+    const buf = await forge.revertToCheckpoint({
+      name,
+      reason,
+      idempotencyKey: randomOperationId(),
+    });
+    const result = decodeTable(buf);
+    this._onDidChange.fire();
+    return result;
+  }
+
+  // ======================================================================
+  // Capabilities / write coordination (#11 / ADR 0015)
+  // ======================================================================
+
+  /** Live capability manifest from the open engine (distinct from the on-disk manifest read in {@link capabilities}). */
+  async liveCapabilities(): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.projectCapabilities !== "function") {
+      throw new UnsupportedByBindingError("projectCapabilities");
+    }
+    const buf = await forge.projectCapabilities();
+    return decodeTable(buf);
+  }
+
+  async enableCapability(
+    capabilityId: string,
+    capabilityVersion: number,
+    actorUuid?: string,
+  ): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.enableCapability !== "function") {
+      throw new UnsupportedByBindingError("enableCapability");
+    }
+    const buf = await forge.enableCapability({
+      operationUuid: randomOperationId(),
+      capabilityId,
+      capabilityVersion,
+      actorUuid,
+    });
+    const result = decodeTable(buf);
+    this._onDidChange.fire();
+    return result;
+  }
+
+  // ======================================================================
+  // Embedding spaces (#10)
+  // ======================================================================
+
+  embeddingSpaces(): unknown[] {
+    const forge = this.requireForge();
+    if (typeof forge.embeddingSpaces !== "function") {
+      throw new UnsupportedByBindingError("embeddingSpaces");
+    }
+    return forge.embeddingSpaces();
+  }
+
+  embeddingSpace(name?: string): unknown {
+    const forge = this.requireForge();
+    if (typeof forge.embeddingSpace !== "function") {
+      throw new UnsupportedByBindingError("embeddingSpace");
+    }
+    return forge.embeddingSpace(name ?? null);
+  }
+
+  bindEmbeddingSpaceAlias(
+    name: string,
+    compatibilityId: string,
+    replace?: boolean,
+  ): unknown {
+    const forge = this.requireForge();
+    if (typeof forge.bindEmbeddingSpaceAlias !== "function") {
+      throw new UnsupportedByBindingError("bindEmbeddingSpaceAlias");
+    }
+    const result = forge.bindEmbeddingSpaceAlias(name, compatibilityId, replace);
+    this._onDidChange.fire();
+    return result;
+  }
+
+  removeEmbeddingSpaceAlias(name: string): boolean {
+    const forge = this.requireForge();
+    if (typeof forge.removeEmbeddingSpaceAlias !== "function") {
+      throw new UnsupportedByBindingError("removeEmbeddingSpaceAlias");
+    }
+    const removed = forge.removeEmbeddingSpaceAlias(name);
+    this._onDidChange.fire();
+    return removed;
+  }
+
+  setDefaultEmbeddingSpace(name?: string): unknown {
+    const forge = this.requireForge();
+    if (typeof forge.setDefaultEmbeddingSpace !== "function") {
+      throw new UnsupportedByBindingError("setDefaultEmbeddingSpace");
+    }
+    const result = forge.setDefaultEmbeddingSpace(name ?? null);
+    this._onDidChange.fire();
+    return result;
+  }
+
+  deleteEmbeddingSpace(name?: string): boolean {
+    const forge = this.requireForge();
+    if (typeof forge.deleteEmbeddingSpace !== "function") {
+      throw new UnsupportedByBindingError("deleteEmbeddingSpace");
+    }
+    const removed = forge.deleteEmbeddingSpace(name ?? null);
+    this._onDidChange.fire();
+    return removed;
+  }
+
+  publishCallerEmbeddings(
+    name: string,
+    input: {
+      rows: Array<{ node: string; vector: number[] }>;
+      dimensions: number;
+      sourceProjection: Record<string, string>;
+      replace?: boolean;
+    },
+  ): string {
+    const forge = this.requireForge();
+    if (typeof forge.publishCallerEmbeddings !== "function") {
+      throw new UnsupportedByBindingError("publishCallerEmbeddings");
+    }
+    const id = forge.publishCallerEmbeddings(name, input);
+    this._onDidChange.fire();
+    return id;
+  }
+
+  inspectEmbeddingSpaceFreshness(name?: string, forceStale?: boolean): unknown {
+    const forge = this.requireForge();
+    if (typeof forge.inspectEmbeddingSpaceFreshness !== "function") {
+      throw new UnsupportedByBindingError("inspectEmbeddingSpaceFreshness");
+    }
+    return forge.inspectEmbeddingSpaceFreshness(name ?? null, forceStale);
+  }
+
+  // ======================================================================
+  // Find + index management (#8)
+  // ======================================================================
+
+  buildTextIndex(label: string, properties?: string[], rebuild?: boolean): unknown {
+    const forge = this.requireForge();
+    if (typeof forge.index !== "function") {
+      throw new UnsupportedByBindingError("index");
+    }
+    const result = forge.index(label, {
+      properties: properties?.length ? properties : null,
+      rebuild,
+    });
+    this._onDidChange.fire();
+    return result;
+  }
+
+  upsertVectorIndex(
+    label: string,
+    node: string,
+    vector: number[],
+    space?: string,
+  ): unknown {
+    const forge = this.requireForge();
+    if (typeof forge.index !== "function") {
+      throw new UnsupportedByBindingError("index");
+    }
+    const result = forge.index(label, { node, vector, space });
+    this._onDidChange.fire();
+    return result;
+  }
+
+  inspectTextIndex(label: string, properties?: string[]): unknown {
+    const forge = this.requireForge();
+    if (typeof forge.inspectTextIndex !== "function") {
+      throw new UnsupportedByBindingError("inspectTextIndex");
+    }
+    return forge.inspectTextIndex(label, properties?.length ? properties : null);
+  }
+
+  buildAdjacencyIndex(): unknown {
+    const forge = this.requireForge();
+    if (typeof forge.indexAdjacency !== "function") {
+      throw new UnsupportedByBindingError("indexAdjacency");
+    }
+    const result = forge.indexAdjacency();
+    this._onDidChange.fire();
+    return result;
+  }
+
+  inspectAdjacencyIndex(): unknown {
+    const forge = this.requireForge();
+    if (typeof forge.inspectAdjacency !== "function") {
+      throw new UnsupportedByBindingError("inspectAdjacency");
+    }
+    return forge.inspectAdjacency();
+  }
+
+  rebuildAdjacencyIndex(): unknown {
+    const forge = this.requireForge();
+    if (typeof forge.rebuildAdjacency !== "function") {
+      throw new UnsupportedByBindingError("rebuildAdjacency");
+    }
+    const result = forge.rebuildAdjacency();
+    this._onDidChange.fire();
+    return result;
+  }
+
+  // ======================================================================
+  // Invocation descriptors / algorithm runs (#11)
+  // ======================================================================
+
+  algorithmDescriptorContracts(): AlgorithmDescriptorContractNative[] {
+    const forge = this.requireForge();
+    if (typeof forge.algorithmDescriptorContracts !== "function") {
+      throw new UnsupportedByBindingError("algorithmDescriptorContracts");
+    }
+    return forge.algorithmDescriptorContracts();
+  }
+
+  /** Prepare (but do not execute) an invocation descriptor for one analyst verb path. */
+  prepareInvocation(
+    verb: Exclude<AnalystVerb, "find">,
+    args: {
+      label?: string;
+      by: string;
+      via?: string;
+      directed?: boolean;
+      k?: number;
+      vectorProperty?: string;
+      source?: string;
+      target?: string;
+    },
+  ): InvocationDescriptorNative {
+    const forge = this.requireForge();
+    switch (verb) {
+      case "rank":
+        if (typeof forge.prepareRankInvocation !== "function") {
+          throw new UnsupportedByBindingError("prepareRankInvocation");
+        }
+        return forge.prepareRankInvocation(args.label ?? "", args.by, args.via, args.directed);
+      case "cluster":
+        if (typeof forge.prepareClusterInvocation !== "function") {
+          throw new UnsupportedByBindingError("prepareClusterInvocation");
+        }
+        return forge.prepareClusterInvocation(
+          args.label ?? "",
+          args.by,
+          args.via,
+          args.directed,
+          args.vectorProperty,
+        );
+      case "paths":
+        if (typeof forge.preparePathsInvocation !== "function") {
+          throw new UnsupportedByBindingError("preparePathsInvocation");
+        }
+        return forge.preparePathsInvocation(
+          args.source ?? null,
+          args.target ?? null,
+          args.by,
+          args.via,
+          args.directed,
+          args.k,
+        );
+      case "analyze":
+        if (typeof forge.prepareAnalyzeInvocation !== "function") {
+          throw new UnsupportedByBindingError("prepareAnalyzeInvocation");
+        }
+        return forge.prepareAnalyzeInvocation(args.by, args.label, args.via, args.directed);
+      case "similar":
+        if (typeof forge.prepareSimilarInvocation !== "function") {
+          throw new UnsupportedByBindingError("prepareSimilarInvocation");
+        }
+        return forge.prepareSimilarInvocation(
+          args.label ?? "",
+          args.by,
+          args.k,
+          args.vectorProperty,
+          args.via,
+        );
+      default:
+        throw new Error(`Unsupported descriptor verb: ${verb as string}`);
+    }
+  }
+
+  invokeDescriptor(descriptor: InvocationDescriptorNative): QueryResult {
+    const forge = this.requireForge();
+    if (typeof forge.invokeDescriptor !== "function") {
+      throw new UnsupportedByBindingError("invokeDescriptor");
+    }
+    const buf = forge.invokeDescriptor(descriptor);
+    return decodeTable(buf);
+  }
+
+  async listAlgorithmRuns(algorithm?: string, limit?: number): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.listAlgorithmRuns !== "function") {
+      throw new UnsupportedByBindingError("listAlgorithmRuns");
+    }
+    const buf = await forge.listAlgorithmRuns({ algorithm, limit });
+    return decodeTable(buf);
+  }
+
+  async algorithmRun(runUuid: string): Promise<QueryResult> {
+    const forge = this.requireForge();
+    if (typeof forge.algorithmRun !== "function") {
+      throw new UnsupportedByBindingError("algorithmRun");
+    }
+    const buf = await forge.algorithmRun(runUuid);
+    return decodeTable(buf);
+  }
+
+  // ======================================================================
+  // Composite transactions (#11, expert/Advanced-only)
+  // ======================================================================
+
+  publishCompositeTransaction(request: unknown): QueryResult {
+    const forge = this.requireForge();
+    if (typeof forge.publishCompositeTransaction !== "function") {
+      throw new UnsupportedByBindingError("publishCompositeTransaction");
+    }
+    const buf = forge.publishCompositeTransaction(request);
+    const result = decodeTable(buf);
+    this._onDidChange.fire();
+    return result;
   }
 
   knowledgeSummary(): KnowledgeSummary {

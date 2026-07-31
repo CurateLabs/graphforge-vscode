@@ -1,6 +1,11 @@
 import * as vscode from "vscode";
 import { registerAnalystVerbs } from "./commands/analystVerbs";
+import { registerCheckpoints } from "./commands/checkpoints";
+import { registerEmbeddingSpaces } from "./commands/embeddingSpaces";
+import { registerFind } from "./commands/find";
+import { registerIndexManagement } from "./commands/indexManagement";
 import { registerOpenViews } from "./commands/openViews";
+import { registerPower } from "./commands/power";
 import { registerRunQuery } from "./commands/runQuery";
 import { registerSetup } from "./commands/setup";
 import { GraphForgeSession } from "./session/graphForgeSession";
@@ -32,6 +37,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerRunQuery(context, session);
   registerAnalystVerbs(context, session);
+  registerFind(context, session);
+  registerIndexManagement(context, session);
+  registerCheckpoints(context, session);
+  registerEmbeddingSpaces(context, session);
+  registerPower(context, session);
   registerOpenViews(context, session, refreshTrees);
   registerSetup(context, session, refreshTrees);
 
