@@ -167,6 +167,21 @@ export interface SetupRecovery {
   nextAction: string;
 }
 
+/**
+ * Structured outcome union returned by every GraphForge command handler to
+ * `executeCommand` callers (#36 — no `void`-and-discard handlers):
+ *
+ * - `SetupRecovery` — no usable runtime / no open project (fail closed).
+ * - `{ cancelled: true }` — the human dismissed an interactive prompt.
+ * - `{ error, code? }` — the engine call failed (from `reportEngineError`).
+ * - `T` — the command's success payload (the JSON it already computes).
+ */
+export type CommandOutcome<T> =
+  | SetupRecovery
+  | { cancelled: true }
+  | { error: string; code?: string }
+  | T;
+
 /** Human-readable next command an agent (or human) should run to unblock setup (#12: covers both runtimes). */
 export async function nextSetupAction(session: GraphForgeSession): Promise<string> {
   const hasRuntime = await session.hasUsableRuntime();

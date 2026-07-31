@@ -70,34 +70,75 @@ Then the call resolves immediately (it does not wait for a human to dismiss the 
 
 ## Command ID table (agent-facing contract)
 
-Source of truth: `package.json#contributes.commands` on `feat/agent-extension-interop` (branched from `feat/integrate-phases-0-4`). All IDs are invoked as `vscode.commands.executeCommand("<id>", ...)`.
+Source of truth: `package.json#contributes.commands`. All IDs are invoked as `vscode.commands.executeCommand("<id>", ...)`. The table covers every contributed command (#36) — nothing is silently outside the contract.
 
-| Command ID | Args accepted (optional) | Returns | Interactive prompts if args omitted | Needs live project/binding to do real work |
+**Shared outcome union.** Every command that does engine work returns `CommandOutcome<T>` (`src/commands/shared.ts`): the success payload `T` listed below, or `SetupRecovery` (`{ error, code?, nextAction }`) when no runtime/project is usable, or `{ cancelled: true }` when a human dismisses an interactive prompt, or `{ error, code? }` when the engine call fails. No handler resolves `undefined` on those paths.
+
+**Destructive commands** (`deleteCheckpoint`, `revertToCheckpoint`, `deleteEmbeddingSpace`, `enableCapability`, `openWithWriteMode`, `publishCompositeTransaction`) keep their human confirmation step unless args include `confirm: true` — an agent must opt in explicitly to skip the modal.
+
+| Command ID | Args accepted (optional) | Returns (success payload) | Interactive prompts if args omitted | Needs live project/binding to do real work |
 |---|---|---|---|---|
 | `graphforge.checkEnvironment` | `{ silent?: boolean }` | `EnvironmentReport` (`{ runtime: { preference, active }, nodeBinding, python, project, nextAction, timestamp }`) always | None (info toast + JSON doc unless `silent: true`) | No — this is the command you call *first*, before either runtime or project exists |
+| `graphforge.copyEnvironmentReport` | none | `EnvironmentReport` (also copies the same JSON to the clipboard, #32) | None | No |
 | `graphforge.setupNativeBinding` | none | `void` | 1 QuickPick (link sibling / browse path / npm install) | No (this *sets up* the Node binding) |
 | `graphforge.setupPythonBinding` | none | `void` | 1 QuickPick (use detected interpreter / browse / install via `uv`) | No (this *sets up* the Python runtime, #12) |
 | `graphforge.initializeProjectHere` | none | `void` | 1 QuickPick (workspace folder vs. browse), plus confirmation dialogs for non-empty/missing targets | Needs a usable runtime first (fails closed with "Setup Native Binding" / "Setup Python Binding" action buttons otherwise) |
 | `graphforge.openProject` | `pathArg?: string` | `void` | Folder picker only when `pathArg` omitted | Needs the target to already be a valid `FORMAT` project |
-| `graphforge.runQuery` | `{ cypher?: string; params?: Record<string, unknown> }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) or `SetupRecovery` (`{ error, code?, nextAction }`) or `{ error }` | Editor selection → whole doc → `showInputBox` only when `args.cypher` omitted/blank | Yes |
+| `graphforge.runQuery` | `{ cypher?: string; params?: Record<string, unknown> }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) | Editor selection → whole doc → `showInputBox` only when `args.cypher` omitted/blank | Yes |
 | `graphforge.runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown> }` | Same as `runQuery` | Same cypher resolution as `runQuery`; params `showInputBox` (JSON) only when `args.params` omitted | Yes |
-| `graphforge.rank` / `rankAdvanced` | none yet (see [Gaps](#gaps--follow-ups)) | Verb result object (`{ verb, by, label, columns, rows, rowCount, algorithm? }`) or `SetupRecovery` or `{ cancelled: true }` / `{ error }` | Label QuickPick, algorithm QuickPick (+ via/directed/writeProperty prompts if `Advanced`) | Yes |
+| `graphforge.rank` / `rankAdvanced` | none yet (see [Gaps](#gaps--follow-ups)) | Verb result object (`{ verb, by, label, columns, rows, rowCount, algorithm? }`) | Label QuickPick, algorithm QuickPick (+ via/directed/writeProperty prompts if `Advanced`) | Yes |
 | `graphforge.cluster` / `clusterAdvanced` | none yet | same shape as `rank` | Label + algorithm QuickPick (+ via/directed/writeProperty/vectorProperty if `Advanced`) | Yes |
 | `graphforge.paths` / `pathsAdvanced` | none yet | same shape as `rank` | Algorithm QuickPick + source/target `showInputBox` (+ via/directed if `Advanced`) | Yes |
 | `graphforge.analyze` / `analyzeAdvanced` | none yet | same shape as `rank` | Label + algorithm QuickPick (+ via/directed if `Advanced`) | Yes |
 | `graphforge.similar` / `similarAdvanced` | none yet | same shape as `rank` | Label + algorithm QuickPick (+ via/vectorProperty if `Advanced`) | Yes |
-| `graphforge.find` | none yet | same shape as `rank` (no `by`) | Label QuickPick (optional) + query/limit `showInputBox` | Yes |
+| `graphforge.find` | none yet | `QueryResult & { verb: "find", query, label? }`; a missing-index failure returns `{ error, code?, nextAction }` naming `graphforge.indexText` | Query `showInputBox` + label QuickPick | Yes |
+| `graphforge.createCheckpoint` | `{ name?, description? }` | `QueryResult` | Name + description InputBoxes | Yes (Node binding) |
+| `graphforge.listCheckpoints` | `{ limit? }` | `QueryResult` | None | Yes (Node binding) |
+| `graphforge.openCheckpoint` | `{ name?, cypher? }` (include `cypher` — even `undefined` — to skip the query prompt) | `{ checkpointUuid, generationUuid, query? }` | Checkpoint QuickPick + read-only Cypher InputBox | Yes (Node binding) |
+| `graphforge.diffCheckpoints` | `{ from?, to?, scope?, detail? }` | `QueryResult` | From/To InputBox+QuickPick, scope + detail QuickPicks | Yes (Node binding) |
+| `graphforge.deleteCheckpoint` | `{ name?, confirm? }` | `QueryResult` | Checkpoint QuickPick + destructive confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
+| `graphforge.revertToCheckpoint` | `{ name?, reason?, confirm? }` | `QueryResult` | Checkpoint QuickPick, reason InputBox, retype-the-name hard confirm (skipped only by `confirm: true`) | Yes (Node binding) |
+| `graphforge.embeddingSpaces` | none | `{ embeddingSpaces: [{ space, freshness? }], note? }` (empty list is a valid state, not an error) | None | Yes (Node binding) |
+| `graphforge.publishCallerEmbeddings` | `{ name?, input?: { rows, dimensions, sourceProjection, replace? } }` | `{ name, compatibilityId }` | Name InputBox + edit-JSON-in-editor flow + Publish toast | Yes (Node binding) |
+| `graphforge.bindEmbeddingSpaceAlias` | `{ alias?, compatibilityId?, replace? }` | `{ alias, compatibilityId, result }` | Alias + compatibility-ID InputBoxes + replace QuickPick | Yes (Node binding) |
+| `graphforge.setDefaultEmbeddingSpace` | `{ name? }` or `{ clear: true }` | `{ name?, result }` | Space QuickPick | Yes (Node binding) |
+| `graphforge.deleteEmbeddingSpace` | `{ name?, confirm? }` | `{ name, removed }` | Space QuickPick + destructive confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
+| `graphforge.inspectEmbeddingSpaceFreshness` | `{ name? }` (`{}` inspects the default space, no picker) | `{ name?, freshness }` | Space QuickPick | Yes (Node binding) |
+| `graphforge.indexText` | `{ label?, properties?, rebuild? }` (or a plain label string, as the Find remediation passes) | `{ command, result }` | Label QuickPick, properties InputBox, rebuild QuickPick | Yes (Node binding) |
+| `graphforge.indexVector` | `{ label?, node?, vector?, space? }` (include `space` — even `undefined` — to skip the space prompt) | `{ command, result }` | Label QuickPick, node/vector/space InputBoxes | Yes (Node binding) |
+| `graphforge.inspectTextIndex` | `{ label? }` | `{ command, result }` | Label QuickPick | Yes (Node binding) |
+| `graphforge.indexAdjacency` | none | `{ command, result }` | None | Yes (Node binding) |
+| `graphforge.inspectAdjacency` | none | `{ command, result }` | None | Yes (Node binding) |
+| `graphforge.rebuildAdjacency` | none | `{ command, result }` | None | Yes (Node binding) |
+| `graphforge.enableCapability` | `{ capabilityId?, version?, confirm? }` | `QueryResult` | ID + version InputBoxes + manifest-mutation confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
+| `graphforge.openWithWriteMode` | `{ mode?, confirm? }` (`mode`: `single_writer` \| `queued_writer` \| `optimistic_multi_writer`) | `{ ok: true, writeMode }` | Mode QuickPick + reopen confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
+| `graphforge.exportInvocationDescriptor` | `{ verb?, label?, by?, invoke? }` | `{ verb, algorithm, fingerprint, projectionFingerprint, canonicalBytesBase64, invocation? }` | Verb/label/algorithm QuickPicks + invoke-now toast | Yes (Node binding) |
+| `graphforge.listAlgorithmRuns` | `{ algorithm?, limit? }` | `QueryResult` | None | Yes (Node binding) |
+| `graphforge.publishCompositeTransaction` | `{ request?, confirm? }` (both required together for the programmatic path) | `QueryResult` | Expert warning, edit-JSON-in-editor flow, publish confirm modal | Yes (Node binding) |
+| `graphforge.listAssertions` | `{ graphUuid?, limit? }` | `QueryResult` | None | Yes |
+| `graphforge.createAssertion` | `{ claim?, subjectUuid?, subjectKind? }` (`subjectKind`: `node` \| `edge`) | `{ assertionUuid }` | Claim/subject-UUID InputBoxes + kind QuickPick | Yes |
+| `graphforge.showAssertion` | `{ assertionUuid? }` or a plain UUID string (tree clicks pass one) | Assertion record + `nextActions` array | Assertion QuickPick/InputBox | Yes |
+| `graphforge.showAssertionOnGraph` | `{ assertionUuid? }` or a plain UUID string | `{ assertionUuid, graph }` (also opens the Result Graph webview) | Assertion QuickPick/InputBox | Yes |
+| `graphforge.attachEvidence` | `{ assertionUuid?, sourceUuid?, sourceKind?, role? }` | `QueryResult` | Assertion + source-UUID prompts, kind + role QuickPicks | Yes |
+| `graphforge.assessConfidence` | `{ assertionUuid?, policy?, value? }` | `QueryResult` | Assertion prompt, policy QuickPick, value InputBox | Yes |
+| `graphforge.recordAssertionStatus` | `{ assertionUuid?, status?, provenanceUuid? }` | `QueryResult` | Assertion prompt, status QuickPick, provenance InputBox | Yes |
 | `graphforge.showOntology` | none | `void` (opens/reveals webview) | None | No — shows an empty/best-effort viewer without a project |
 | `graphforge.showResultGraph` | none | `void` (opens/reveals webview) | None | No — shows a demo graph when no result exists yet |
 | `graphforge.showResultGraphAdvanced` | none | `void` | 1 QuickPick + 1 `showInputBox` (belief-resolution policy) | No |
 | `graphforge.showCapabilities` | none | `void` (opens markdown doc) or nothing on failure | None (fire-and-forget error toast if no project) | Yes, to see real data |
 | `graphforge.loadOntology` | none | `void` | File picker | Yes |
+| `graphforge.openOntologyFile` | none | `void` (opens the committed ontology.json, or offers Load Ontology) | Button-bearing toast when no committed ontology exists | Yes, to open a real file |
+| `graphforge.explainOntologyMode` | none | `void` (opens a markdown explainer) | None | No |
 | `graphforge.refreshExplorer` | none | `void` | None | No |
+| `graphforge.getStarted` | none | `void` (reveals the Get Started sidebar) | None | No |
+| `graphforge.chooseExperienceMode` | none | `void` (reveals the Welcome mode picker) | None | No |
+| `graphforge.openSettings` | none | `void` (opens the Settings webview) | None | No |
+| `graphforge.statusBarClick` | none | `void` (routes to Show Capabilities or Get Started) | None | No |
 
 **Structured output today** comes in two forms, both agent-copyable:
 
-1. **Return value** — everything in the "Returns" column above is returned from `executeCommand`, so any extension/agent with access to the VS Code command API can read it directly without opening any editor.
-2. **Editor document** — `runQuery`, `runQueryWithParams`, the verb commands, and `checkEnvironment` (unless `silent: true`) also open a `language: "json"` document with the same shape, for a human (or a chat-only agent that can only read visible buffers, not call `executeCommand`) to read.
+1. **Return value** — everything in the "Returns" column above is returned from `executeCommand`, so any extension/agent with access to the VS Code command API can read it directly without opening any editor. Commands whose "Returns" column says `void` are view-openers/setup flows whose effect *is* the UI; everything that computes a JSON payload returns it.
+2. **Editor document** — `runQuery`, `runQueryWithParams`, the verb commands, `checkEnvironment` (unless `silent: true`), and the checkpoint / embedding-space / index / power / knowledge commands also open a `language: "json"` document with the same shape, for a human (or a chat-only agent that can only read visible buffers, not call `executeCommand`) to read.
 
 ## Recommended agent loop
 
@@ -123,6 +164,6 @@ flowchart TD
 
 ## Gaps / follow-ups
 
-- **Verb commands (`rank`, `cluster`, `paths`, `analyze`, `similar`, `find`) do not yet accept args.** They always walk their QuickPick chain (label, then algorithm, then advanced prompts). An agent can still read the eventual result (now returned from `executeCommand` instead of `void`), but cannot skip straight to a known `{ label, by, ... }` combination the way it can with `runQuery`. Adding an optional args object mirroring `session.invokeVerb`'s parameter shape would close this gap; deliberately left out of this change to keep the diff small and because issue [#4](https://github.com/CurateLabs/graphforge-vscode/issues/4) already owns the verb-invocation UX.
+- **Verb commands (`rank`, `cluster`, `paths`, `analyze`, `similar`, `find`) do not yet accept args.** They always walk their QuickPick chain (label, then algorithm, then advanced prompts). An agent can still read the eventual result (now returned from `executeCommand` instead of `void`), but cannot skip straight to a known `{ label, by, ... }` combination the way it can with `runQuery` — or with the checkpoint / embedding-space / index / power / knowledge commands, which all accept args since [#36](https://github.com/CurateLabs/graphforge-vscode/issues/36). Adding an optional args object mirroring `session.invokeVerb`'s parameter shape would close this gap; deliberately left out because issue [#4](https://github.com/CurateLabs/graphforge-vscode/issues/4) already owns the verb-invocation UX.
 - **`setupNativeBinding`, `initializeProjectHere`, `loadOntology`, `showResultGraphAdvanced` are QuickPick/dialog-only.** These are inherently about human choices (which folder, which binding source) and are reasonable to leave interactive; an agent's role here is to detect the need (via Check Environment) and either prompt the human or make the choice on the human's behalf by pre-setting `graphforge.nativeModulePath` via the VS Code configuration API before calling `setupNativeBinding`, or by using `openProject(path)`/args-based commands where they exist instead.
 - **No live-project integration test.** This branch's automated test (`src/test/extension.test.ts`) proves the fail-closed, no-binding, no-project path in CI. Proving the success path (`runQuery` actually executing Cypher and returning rows) needs a fixture `FORMAT` project and a built `@graphforge/node`, which is out of scope for this activation-time smoke suite.

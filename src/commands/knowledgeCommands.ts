@@ -5,12 +5,55 @@ import {
   CONFIDENCE_POLICY_OPTIONS,
   EVIDENCE_ROLE_OPTIONS,
   EXPLICIT_STATUS_OPTIONS,
-  GRAPH_KIND_OPTIONS,
   GlossedOption,
+  GRAPH_KIND_OPTIONS,
   SOURCE_KIND_OPTIONS,
 } from "./pickerCopy";
-import { ensureProjectReady } from "./shared";
-import type { GraphPayload } from "../session/types";
+import { CommandOutcome, ensureProjectOrRecover, reportEngineError } from "./shared";
+import type {
+  AssertionGraphKind,
+  ConfidencePolicy,
+  EvidenceRole,
+  EvidenceSourceKind,
+  ExplicitAssertionStatus,
+  GraphPayload,
+  QueryResult,
+} from "../session/types";
+
+/**
+ * Optional args (#36) so a coding agent can drive each knowledge command via
+ * `executeCommand` without any InputBox/QuickPick. `showAssertion` /
+ * `showAssertionOnGraph` also still accept a plain UUID string (tree-item
+ * clicks pass one).
+ */
+export interface ListAssertionsArgs {
+  graphUuid?: string;
+  limit?: number;
+}
+export interface CreateAssertionArgs {
+  claim?: string;
+  subjectUuid?: string;
+  subjectKind?: AssertionGraphKind;
+}
+export interface AssertionRefArgs {
+  assertionUuid?: string;
+}
+export interface AttachEvidenceArgs {
+  assertionUuid?: string;
+  sourceUuid?: string;
+  sourceKind?: EvidenceSourceKind;
+  role?: EvidenceRole;
+}
+export interface AssessConfidenceArgs {
+  assertionUuid?: string;
+  policy?: ConfidencePolicy;
+  value?: number;
+}
+export interface RecordAssertionStatusArgs {
+  assertionUuid?: string;
+  status?: ExplicitAssertionStatus;
+  provenanceUuid?: string;
+}
 
 /** Truncate a long string for display in a quick pick / detail line. */
 function truncate(text: string, max = 80): string {
@@ -53,8 +96,9 @@ async function openJsonDoc(content: unknown): Promise<void> {
 
 /**
  * Resolve an assertion UUID argument that may come from a tree-item click
- * (already a plain UUID string) or be missing (palette invocation), in which
- * case the analyst is prompted to pick from the ledger or paste one in.
+ * (already a plain UUID string), an agent args object (`{ assertionUuid }`),
+ * or be missing (palette invocation), in which case the analyst is prompted
+ * to pick from the ledger or paste one in.
  */
 async function resolveAssertionUuid(
   session: GraphForgeSession,
@@ -62,6 +106,12 @@ async function resolveAssertionUuid(
 ): Promise<string | undefined> {
   if (typeof arg === "string" && isUuidish(arg)) {
     return arg;
+  }
+  if (arg && typeof arg === "object") {
+    const fromArgs = (arg as AssertionRefArgs).assertionUuid;
+    if (typeof fromArgs === "string" && isUuidish(fromArgs)) {
+      return fromArgs;
+    }
   }
   const summary = await session.knowledgeSummary();
   if (summary.assertions.length === 0) {
@@ -88,11 +138,13 @@ export function registerKnowledgeCommands(
   refreshTrees: () => void,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("graphforge.listAssertions", () =>
-      runListAssertions(session),
+    vscode.commands.registerCommand(
+      "graphforge.listAssertions",
+      (args?: ListAssertionsArgs) => runListAssertions(session, args),
     ),
-    vscode.commands.registerCommand("graphforge.createAssertion", () =>
-      runCreateAssertion(session, refreshTrees),
+    vscode.commands.registerCommand(
+      "graphforge.createAssertion",
+      (args?: CreateAssertionArgs) => runCreateAssertion(session, refreshTrees, args),
     ),
     vscode.commands.registerCommand("graphforge.showAssertion", (arg?: unknown) =>
       runShowAssertion(session, arg),
@@ -101,33 +153,42 @@ export function registerKnowledgeCommands(
       "graphforge.showAssertionOnGraph",
       (arg?: unknown) => runShowAssertionOnGraph(context, session, arg),
     ),
-    vscode.commands.registerCommand("graphforge.attachEvidence", () =>
-      runAttachEvidence(session),
+    vscode.commands.registerCommand(
+      "graphforge.attachEvidence",
+      (args?: AttachEvidenceArgs) => runAttachEvidence(session, args),
     ),
-    vscode.commands.registerCommand("graphforge.assessConfidence", () =>
-      runAssessConfidence(session),
+    vscode.commands.registerCommand(
+      "graphforge.assessConfidence",
+      (args?: AssessConfidenceArgs) => runAssessConfidence(session, args),
     ),
-    vscode.commands.registerCommand("graphforge.recordAssertionStatus", () =>
-      runRecordAssertionStatus(session),
+    vscode.commands.registerCommand(
+      "graphforge.recordAssertionStatus",
+      (args?: RecordAssertionStatusArgs) => runRecordAssertionStatus(session, args),
     ),
   );
 }
 
-async function runListAssertions(session: GraphForgeSession): Promise<void> {
-  if (!(await ensureProjectReady(session))) {
-    return;
+async function runListAssertions(
+  session: GraphForgeSession,
+  args?: ListAssertionsArgs,
+): Promise<CommandOutcome<QueryResult>> {
+  const recovery = await ensureProjectOrRecover(session);
+  if (recovery) {
+    return recovery;
   }
   try {
-    const result = await session.listAssertions({ limit: 100 });
+    const result = await session.listAssertions({
+      graphUuid: args?.graphUuid,
+      limit: args?.limit ?? 100,
+    });
     await openJsonDoc({
       rowCount: result.rowCount,
       columns: result.columns,
       rows: result.rows,
     });
+    return result;
   } catch (err) {
-    void vscode.window.showErrorMessage(
-      `List Assertions failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return reportEngineError("List Assertions failed", err);
   }
 }
 
@@ -139,34 +200,45 @@ async function runListAssertions(session: GraphForgeSession): Promise<void> {
 async function runCreateAssertion(
   session: GraphForgeSession,
   refreshTrees: () => void,
-): Promise<void> {
-  if (!(await ensureProjectReady(session))) {
-    return;
+  args?: CreateAssertionArgs,
+): Promise<CommandOutcome<{ assertionUuid: string }>> {
+  const recovery = await ensureProjectOrRecover(session);
+  if (recovery) {
+    return recovery;
   }
 
-  const claim = await vscode.window.showInputBox({
-    title: "GraphForge: Create Assertion (1/3) — Claim",
-    prompt: "State the assertion in plain language.",
-    ignoreFocusOut: true,
-  });
+  const claim =
+    args?.claim?.trim() ||
+    (await vscode.window.showInputBox({
+      title: "GraphForge: Create Assertion (1/3) — Claim",
+      prompt: "State the assertion in plain language.",
+      ignoreFocusOut: true,
+    }));
   if (!claim) {
-    return;
+    return { cancelled: true };
   }
 
-  const subjectUuid = await vscode.window.showInputBox({
-    title: "GraphForge: Create Assertion (2/3) — Subject UUID",
-    prompt: "UUID of the graph node or edge this assertion is about.",
-    ignoreFocusOut: true,
-    validateInput: (v) =>
-      v && !isUuidish(v) ? "Expected a UUID" : undefined,
-  });
+  const subjectUuid =
+    args?.subjectUuid?.trim() ||
+    (await vscode.window.showInputBox({
+      title: "GraphForge: Create Assertion (2/3) — Subject UUID",
+      prompt: "UUID of the graph node or edge this assertion is about.",
+      ignoreFocusOut: true,
+      validateInput: (v) =>
+        v && !isUuidish(v) ? "Expected a UUID" : undefined,
+    }));
   if (!subjectUuid) {
-    return;
+    return { cancelled: true };
+  }
+  if (!isUuidish(subjectUuid)) {
+    return { error: `subjectUuid is not a UUID: ${subjectUuid}` };
   }
 
-  const subjectKind = await pickFrom(GRAPH_KIND_OPTIONS, "Create Assertion (3/3) — Subject kind");
+  const subjectKind =
+    args?.subjectKind ??
+    (await pickFrom(GRAPH_KIND_OPTIONS, "Create Assertion (3/3) — Subject kind"));
   if (!subjectKind) {
-    return;
+    return { cancelled: true };
   }
 
   try {
@@ -177,36 +249,43 @@ async function runCreateAssertion(
       ],
     });
     refreshTrees();
-    const choice = await vscode.window.showInformationMessage(
-      `Assertion created: ${assertionUuid}`,
-      "Show Assertion",
-      "Show on Graph",
-    );
-    if (choice === "Show Assertion") {
-      await runShowAssertion(session, assertionUuid);
-    } else if (choice === "Show on Graph") {
-      await vscode.commands.executeCommand(
-        "graphforge.showAssertionOnGraph",
-        assertionUuid,
-      );
-    }
+    // Fire-and-forget follow-up so a programmatic caller is never blocked on
+    // a toast nobody will dismiss; the buttons still work for humans.
+    void vscode.window
+      .showInformationMessage(
+        `Assertion created: ${assertionUuid}`,
+        "Show Assertion",
+        "Show on Graph",
+      )
+      .then((choice) => {
+        if (choice === "Show Assertion") {
+          return runShowAssertion(session, assertionUuid);
+        }
+        if (choice === "Show on Graph") {
+          return vscode.commands.executeCommand(
+            "graphforge.showAssertionOnGraph",
+            assertionUuid,
+          );
+        }
+        return undefined;
+      });
+    return { assertionUuid };
   } catch (err) {
-    void vscode.window.showErrorMessage(
-      `Create Assertion failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return reportEngineError("Create Assertion failed", err);
   }
 }
 
 async function runShowAssertion(
   session: GraphForgeSession,
   arg?: unknown,
-): Promise<void> {
-  if (!(await ensureProjectReady(session))) {
-    return;
+): Promise<CommandOutcome<Record<string, unknown>>> {
+  const recovery = await ensureProjectOrRecover(session);
+  if (recovery) {
+    return recovery;
   }
   const assertionUuid = await resolveAssertionUuid(session, arg);
   if (!assertionUuid) {
-    return;
+    return { cancelled: true };
   }
   try {
     const assertion = await session.getAssertion(assertionUuid);
@@ -214,9 +293,9 @@ async function runShowAssertion(
       void vscode.window.showWarningMessage(
         `Assertion not found: ${assertionUuid}`,
       );
-      return;
+      return { error: `Assertion not found: ${assertionUuid}` };
     }
-    await openJsonDoc({
+    const payload = {
       ...assertion,
       nextActions: [
         "graphforge.showAssertionOnGraph",
@@ -224,11 +303,11 @@ async function runShowAssertion(
         "graphforge.assessConfidence",
         "graphforge.recordAssertionStatus",
       ],
-    });
+    };
+    await openJsonDoc(payload);
+    return payload;
   } catch (err) {
-    void vscode.window.showErrorMessage(
-      `Show Assertion failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return reportEngineError("Show Assertion failed", err);
   }
 }
 
@@ -236,25 +315,23 @@ async function runShowAssertionOnGraph(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
   arg?: unknown,
-): Promise<void> {
-  if (!(await ensureProjectReady(session))) {
-    return;
+): Promise<CommandOutcome<{ assertionUuid: string; graph: GraphPayload }>> {
+  const recovery = await ensureProjectOrRecover(session);
+  if (recovery) {
+    return recovery;
   }
   const assertionUuid = await resolveAssertionUuid(session, arg);
   if (!assertionUuid) {
-    return;
+    return { cancelled: true };
   }
   try {
     const assertion = await session.getAssertion(assertionUuid);
     const refs = await session.assertionGraphRefs(assertionUuid);
-    ResultGraphPanel.show(
-      context.extensionUri,
-      assertionToGraphPayload(assertionUuid, assertion?.claim ?? "", refs),
-    );
+    const graph = assertionToGraphPayload(assertionUuid, assertion?.claim ?? "", refs);
+    ResultGraphPanel.show(context.extensionUri, graph);
+    return { assertionUuid, graph };
   } catch (err) {
-    void vscode.window.showErrorMessage(
-      `Show on Graph failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return reportEngineError("Show on Graph failed", err);
   }
 }
 
@@ -301,75 +378,100 @@ function assertionToGraphPayload(
 }
 
 /** Advanced: attach one evidence link. Kept out of Create Assertion by design. */
-async function runAttachEvidence(session: GraphForgeSession): Promise<void> {
-  if (!(await ensureProjectReady(session))) {
-    return;
+async function runAttachEvidence(
+  session: GraphForgeSession,
+  args?: AttachEvidenceArgs,
+): Promise<CommandOutcome<QueryResult>> {
+  const recovery = await ensureProjectOrRecover(session);
+  if (recovery) {
+    return recovery;
   }
-  const assertionUuid = await resolveAssertionUuid(session);
+  const assertionUuid = await resolveAssertionUuid(session, args);
   if (!assertionUuid) {
-    return;
+    return { cancelled: true };
   }
-  const sourceUuid = await vscode.window.showInputBox({
-    title: "GraphForge: Attach Evidence — Source UUID",
-    validateInput: (v) => (v && !isUuidish(v) ? "Expected a UUID" : undefined),
-  });
+  const sourceUuid =
+    args?.sourceUuid?.trim() ||
+    (await vscode.window.showInputBox({
+      title: "GraphForge: Attach Evidence — Source UUID",
+      validateInput: (v) => (v && !isUuidish(v) ? "Expected a UUID" : undefined),
+    }));
   if (!sourceUuid) {
-    return;
+    return { cancelled: true };
   }
-  const sourceKind = await pickFrom(SOURCE_KIND_OPTIONS, "Attach Evidence — Source kind");
+  const sourceKind =
+    args?.sourceKind ??
+    (await pickFrom(SOURCE_KIND_OPTIONS, "Attach Evidence — Source kind"));
   if (!sourceKind) {
-    return;
+    return { cancelled: true };
   }
-  const role = await pickFrom(EVIDENCE_ROLE_OPTIONS, "Attach Evidence — Role");
+  const role =
+    args?.role ?? (await pickFrom(EVIDENCE_ROLE_OPTIONS, "Attach Evidence — Role"));
   if (!role) {
-    return;
+    return { cancelled: true };
   }
   try {
-    await session.attachEvidence({ assertionUuid, sourceUuid, sourceKind, role });
+    const result = await session.attachEvidence({
+      assertionUuid,
+      sourceUuid,
+      sourceKind,
+      role,
+    });
     void vscode.window.showInformationMessage("Evidence attached.");
+    return result;
   } catch (err) {
-    void vscode.window.showErrorMessage(
-      `Attach Evidence failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return reportEngineError("Attach Evidence failed", err);
   }
 }
 
 /** Advanced: record one confidence assessment. Kept out of Create Assertion by design. */
-async function runAssessConfidence(session: GraphForgeSession): Promise<void> {
-  if (!(await ensureProjectReady(session))) {
-    return;
+async function runAssessConfidence(
+  session: GraphForgeSession,
+  args?: AssessConfidenceArgs,
+): Promise<CommandOutcome<QueryResult>> {
+  const recovery = await ensureProjectOrRecover(session);
+  if (recovery) {
+    return recovery;
   }
-  const assertionUuid = await resolveAssertionUuid(session);
+  const assertionUuid = await resolveAssertionUuid(session, args);
   if (!assertionUuid) {
-    return;
+    return { cancelled: true };
   }
-  const policy = await pickFrom(CONFIDENCE_POLICY_OPTIONS, "Assess Confidence — Policy");
+  const policy =
+    args?.policy ??
+    (await pickFrom(CONFIDENCE_POLICY_OPTIONS, "Assess Confidence — Policy"));
   if (!policy) {
-    return;
+    return { cancelled: true };
   }
   let value: number | undefined;
   if (policy === "explicit") {
-    const raw = await vscode.window.showInputBox({
-      title: "GraphForge: Assess Confidence — Value (0.0–1.0)",
-      validateInput: (v) => {
-        const n = Number(v);
-        return Number.isFinite(n) && n >= 0 && n <= 1
-          ? undefined
-          : "Enter a number between 0 and 1";
-      },
-    });
-    if (raw === undefined) {
-      return;
+    if (typeof args?.value === "number") {
+      value = args.value;
+    } else {
+      const raw = await vscode.window.showInputBox({
+        title: "GraphForge: Assess Confidence — Value (0.0–1.0)",
+        validateInput: (v) => {
+          const n = Number(v);
+          return Number.isFinite(n) && n >= 0 && n <= 1
+            ? undefined
+            : "Enter a number between 0 and 1";
+        },
+      });
+      if (raw === undefined) {
+        return { cancelled: true };
+      }
+      value = Number(raw);
     }
-    value = Number(raw);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      return { error: "explicit confidence value must be a number between 0 and 1." };
+    }
   }
   try {
-    await session.assessConfidence({ assertionUuid, policy, value });
+    const result = await session.assessConfidence({ assertionUuid, policy, value });
     void vscode.window.showInformationMessage("Confidence recorded.");
+    return result;
   } catch (err) {
-    void vscode.window.showErrorMessage(
-      `Assess Confidence failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return reportEngineError("Assess Confidence failed", err);
   }
 }
 
@@ -380,32 +482,40 @@ async function runAssessConfidence(session: GraphForgeSession): Promise<void> {
  */
 async function runRecordAssertionStatus(
   session: GraphForgeSession,
-): Promise<void> {
-  if (!(await ensureProjectReady(session))) {
-    return;
+  args?: RecordAssertionStatusArgs,
+): Promise<CommandOutcome<QueryResult>> {
+  const recovery = await ensureProjectOrRecover(session);
+  if (recovery) {
+    return recovery;
   }
-  const assertionUuid = await resolveAssertionUuid(session);
+  const assertionUuid = await resolveAssertionUuid(session, args);
   if (!assertionUuid) {
-    return;
+    return { cancelled: true };
   }
-  const status = await pickFrom(EXPLICIT_STATUS_OPTIONS, "Record Status — Status");
+  const status =
+    args?.status ?? (await pickFrom(EXPLICIT_STATUS_OPTIONS, "Record Status — Status"));
   if (!status) {
-    return;
+    return { cancelled: true };
   }
-  const provenanceUuid = await vscode.window.showInputBox({
-    title: "GraphForge: Record Status — Provenance UUID",
-    prompt: "Existing provenance record UUID backing this status event.",
-    validateInput: (v) => (v && !isUuidish(v) ? "Expected a UUID" : undefined),
-  });
+  const provenanceUuid =
+    args?.provenanceUuid?.trim() ||
+    (await vscode.window.showInputBox({
+      title: "GraphForge: Record Status — Provenance UUID",
+      prompt: "Existing provenance record UUID backing this status event.",
+      validateInput: (v) => (v && !isUuidish(v) ? "Expected a UUID" : undefined),
+    }));
   if (!provenanceUuid) {
-    return;
+    return { cancelled: true };
   }
   try {
-    await session.recordAssertionStatus({ assertionUuid, status, provenanceUuid });
+    const result = await session.recordAssertionStatus({
+      assertionUuid,
+      status,
+      provenanceUuid,
+    });
     void vscode.window.showInformationMessage("Assertion status recorded.");
+    return result;
   } catch (err) {
-    void vscode.window.showErrorMessage(
-      `Record Status failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return reportEngineError("Record Status failed", err);
   }
 }

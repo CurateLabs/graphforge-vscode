@@ -231,22 +231,157 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
 });
 
 /**
+ * Args that let a coding agent drive each command via `executeCommand`
+ * without any QuickPick/InputBox — see the command table in
+ * `docs/experience/agent-interop.md` (#36). In this suite's environment (no
+ * `@graphforge/node` binding, no project open) every one of these commands
+ * must fail closed by *returning* a structured `SetupRecovery`
+ * (`{ error, code?, nextAction }`) — never `undefined`, never a bare throw,
+ * and never a hang on a prompt nobody will dismiss in CI.
+ */
+const NO_PROJECT_STRUCTURED_RESULTS: ReadonlyArray<readonly [string, unknown]> = [
+  // Cypher (already documented; proves the doc's "missing binding" scenario)
+  ["graphforge.runQuery", { cypher: "MATCH (n) RETURN n LIMIT 1" }],
+  ["graphforge.runQueryWithParams", { cypher: "MATCH (n) RETURN n LIMIT $k", params: { k: 1 } }],
+  // Find (no args-based bypass yet, but its project gate resolves first)
+  ["graphforge.find", undefined],
+  // Checkpoints (#9)
+  ["graphforge.createCheckpoint", { name: "ci-smoke", description: "created by CI" }],
+  ["graphforge.listCheckpoints", { limit: 5 }],
+  ["graphforge.openCheckpoint", { name: "ci-smoke", cypher: undefined }],
+  [
+    "graphforge.diffCheckpoints",
+    { from: "current", to: "ci-smoke", scope: "summary", detail: "summary" },
+  ],
+  ["graphforge.deleteCheckpoint", { name: "ci-smoke", confirm: true }],
+  ["graphforge.revertToCheckpoint", { name: "ci-smoke", reason: "ci", confirm: true }],
+  // Embedding spaces (#10)
+  ["graphforge.embeddingSpaces", undefined],
+  [
+    "graphforge.publishCallerEmbeddings",
+    {
+      name: "ci-space",
+      input: {
+        dimensions: 1,
+        sourceProjection: { recipe: "ci" },
+        rows: [{ node: "00000000-0000-7000-8000-000000000000", vector: [0.1] }],
+      },
+    },
+  ],
+  [
+    "graphforge.bindEmbeddingSpaceAlias",
+    { alias: "ci-alias", compatibilityId: "ci-compat", replace: false },
+  ],
+  ["graphforge.setDefaultEmbeddingSpace", { clear: true }],
+  ["graphforge.deleteEmbeddingSpace", { name: "ci-space", confirm: true }],
+  ["graphforge.inspectEmbeddingSpaceFreshness", {}],
+  // Index management (#8)
+  ["graphforge.indexText", { label: "Person", properties: [], rebuild: false }],
+  [
+    "graphforge.indexVector",
+    { label: "Person", node: "00000000-0000-7000-8000-000000000000", vector: [0.1], space: undefined },
+  ],
+  ["graphforge.inspectTextIndex", { label: "Person" }],
+  ["graphforge.indexAdjacency", undefined],
+  ["graphforge.inspectAdjacency", undefined],
+  ["graphforge.rebuildAdjacency", undefined],
+  // Power (#11)
+  ["graphforge.enableCapability", { capabilityId: "ci-capability", version: 1, confirm: true }],
+  ["graphforge.openWithWriteMode", { mode: "single_writer", confirm: true }],
+  [
+    "graphforge.exportInvocationDescriptor",
+    { verb: "rank", label: "Person", by: "pagerank", invoke: false },
+  ],
+  ["graphforge.listAlgorithmRuns", { limit: 5 }],
+  [
+    "graphforge.publishCompositeTransaction",
+    { request: { operationUuid: "", nodes: [], edges: [], knowledge: {} }, confirm: true },
+  ],
+  // Knowledge ledger (#13)
+  ["graphforge.listAssertions", { limit: 5 }],
+  [
+    "graphforge.createAssertion",
+    {
+      claim: "CI smoke assertion",
+      subjectUuid: "00000000-0000-7000-8000-000000000000",
+      subjectKind: "node",
+    },
+  ],
+  ["graphforge.showAssertion", { assertionUuid: "00000000-0000-7000-8000-000000000000" }],
+  ["graphforge.showAssertionOnGraph", { assertionUuid: "00000000-0000-7000-8000-000000000000" }],
+  [
+    "graphforge.attachEvidence",
+    {
+      assertionUuid: "00000000-0000-7000-8000-000000000000",
+      sourceUuid: "00000000-0000-7000-8000-000000000001",
+      sourceKind: "document",
+      role: "supports",
+    },
+  ],
+  [
+    "graphforge.assessConfidence",
+    { assertionUuid: "00000000-0000-7000-8000-000000000000", policy: "explicit", value: 0.5 },
+  ],
+  [
+    "graphforge.recordAssertionStatus",
+    {
+      assertionUuid: "00000000-0000-7000-8000-000000000000",
+      status: "supported",
+      provenanceUuid: "00000000-0000-7000-8000-000000000002",
+    },
+  ],
+];
+
+/**
+ * Agent interop (#36): every command that needs a live project/binding must
+ * *return* its failure — a structured `SetupRecovery` object — instead of
+ * resolving `undefined` (the old `void`-and-discard behavior) or hanging on
+ * an interactive prompt. Each command here is invoked with the args a real
+ * agent would pass (QuickPick/InputBox bypasses, `confirm: true` for
+ * destructive commands), which must never open a prompt on this path.
+ */
+suite("GraphForge agent interop — structured fail-closed results (no binding, no project)", () => {
+  for (const [commandId, args] of NO_PROJECT_STRUCTURED_RESULTS) {
+    test(`${commandId} returns { error, nextAction } instead of undefined/void`, async () => {
+      const result = await vscode.commands.executeCommand<{
+        error?: string;
+        code?: string;
+        nextAction?: string;
+      }>(commandId, args);
+
+      assert.ok(
+        result !== undefined && result !== null && typeof result === "object",
+        `${commandId} resolved ${String(result)} — expected a structured object`,
+      );
+      assert.equal(
+        typeof result.error,
+        "string",
+        `${commandId} result.error missing — got ${JSON.stringify(result)}`,
+      );
+      assert.ok(
+        typeof result.nextAction === "string" && result.nextAction.length > 0,
+        `${commandId} result.nextAction must name the next command — got ${JSON.stringify(result)}`,
+      );
+    });
+  }
+});
+
+/**
  * NOT executed here — registration is covered above, but invoking these in
  * a headless test would either hang (they await a `showQuickPick` /
- * `showInputBox` / button-bearing `showErrorMessage` that nothing will ever
- * dismiss in CI) or require a live `@graphforge/node` binding + an open
- * FORMAT project, neither of which are available in this repo's CI image:
+ * `showInputBox` / button-bearing message that nothing will ever dismiss in
+ * CI) or do nothing meaningful without a live `@graphforge/node` binding +
+ * an open FORMAT project, neither of which are available in this repo's CI
+ * image:
  *
- * - `graphforge.runQuery` / `graphforge.runQueryWithParams` — safe to call
- *   with `{ cypher, params }` args once a project is open (skips the
- *   editor-selection/input-box chain), but still need a live project +
- *   binding to actually execute Cypher.
  * - `graphforge.rank` / `rankAdvanced`, `cluster` / `clusterAdvanced`,
  *   `paths` / `pathsAdvanced`, `analyze` / `analyzeAdvanced`, `similar` /
- *   `similarAdvanced`, `find` — always walk a QuickPick (label/algorithm)
- *   chain today; see the "gaps" section of `docs/experience/agent-interop.md`.
- * - `graphforge.setupNativeBinding` — shows a `showQuickPick` of setup
- *   choices.
+ *   `similarAdvanced` — always walk a QuickPick (label/algorithm) chain
+ *   today (no args-based bypass yet — the gap issue #4 owns); their
+ *   project gate does return `SetupRecovery` like the commands above, but
+ *   they are left registration-only until args land.
+ * - `graphforge.setupNativeBinding` / `graphforge.setupPythonBinding` —
+ *   show a `showQuickPick` of setup choices.
  * - `graphforge.initializeProjectHere` — awaits a button-bearing
  *   `showErrorMessage` when the binding is unavailable (the common CI case),
  *   then a QuickPick for the target folder.
@@ -254,9 +389,14 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
  *   its (blocking) file picker.
  * - `graphforge.showResultGraphAdvanced` — awaits two QuickPick/InputBox
  *   prompts before doing anything.
+ * - `graphforge.openOntologyFile` — awaits a button-bearing
+ *   `showInformationMessage` when there is no committed ontology (the CI
+ *   case).
+ * - `graphforge.explainOntologyMode` — human-display-only (opens a markdown
+ *   explainer); safe but asserts nothing an agent relies on.
  *
  * A project-scoped integration test (with a real FORMAT-marked fixture
- * project and `@graphforge/node` installed) would be needed to safely
- * exercise these end-to-end; that is out of scope for this activation-time
- * smoke suite.
+ * project and `@graphforge/node` installed) would be needed to exercise the
+ * success half of the contract end-to-end; that is out of scope for this
+ * activation-time smoke suite.
  */
