@@ -22,6 +22,36 @@ export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * Missing/stale-index signature shared by Find, Similar, and Cluster
+ * (#8/#39). The engine error surface for this is still moving, so this
+ * matches defensively on the message/code rather than one frozen string.
+ */
+export function isMissingIndexError(err: unknown): boolean {
+  return /index/i.test(errorMessage(err)) || engineErrorCode(err) === "GF_VALIDATION";
+}
+
+/**
+ * Whether a failed Similar/Cluster invocation was vector-index-shaped, i.e.
+ * a missing-index error plausibly means "build/refresh the vector index"
+ * (#39). Deliberately conservative — only the paths where the signal is
+ * reliable: `similar` with a vector algorithm (`knn`/`cosine`), or either
+ * verb invoked with an explicit `vectorProperty`. Other verbs/algorithms
+ * keep the generic error report.
+ */
+export function isVectorIndexShapedInvocation(
+  verb: string,
+  opts: { by?: string; vectorProperty?: string },
+): boolean {
+  if (verb !== "similar" && verb !== "cluster") {
+    return false;
+  }
+  if (opts.vectorProperty) {
+    return true;
+  }
+  return verb === "similar" && (opts.by === "knn" || opts.by === "cosine");
+}
+
 export type ErrorSeverity = "warning" | "error";
 
 /**

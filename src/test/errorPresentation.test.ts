@@ -2,6 +2,8 @@ import * as assert from "node:assert/strict";
 import {
   engineErrorCode,
   errorMessage,
+  isMissingIndexError,
+  isVectorIndexShapedInvocation,
   oneLineSummary,
   presentError,
 } from "../commands/errorPresentation";
@@ -111,6 +113,39 @@ suite("oneLineSummary", () => {
 
   test("leaves short messages untouched", () => {
     assert.equal(oneLineSummary("short"), "short");
+  });
+});
+
+suite("missing-index remediation detection (#39)", () => {
+  test("matches index-looking messages and GF_VALIDATION codes", () => {
+    assert.equal(isMissingIndexError(new Error("text index not found for label Person")), true);
+    assert.equal(isMissingIndexError(new Error("stale INDEX for space")), true);
+    assert.equal(
+      isMissingIndexError(Object.assign(new Error("bad input"), { code: "GF_VALIDATION" })),
+      true,
+    );
+    assert.equal(isMissingIndexError(new Error("parse error at line 1")), false);
+  });
+
+  test("vector remediation applies only to reliably vector-shaped invocations", () => {
+    // similar with a vector algorithm — reliable signal.
+    assert.equal(isVectorIndexShapedInvocation("similar", { by: "knn" }), true);
+    assert.equal(isVectorIndexShapedInvocation("similar", { by: "cosine" }), true);
+    // either verb with an explicit vectorProperty (Advanced flow).
+    assert.equal(
+      isVectorIndexShapedInvocation("cluster", { by: "louvain", vectorProperty: "embedding" }),
+      true,
+    );
+    assert.equal(
+      isVectorIndexShapedInvocation("similar", { by: "node_similarity", vectorProperty: "vec" }),
+      true,
+    );
+    // topology-only invocations keep the generic error report.
+    assert.equal(isVectorIndexShapedInvocation("similar", { by: "node_similarity" }), false);
+    assert.equal(isVectorIndexShapedInvocation("cluster", { by: "louvain" }), false);
+    // other verbs never get the offer.
+    assert.equal(isVectorIndexShapedInvocation("rank", { by: "pagerank" }), false);
+    assert.equal(isVectorIndexShapedInvocation("find", { by: "knn" }), false);
   });
 });
 

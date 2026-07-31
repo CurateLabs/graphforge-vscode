@@ -35,6 +35,16 @@ export interface CheckEnvironmentArgs {
   silent?: boolean;
 }
 
+const COPY_REPORT = "Copy Report";
+
+/** Put the curated environment JSON on the clipboard with a confirmation toast (#32). */
+async function copyReportToClipboard(report: EnvironmentReport): Promise<void> {
+  await vscode.env.clipboard.writeText(JSON.stringify(report, null, 2));
+  void vscode.window.showInformationMessage(
+    "GraphForge: environment report copied to clipboard.",
+  );
+}
+
 export function registerSetup(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
@@ -46,7 +56,14 @@ export function registerSetup(
       async (args?: CheckEnvironmentArgs): Promise<EnvironmentReport> => {
         const report = await buildEnvironmentReport(session);
         if (!args?.silent) {
-          void vscode.window.showInformationMessage(formatSummaryLines(report).join("\n"));
+          // Fire-and-forget so headless/agent runs never hang on the toast;
+          // the Copy Report button closes the paste-into-a-bug-report loop
+          // without a second probe (#32).
+          void vscode.window
+            .showInformationMessage(formatSummaryLines(report).join("\n"), COPY_REPORT)
+            .then((choice) =>
+              choice === COPY_REPORT ? copyReportToClipboard(report) : undefined,
+            );
 
           const doc = await vscode.workspace.openTextDocument({
             content: JSON.stringify(report, null, 2),
@@ -54,6 +71,18 @@ export function registerSetup(
           });
           await vscode.window.showTextDocument(doc, { preview: true });
         }
+        return report;
+      },
+    ),
+
+    // #32: always-available palette twin of Check Environment's Copy Report
+    // button. Same probe path (`buildEnvironmentReport`), no editor UI side
+    // effects, and it returns the report so agents get structured data too.
+    vscode.commands.registerCommand(
+      "graphforge.copyEnvironmentReport",
+      async (): Promise<EnvironmentReport> => {
+        const report = await buildEnvironmentReport(session);
+        await copyReportToClipboard(report);
         return report;
       },
     ),

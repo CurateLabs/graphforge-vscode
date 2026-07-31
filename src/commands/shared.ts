@@ -5,7 +5,13 @@ import { engineErrorCode, errorMessage, presentError } from "./errorPresentation
 
 // Pure helpers live in `errorPresentation.ts` (vscode-free, unit tested);
 // re-exported here so existing command imports keep working.
-export { engineErrorCode, errorMessage, presentError } from "./errorPresentation";
+export {
+  engineErrorCode,
+  errorMessage,
+  isMissingIndexError,
+  isVectorIndexShapedInvocation,
+  presentError,
+} from "./errorPresentation";
 
 /** Short, single-line, whitespace-collapsed preview of a query for error toasts. */
 export function querySnippet(text: string, max = 80): string {
@@ -102,6 +108,52 @@ export function reportEngineError(
       return undefined;
     });
   return { error: presented.detail, code: presented.code };
+}
+
+/** Which index a missing-index remediation toast should offer to build (#39). */
+export interface MissingIndexRemediation {
+  /** Which index command fixes the failure. */
+  index: "text" | "vector";
+  /** Pre-fill the index command with the same label the verb ran against. */
+  label?: string;
+}
+
+/**
+ * Curated missing-index remediation toast shared by Find/Similar/Cluster
+ * (#8/#39): instead of echoing the raw engine message, the toast names the
+ * remediation command and offers to run it inline, pre-filled with the same
+ * label. Full detail goes to the error output channel, and the structured
+ * `{ error, code }` shape is returned immediately (the toast is
+ * fire-and-forget so headless/agent runs can't hang).
+ */
+export function reportMissingIndexError(
+  what: string,
+  err: unknown,
+  remediation: MissingIndexRemediation,
+): { error: string; code?: string } {
+  const code = engineErrorCode(err);
+  const detail = errorMessage(err);
+  logErrorDetail(`${what} (missing/stale index?)`, err);
+
+  const commandId =
+    remediation.index === "text" ? "graphforge.indexText" : "graphforge.indexVector";
+  const commandTitle =
+    remediation.index === "text" ? "GraphForge: Index Text…" : "GraphForge: Index Vector…";
+  const button = remediation.index === "text" ? "Index Text…" : "Index Vector…";
+  const namedRemediation = remediation.label
+    ? `${commandTitle} (label: ${remediation.label})`
+    : commandTitle;
+
+  void vscode.window
+    .showErrorMessage(
+      `GraphForge: ${what}${code ? ` [${code}]` : ""} — the ${remediation.index} index looks missing or stale. ` +
+        `Run "${namedRemediation}" then retry.`,
+      button,
+    )
+    .then((choice) =>
+      choice ? vscode.commands.executeCommand(commandId, remediation.label) : undefined,
+    );
+  return { error: detail, code };
 }
 
 /**

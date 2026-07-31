@@ -19,9 +19,14 @@ export function registerIndexManagement(
       },
     ),
 
-    vscode.commands.registerCommand("graphforge.indexVector", async () => {
-      await runIndexVector(session);
-    }),
+    // Accepts an optional label like `indexText` so the missing-index
+    // remediation toast (#39) can pre-fill it.
+    vscode.commands.registerCommand(
+      "graphforge.indexVector",
+      async (labelArg?: string) => {
+        await runIndexVector(session, labelArg);
+      },
+    ),
 
     vscode.commands.registerCommand("graphforge.inspectTextIndex", async () => {
       await runInspectTextIndex(session);
@@ -120,11 +125,14 @@ async function runIndexText(
   }
 }
 
-async function runIndexVector(session: GraphForgeSession): Promise<void> {
+async function runIndexVector(
+  session: GraphForgeSession,
+  labelArg?: string,
+): Promise<void> {
   if (!(await ensureReady(session))) {
     return;
   }
-  const label = await pickLabel(session);
+  const label = await pickLabel(session, labelArg);
   if (!label) {
     return;
   }

@@ -2,20 +2,8 @@ import * as vscode from "vscode";
 import { decodeTable } from "../session/arrowCodec";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { QueryResult, TableRow } from "../session/types";
+import { DIFF_DETAIL_OPTIONS, DIFF_SCOPE_OPTIONS } from "./pickerCopy";
 import { ensureProjectReady, reportEngineError } from "./shared";
-
-const DIFF_SCOPES = [
-  "summary",
-  "graph",
-  "ontology",
-  "configuration",
-  "capabilities",
-  "provenance",
-  "knowledge",
-  "epistemic",
-  "all",
-];
-const DIFF_DETAILS = ["summary", "records"];
 
 /**
  * Checkpoint commands (#9) — flat palette entries, no cascading checkpoint
@@ -210,20 +198,22 @@ async function runDiffCheckpoints(session: GraphForgeSession): Promise<void> {
   if (!to) {
     return;
   }
-  const scope = await vscode.window.showQuickPick(DIFF_SCOPES, {
+  const scopePick = await vscode.window.showQuickPick([...DIFF_SCOPE_OPTIONS], {
     title: "GraphForge: Diff Checkpoints… — Scope",
     placeHolder: "summary",
   });
-  if (!scope) {
+  if (!scopePick) {
     return;
   }
-  const detail = await vscode.window.showQuickPick(DIFF_DETAILS, {
+  const scope = scopePick.label;
+  const detailPick = await vscode.window.showQuickPick([...DIFF_DETAIL_OPTIONS], {
     title: "GraphForge: Diff Checkpoints… — Detail",
     placeHolder: "summary",
   });
-  if (!detail) {
+  if (!detailPick) {
     return;
   }
+  const detail = detailPick.label;
   try {
     const result = await session.diffCheckpoints(from, to, scope, detail);
     await showResultDoc(`Diff ${from} → ${to} (${scope}/${detail})`, result);
@@ -282,10 +272,13 @@ async function runRevertToCheckpoint(session: GraphForgeSession): Promise<void> 
   if (!reason) {
     return;
   }
+  // #40: point at the safest pre-check (Diff Checkpoints…) without adding a
+  // blocking step — the retype-to-confirm gate itself is unchanged.
   const typedName = await vscode.window.showInputBox({
     title: `Type "${name}" to confirm revert`,
     prompt:
-      "This restores the checkpoint as a new committed generation and cannot be undone from here.",
+      "This restores the checkpoint as a new committed generation and cannot be undone from here. " +
+      'Not sure what will change? Press Escape and run "GraphForge: Diff Checkpoints…" first.',
     placeHolder: name,
   });
   if (typedName !== name) {

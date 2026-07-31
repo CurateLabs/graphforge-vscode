@@ -3,11 +3,10 @@ import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { QueryResult } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
 import {
-  engineErrorCode,
   ensureProjectOrRecover,
-  errorMessage,
-  logErrorDetail,
+  isMissingIndexError,
   reportEngineError,
+  reportMissingIndexError,
 } from "./shared";
 
 /**
@@ -99,32 +98,14 @@ async function runFind(
 }
 
 /**
- * Missing-index errors must name the remediation command (#8 AC). The engine
- * error surface for this is still moving, so this matches defensively on the
- * message/code rather than one frozen string.
+ * Missing-index errors must name the remediation command (#8 AC). Detection
+ * and the remediation toast are shared with Similar/Cluster (#39) via
+ * `isMissingIndexError` / `reportMissingIndexError`.
  */
 async function handleFindError(err: unknown, label?: string): Promise<void> {
-  const code = engineErrorCode(err);
-  const message = errorMessage(err);
-  const looksLikeMissingIndex = /index/i.test(message) || code === "GF_VALIDATION";
-
-  if (!looksLikeMissingIndex) {
+  if (!isMissingIndexError(err)) {
     reportEngineError("Find failed", err);
     return;
   }
-
-  // Curated remediation toast (#28): names the fix instead of echoing the
-  // raw engine message; full detail goes to the error output channel.
-  logErrorDetail("Find failed (missing/stale index?)", err);
-  const remediation = label
-    ? `GraphForge: Index Text… (label: ${label})`
-    : "GraphForge: Index Text…";
-  const choice = await vscode.window.showErrorMessage(
-    `GraphForge: Find failed${code ? ` [${code}]` : ""} — the text/vector index looks missing or stale. ` +
-      `Run "${remediation}" then retry Find.`,
-    "Index Text…",
-  );
-  if (choice) {
-    await vscode.commands.executeCommand("graphforge.indexText", label);
-  }
+  reportMissingIndexError("Find failed", err, { index: "text", label });
 }

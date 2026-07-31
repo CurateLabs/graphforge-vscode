@@ -2,7 +2,14 @@ import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { AnalystVerb, QueryResult } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
-import { ensureProjectOrRecover, reportEngineError, SetupRecovery } from "./shared";
+import {
+  ensureProjectOrRecover,
+  isMissingIndexError,
+  isVectorIndexShapedInvocation,
+  reportEngineError,
+  reportMissingIndexError,
+  SetupRecovery,
+} from "./shared";
 
 const CATALOG_VERBS: Array<Exclude<AnalystVerb, "find">> = [
   "rank",
@@ -260,6 +267,16 @@ async function runVerb(
     );
     return { ...result, verb, by, label };
   } catch (err) {
+    // #39: Similar/Cluster share Find's missing-index remediation — when a
+    // vector-shaped invocation fails with an index-looking error, the toast
+    // offers to run Index Vector… pre-filled with the same label instead of
+    // dead-ending on the raw message.
+    if (
+      isMissingIndexError(err) &&
+      isVectorIndexShapedInvocation(verb, { by, vectorProperty })
+    ) {
+      return reportMissingIndexError(`${verb} failed`, err, { index: "vector", label });
+    }
     return reportEngineError(`${verb} failed`, err);
   }
 }
