@@ -1,0 +1,233 @@
+{
+  "name": "graphforge",
+  "displayName": "GraphForge",
+  "description": "Explore GraphForge projects in VS Code — Cypher, analyst verbs, ontology, and epistemic-aware result graphs.",
+  "version": "0.1.0",
+  "publisher": "CurateLabs",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.96.0",
+    "node": ">=20"
+  },
+  "categories": [
+    "Programming Languages",
+    "Data Science",
+    "Other"
+  ],
+  "keywords": [
+    "graphforge",
+    "cypher",
+    "opencypher",
+    "graph",
+    "knowledge-graph",
+    "ontology"
+  ],
+  "activationEvents": [
+    "onLanguage:cypher",
+    "workspaceContains:FORMAT"
+  ],
+  "main": "./dist/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CurateLabs/graphforge-vscode.git"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "cypher",
+        "aliases": [
+          "Cypher",
+          "openCypher"
+        ],
+        "extensions": [
+          ".cypher",
+          ".cql"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cypher",
+        "scopeName": "source.cypher",
+        "path": "./syntaxes/cypher.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "graphforge.openProject",
+        "title": "GraphForge: Open Project",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "graphforge.refreshExplorer",
+        "title": "GraphForge: Refresh Explorer",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "graphforge.runQuery",
+        "title": "GraphForge: Run Query",
+        "icon": "$(play)"
+      },
+      {
+        "command": "graphforge.runQueryWithParams",
+        "title": "GraphForge: Run Query with Parameters…"
+      },
+      {
+        "command": "graphforge.checkEnvironment",
+        "title": "GraphForge: Check Environment"
+      },
+      {
+        "command": "graphforge.setupNativeBinding",
+        "title": "GraphForge: Setup Native Binding"
+      },
+      {
+        "command": "graphforge.initializeProjectHere",
+        "title": "GraphForge: Initialize Project Here"
+      },
+      {
+        "command": "graphforge.rank",
+        "title": "GraphForge: Rank"
+      },
+      {
+        "command": "graphforge.cluster",
+        "title": "GraphForge: Cluster"
+      },
+      {
+        "command": "graphforge.paths",
+        "title": "GraphForge: Paths"
+      },
+      {
+        "command": "graphforge.analyze",
+        "title": "GraphForge: Analyze"
+      },
+      {
+        "command": "graphforge.similar",
+        "title": "GraphForge: Similar"
+      },
+      {
+        "command": "graphforge.find",
+        "title": "GraphForge: Find"
+      },
+      {
+        "command": "graphforge.showOntology",
+        "title": "GraphForge: Show Ontology Viewer"
+      },
+      {
+        "command": "graphforge.showResultGraph",
+        "title": "GraphForge: Show Result Graph"
+      },
+      {
+        "command": "graphforge.showCapabilities",
+        "title": "GraphForge: Show Project Capabilities"
+      },
+      {
+        "command": "graphforge.loadOntology",
+        "title": "GraphForge: Load Ontology…"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "graphforge.runQuery",
+          "when": "resourceLangId == cypher",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "graphforge.refreshExplorer",
+          "when": "view == graphforge.projects",
+          "group": "navigation"
+        },
+        {
+          "command": "graphforge.openProject",
+          "when": "view == graphforge.projects",
+          "group": "navigation"
+        },
+        {
+          "command": "graphforge.showOntology",
+          "when": "view == graphforge.ontology",
+          "group": "navigation"
+        },
+        {
+          "command": "graphforge.loadOntology",
+          "when": "view == graphforge.ontology",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "graphforge",
+          "title": "GraphForge",
+          "icon": "media/graphforge.svg"
+        }
+      ]
+    },
+    "views": {
+      "graphforge": [
+        {
+          "id": "graphforge.projects",
+          "name": "Projects"
+        },
+        {
+          "id": "graphforge.ontology",
+          "name": "Ontology"
+        },
+        {
+          "id": "graphforge.knowledge",
+          "name": "Knowledge"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "GraphForge",
+      "properties": {
+        "graphforge.nativeModulePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to a built @graphforge/node package (directory containing index.js). Leave empty to resolve from node_modules or sibling monorepo."
+        },
+        "graphforge.openResultGraphOnQuery": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the Result Graph webview after a successful Cypher query or analyst verb."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "check": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vscode-test",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "apache-arrow": "^18.0.0"
+  },
+  "peerDependencies": {
+    "@graphforge/node": ">=0.5.0-dev.0"
+  },
+  "peerDependenciesMeta": {
+    "@graphforge/node": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.13.10",
+    "@types/vscode": "^1.96.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.3.2",
+    "esbuild": "^0.25.1",
+    "mocha": "^11.1.0",
+    "typescript": "^5.8.2"
+  }
+}
