@@ -81,8 +81,8 @@ const ALL_COMMAND_IDS = [
 
 suite("GraphForge extension", () => {
   test("activates and registers all agent-facing command IDs", async () => {
-    const ext = vscode.extensions.getExtension("CurateLabs.graphforge");
-    assert.ok(ext, "extension CurateLabs.graphforge not found");
+    const ext = vscode.extensions.getExtension("CurateLabsAI.graphforge");
+    assert.ok(ext, "extension CurateLabsAI.graphforge not found");
     await ext.activate();
     assert.equal(ext.isActive, true);
 

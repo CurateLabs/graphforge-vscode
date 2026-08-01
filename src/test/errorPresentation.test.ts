@@ -17,7 +17,7 @@ import { NodeOnlyFeatureError, UnsupportedByBindingError } from "../session/erro
 const RAW_NODE_REQUIRE_ERROR =
   "GraphForge native binding unavailable. Tried: @graphforge/node: Cannot find module '@graphforge/node'\n" +
   "Require stack:\n" +
-  "- /home/user/.vscode/extensions/curatelabs.graphforge-0.1.0/dist/extension.js";
+  "- /home/user/.vscode/extensions/curatelabsai.graphforge-0.1.0/dist/extension.js";
 
 const RAW_PYTHON_PROBE_ERROR =
   "graphforge not importable in any detected interpreter. Tried: " +

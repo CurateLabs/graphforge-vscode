@@ -2,9 +2,9 @@
 
 ## Identity
 
-- Publisher: `CurateLabs`
+- Publisher: `CurateLabsAI`
 - Extension name: `graphforge`
-- Fully qualified id: `CurateLabs.graphforge`
+- Fully qualified id: `CurateLabsAI.graphforge`
 - Marketplace: [Visual Studio Marketplace](https://marketplace.visualstudio.com/) and
   [Open VSX](https://open-vsx.org/) (for VS Code-compatible editors that can't use the
   Marketplace, e.g. VSCodium, Cursor before it added Marketplace support in some
@@ -34,14 +34,14 @@ this tree.
 
 ## One-time setup
 
-1. Ensure the `CurateLabs` Marketplace publisher exists
+1. Ensure the `CurateLabsAI` Marketplace publisher exists
    ([Publisher management](https://marketplace.visualstudio.com/manage)) and an Azure DevOps
    Personal Access Token (scope: **Marketplace → Manage**) is available to CI as `VSCE_PAT` —
    stored in the Pulumi ESC environment, not as a raw GitHub secret (see "CI publishing" below).
-2. Ensure a matching Open VSX namespace (`CurateLabs`) and access token exist
+2. Ensure a matching Open VSX namespace (`CurateLabsAI`) and access token exist
    ([open-vsx.org namespace docs](https://github.com/eclipse/openvsx/wiki/Publishing-Extensions))
    as `OVSX_PAT`, likewise stored in the ESC environment.
-3. `npx vsce login CurateLabs` locally once (or rely on `VSCE_PAT` in CI — `vsce` reads it from
+3. `npx vsce login CurateLabsAI` locally once (or rely on `VSCE_PAT` in CI — `vsce` reads it from
    the environment, no interactive login needed in CI).
 
 ## Package
@@ -81,8 +81,8 @@ republishing an existing version.
 ## Post-publish checklist
 
 - Verify the listing on both the
-  [Marketplace](https://marketplace.visualstudio.com/items?itemName=CurateLabs.graphforge) and
-  [Open VSX](https://open-vsx.org/extension/CurateLabs/graphforge) — icon, README rendering,
+  [Marketplace](https://marketplace.visualstudio.com/items?itemName=CurateLabsAI.graphforge) and
+  [Open VSX](https://open-vsx.org/extension/CurateLabsAI/graphforge) — icon, README rendering,
   categories/keywords, repository link.
 - Install from the Marketplace into a clean VS Code profile and run
   `GraphForge: Check Environment` to confirm activation and command registration work outside

@@ -3,7 +3,7 @@
   "displayName": "GraphForge",
   "description": "Explore GraphForge projects in VS Code — Cypher, analyst verbs, ontology, and epistemic-aware result graphs.",
   "version": "0.1.0",
-  "publisher": "CurateLabs",
+  "publisher": "CurateLabsAI",
   "icon": "media/icon.png",
   "license": "Apache-2.0",
   "engines": {

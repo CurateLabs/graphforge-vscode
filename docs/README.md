@@ -1,6 +1,6 @@
 # Documentation
 
-Living docs for **GraphForge for VS Code** (`CurateLabs.graphforge`).
+Living docs for **GraphForge for VS Code** (`CurateLabsAI.graphforge`).
 
 | Document | Question it answers |
 |---|---|

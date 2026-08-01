@@ -62,6 +62,6 @@ to anonymous nodes.
 
 ## Stakeholders
 
-- **Curate Labs** — publisher (`CurateLabs.graphforge`) and product direction.
+- **Curate Labs** — publisher (`CurateLabsAI.graphforge`) and product direction.
 - **GraphForge engine maintainers** — `@graphforge/node` contract owners.
 - **Analyst users** — primary outcomes.
