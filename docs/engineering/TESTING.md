@@ -67,7 +67,7 @@ CurateLabs/GraphForge repos:
 | Job | Steps | Gate |
 |---|---|---|
 | `build` | `npm ci` → `npm run check` → `npm run compile` → `npm run test:unit` | Required. No Python or Electron needed; this is the fast, deterministic gate. |
-| `vscode-test` | `npm ci` → `npm run compile` → `xvfb-run -a npm test` (Extension Development Host under Xvfb) | Non-blocking (`continue-on-error: true`) for now — downloading/launching real VS Code is more environment-sensitive than the unit suite. Promote to required once it's proven stable across several CI runs. |
+| `vscode-test` | `npm ci` → `npm run compile` → `xvfb-run -a npm test` (Extension Development Host under Xvfb) | Required. Promoted to blocking after proving stable across CI runs (issue #24 host-switch gate) — it is the only automated detector for builds that compile green but fail to activate in a real VS Code window. |
 | `package` | `npm ci` → `npm run compile` → `npx vsce package --no-dependencies` | Required. Proves the extension still packages; uploads the `.vsix` as a build artifact (not published — see `PUBLISHING.md`). |
 
 The `pythonProbe.test.ts` "graphforge is importable" case only runs when a sibling
