@@ -13,8 +13,8 @@ node_modules/**
 .eslintrc*
 **/tsconfig.json
 **/*.ts
+**/*.mts
 **/*.map
-esbuild.mjs
 **/.DS_Store
 .git/**
 *.vsix

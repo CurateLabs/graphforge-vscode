@@ -439,10 +439,10 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "npm run compile:host && npm run compile:webview",
-    "compile:host": "node esbuild.mjs",
-    "compile:webview": "vite build --config webview-ui/vite.config.ts",
-    "watch": "node esbuild.mjs --watch",
-    "watch:webview": "vite build --watch --config webview-ui/vite.config.ts",
+    "compile:host": "vite build && vite build --mode tests",
+    "compile:webview": "vite build --config webview-ui/vite.config.mts",
+    "watch": "vite build --watch",
+    "watch:webview": "vite build --watch --config webview-ui/vite.config.mts",
     "check": "tsc --noEmit && tsc --noEmit -p webview-ui",
     "lint": "npm run check",
     "test": "vscode-test",
@@ -467,9 +467,8 @@
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.3.2",
-    "esbuild": "^0.25.1",
     "mocha": "^11.1.0",
     "typescript": "^5.8.2",
-    "vite": "^7.3.6"
+    "vite": "^8.2.0"
   }
 }

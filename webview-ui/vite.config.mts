@@ -8,7 +8,8 @@ const here = fileURLToPath(new URL(".", import.meta.url));
  * Webview UI build (Phase 1 of the esbuild → Vite direction, issue #24).
  * Builds browser bundles for GraphForge webview panels into dist/webview-ui/,
  * which the extension host serves via `webview.asWebviewUri`. The extension
- * host itself still builds with esbuild.mjs (Phase 2 is a separate commit).
+ * host builds separately as a Node library — see vite.config.mts at the repo
+ * root; nothing app-mode from this config applies there.
  *
  * File names are fixed (no content hashes): the host references
  * dist/webview-ui/settings.js / settings.css directly, and webview panels
