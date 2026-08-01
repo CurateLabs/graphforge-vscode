@@ -42,11 +42,9 @@ jobs:
     name: Extension Development Host tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: build
-    # Downloads a real VS Code build and launches it headlessly under Xvfb; more
-    # environment-sensitive than the unit suite above. Non-blocking for now per
-    # docs/engineering/TESTING.md — promote to required once it's proven stable
-    # across several CI runs.
-    continue-on-error: true
+    # Downloads a real VS Code build and launches it headlessly under Xvfb.
+    # Blocking (issue #24 host-switch gate): this is the only automated detector
+    # for the builds-green-but-fails-to-activate failure class.
     steps:
       - name: Checkout
         uses: actions/checkout@v7
