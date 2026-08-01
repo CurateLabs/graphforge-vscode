@@ -5,7 +5,7 @@
 ```bash
 npm install
 npm run check      # tsc --noEmit
-npm run compile    # esbuild extension + tests
+npm run compile    # vite: extension host + test bundles + webview UI
 npm run test:unit  # FORMAT detector (plain mocha, no Electron)
 npm test           # @vscode/test-cli (Extension Development Host)
 ```
