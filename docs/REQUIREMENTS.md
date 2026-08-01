@@ -34,7 +34,7 @@ context, and view epistemic-aware result graphs.
 | NFR-1 | Compatibility | VS Code `^1.96`, Node `>=20` | Aligns with engine Node bindings. |
 | NFR-2 | Correctness boundary | No reimplementation of Cypher/verb/epistemic semantics in the extension (Node **or** Python path) | Engine is source of truth. |
 | NFR-3 | Portability | Native addon resolved via optional peer, config path, or sibling monorepo | Dev and CI can work without published npm binary. |
-| NFR-4 | License | Apache-2.0, publisher CurateLabs | Matches GraphForge engine. |
+| NFR-4 | License | Apache-2.0, publisher CurateLabsAI | Matches GraphForge engine. |
 | NFR-5 | Default runtime | `@graphforge/node` remains the global default for Node-ish and ambiguous workspaces; Python is preferred in `auto` only for Python-first workspaces (or as a fallback when Node is unavailable), and an explicit `graphforge.runtime` setting always overrides project-kind detection | Issue #12 constraint from product. |
 | NFR-6 | Fail-closed dual runtime | When neither runtime is usable, error messages and recovery actions must cover both setup paths | Issue #12 — no dead-end failures. |
 | NFR-7 | Python packaging | Python setup/install flows use `uv` exclusively (`uv add` / `uv pip install`); the extension never shells out to `pip` and does not fall back to it when `uv` is missing | Ship policy — uv only, never pip. |
@@ -67,4 +67,4 @@ context, and view epistemic-aware result graphs.
 ## Open questions
 
 - Belief-projection policy defaults for statusless subjects in the graph UI — extension owners.
-- Whether Marketplace publisher namespace is already claimed under CurateLabs — release owners.
+- Whether Marketplace publisher namespace is already claimed under CurateLabsAI — release owners.

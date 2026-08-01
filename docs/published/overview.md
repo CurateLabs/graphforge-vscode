@@ -1,6 +1,6 @@
 # Overview
 
-**GraphForge for VS Code** (`CurateLabs.graphforge`) brings [GraphForge](https://docs.graphforge.sh/)
+**GraphForge for VS Code** (`CurateLabsAI.graphforge`) brings [GraphForge](https://docs.graphforge.sh/)
 projects into the editor: an openCypher query surface, a set of analyst verbs (Rank, Cluster,
 Paths, Analyze, Similar, Find), a progressive ontology viewer, and an epistemic-aware result
 graph.

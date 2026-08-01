@@ -2,7 +2,7 @@
 
 Explore [GraphForge](https://docs.graphforge.sh/) projects in the editor: Cypher, analyst verbs, progressive ontology, and epistemic-aware result graphs.
 
-Publisher: **CurateLabs** (`CurateLabs.graphforge`).
+Publisher: **CurateLabsAI** (`CurateLabsAI.graphforge`).
 
 ## Features
 
