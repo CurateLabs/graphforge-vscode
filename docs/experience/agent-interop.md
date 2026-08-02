@@ -126,6 +126,8 @@ Source of truth: `package.json#contributes.commands`. All IDs are invoked as `vs
 | `graphforge.showOntology` | none | `void` (opens/reveals webview) | None | No — shows an empty/best-effort viewer without a project |
 | `graphforge.showResultGraph` | none | `void` (opens/reveals webview) | None | No — shows a demo graph when no result exists yet |
 | `graphforge.showResultGraphAdvanced` | none | `void` | 1 QuickPick + 1 `showInputBox` (belief-resolution policy) | No |
+| `graphforge.showFigure` | `{ figure }` (Plotly figure JSON: `data`, optional `layout`/`frames`) | `{ figure, panel: "opened"\|"updated" }` or `{ error, code, nextAction? }` | None when `figure` provided; missing figure → structured `FIGURE_REQUIRED` | No |
+| `graphforge.figureFromResult` | `{ chartType, x, y?, color?, title?, columns?, rows? }` or `{ table: { columns, rows }, … }` (`chartType`: `bar`\|`scatter`\|`histogram`\|`line`) | `{ figure, panel, chartType }` or `{ error, code, nextAction? }` / `{ cancelled: true }` | Chart/column QuickPicks when bindings incomplete; skipped when args complete | No — uses last session result or explicit table |
 | `graphforge.showCapabilities` | none | `void` (opens markdown doc) or nothing on failure | None (fire-and-forget error toast if no project) | Yes, to see real data |
 | `graphforge.loadOntology` | none | `void` | File picker | Yes |
 | `graphforge.openOntologyFile` | none | `void` (opens the committed ontology.json, or offers Load Ontology) | Button-bearing toast when no committed ontology exists | Yes, to open a real file |
@@ -152,12 +154,14 @@ flowchart TD
     C --> A
     D -->|result.error present| B
     D -->|success| E["Read QueryResult JSON from the return value or the opened document"]
+    E --> F["Optional: figureFromResult({ chartType, x, y, columns, rows }) or showFigure({ figure })"]
 ```
 
 1. **Check Environment** — `executeCommand("graphforge.checkEnvironment", { silent: true })`. Inspect `runtime.active` (`"node" | "python" | "none"`), `nodeBinding.available`, `python.available`, and `project.open`; the `nextAction` string always names the exact next command.
 2. **Setup / Init if needed** — if no runtime is usable, run `graphforge.setupNativeBinding` and/or `graphforge.setupPythonBinding` (each is one QuickPick with no args-based bypass yet; see [Gaps](#gaps--follow-ups)); if a runtime is ready but no project is open, run `graphforge.initializeProjectHere` (new project) or `graphforge.openProject(path)` (existing project — `path` is a plain string arg, no picker needed). Re-run step 1 to confirm.
 3. **Run Query / Rank** — once both are ready, call `graphforge.runQuery({ cypher, params })` for Cypher, or one of the verb commands for an analyst verb (these still need a QuickPick today).
 4. **Read the result** — either the `executeCommand` return value or the opened JSON document, per the table above. On failure, the returned object's `error`/`code`/`nextAction` fields (or the verb result's `{ error }`) tell you exactly what to do next — never a bare exception.
+5. **Optional chart** — call `graphforge.figureFromResult` with `chartType` + column bindings (and `columns`/`rows` or rely on the last session result), or `graphforge.showFigure({ figure })` with Plotly figure JSON from Python (`fig.to_dict()`) or JS. This opens the Figure panel; it does not replace Result Graph.
 
 ## Runtime note (Node vs. Python)
 

@@ -66,6 +66,8 @@ const ALL_COMMAND_IDS = [
   "graphforge.showOntology",
   "graphforge.showResultGraph",
   "graphforge.showResultGraphAdvanced",
+  "graphforge.showFigure",
+  "graphforge.figureFromResult",
   "graphforge.statusBarClick",
   "graphforge.showCapabilities",
   "graphforge.loadOntology",
@@ -189,6 +191,58 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     await assert.doesNotReject(
       Promise.resolve(vscode.commands.executeCommand("graphforge.showResultGraph")),
     );
+  });
+
+  test("showFigure with { figure } returns structured panel status without prompting (#62)", async () => {
+    const result = await vscode.commands.executeCommand<{
+      figure?: { data: unknown[] };
+      panel?: string;
+      error?: string;
+      code?: string;
+    }>("graphforge.showFigure", {
+      figure: {
+        data: [{ type: "bar", x: ["a", "b"], y: [1, 2] }],
+        layout: { title: { text: "agent figure" } },
+      },
+    });
+    assert.ok(result);
+    assert.equal(result.error, undefined);
+    assert.ok(result.figure?.data?.length);
+    assert.ok(result.panel === "opened" || result.panel === "updated");
+  });
+
+  test("showFigure without figure returns FIGURE_REQUIRED (#62)", async () => {
+    const result = await vscode.commands.executeCommand<{
+      error?: string;
+      code?: string;
+      nextAction?: string;
+    }>("graphforge.showFigure");
+    assert.ok(result);
+    assert.equal(result.code, "FIGURE_REQUIRED");
+    assert.ok(result.nextAction);
+  });
+
+  test("figureFromResult with table + bindings returns figure without prompting (#62)", async () => {
+    const result = await vscode.commands.executeCommand<{
+      figure?: { data: unknown[] };
+      panel?: string;
+      chartType?: string;
+      error?: string;
+    }>("graphforge.figureFromResult", {
+      chartType: "bar",
+      x: "label",
+      y: "score",
+      columns: ["label", "score"],
+      rows: [
+        { label: "a", score: 1 },
+        { label: "b", score: 2 },
+      ],
+    });
+    assert.ok(result);
+    assert.equal(result.error, undefined);
+    assert.equal(result.chartType, "bar");
+    assert.ok(result.figure?.data?.length);
+    assert.ok(result.panel === "opened" || result.panel === "updated");
   });
 
   test("showOntology does not throw", async () => {

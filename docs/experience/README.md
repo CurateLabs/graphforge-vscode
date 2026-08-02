@@ -25,14 +25,21 @@ owned elsewhere and omitted from this repo.
 - What threshold turns a finding into a requirement or product decision?
 Keep this practical; do not prescribe ceremony the team will not use. -->
 
-_How does the team learn from users and decide what is worth building?_
+Maintainer-stated feeling and product intent live in PRODUCT/DESIGN and focused
+experience files. External analyst interviews are not yet a routine practice —
+treat proto-persona claims as hypotheses until discovery validates them. Emotion
+audits and briefs may land under `.productfeeling/`; durable decisions stay here
+or in REQUIREMENTS.
 
 ## Experience principles
 
-<!-- LLM: Capture the cross-cutting qualities that should be true of every journey. Link to
-the corresponding design principle in ../DESIGN.md when one exists. -->
+- **Hunch over admin** — surfaces ask “what can I try next?” not “how do I administer a store?”
+- **Concierge without complexity** — guide the path; do not multiply controls or jargon.
+- **Fail clear, recover easy** — failures are legible and actionable.
+- **Honest waits** — long work announces itself; stuckness is distinguishable from progress.
+- **Return is first-class** — resuming is as easy as starting fresh.
 
-- _Principle — what it means for a user._
+See [`discovery-feeling.md`](./discovery-feeling.md) and [`../DESIGN.md`](../DESIGN.md#emotional-north-star).
 
 ## Artifact template
 
@@ -80,4 +87,5 @@ and give each a stable, descriptive lowercase-kebab-case filename. -->
 
 | Document | Kind | Status | What it informs |
 |---|---|---|---|
+| [discovery-feeling.md](./discovery-feeling.md) | Feeling / journey | Active | Emotional north star (uncovering hunches), need states, moments that matter, trust/anxiety, experience principles |
 | [agent-interop.md](./agent-interop.md) | Agent experience / product slice | Active | Stable `graphforge.*` command IDs, structured output shapes, and the Check Environment → Setup/Init → Run Query/Rank loop a coding agent should follow; gaps for #4 verb-args follow-up |

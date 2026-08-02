@@ -1,0 +1,12 @@
+{
+  "primaryFeeling": "exploring and uncovering hunches",
+  "antiGoals": ["complex", "brittle"],
+  "register": "tool-for-graphforge",
+  "docs": {
+    "northStar": "docs/DESIGN.md#emotional-north-star",
+    "experience": "docs/experience/discovery-feeling.md",
+    "positioning": "docs/strategy/positioning.md",
+    "product": "docs/PRODUCT.md"
+  },
+  "initializedAt": "2026-08-01"
+}

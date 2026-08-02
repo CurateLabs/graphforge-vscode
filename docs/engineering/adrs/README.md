@@ -30,4 +30,4 @@ carries inline guidance), then add a row to the log below.
 
 | ADR | Title | Status | Date |
 |---|---|---|---|
-| _0001_ | _short title_ | _Proposed_ | _YYYY-MM-DD_ |
+| [0001](./0001-plotly-figure-webview-csp.md) | Plotly Figure webview under Settings-strict CSP | Accepted | 2026-08-01 |

@@ -269,6 +269,14 @@
         "title": "GraphForge: Result Graph (Advanced)…"
       },
       {
+        "command": "graphforge.showFigure",
+        "title": "GraphForge: Show Figure"
+      },
+      {
+        "command": "graphforge.figureFromResult",
+        "title": "GraphForge: Figure from Result…"
+      },
+      {
         "command": "graphforge.statusBarClick",
         "title": "GraphForge: Status Bar"
       },
@@ -441,6 +449,29 @@
           ],
           "default": "guided",
           "description": "How much GraphForge confirms with you vs. acts on its own. Set from the Welcome step in Get Started, or here."
+        },
+        "graphforge.figureLimitsEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, reject Plotly figures that exceed figureMaxTraces / figureMaxPoints / figureMaxBytes. Off by default."
+        },
+        "graphforge.figureMaxTraces": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "description": "Maximum number of Plotly traces when figureLimitsEnabled is true."
+        },
+        "graphforge.figureMaxPoints": {
+          "type": "number",
+          "default": 100000,
+          "minimum": 1,
+          "description": "Approximate maximum x/y points across traces when figureLimitsEnabled is true."
+        },
+        "graphforge.figureMaxBytes": {
+          "type": "number",
+          "default": 10000000,
+          "minimum": 1,
+          "description": "Maximum serialized figure JSON size in bytes when figureLimitsEnabled is true."
         }
       }
     }
@@ -455,11 +486,12 @@
     "check": "tsc --noEmit && tsc --noEmit -p webview-ui",
     "lint": "npm run check",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js dist/test/figureFromResult.test.js dist/test/figureSchema.test.js",
     "package": "vsce package"
   },
   "dependencies": {
-    "apache-arrow": "^21.2.0"
+    "apache-arrow": "^21.2.0",
+    "plotly.js": "^3.7.0"
   },
   "peerDependencies": {
     "@curatelabs/graphforge": "^0.5.1",

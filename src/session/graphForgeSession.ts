@@ -272,7 +272,9 @@ export class GraphForgeSession implements vscode.Disposable {
   async execute(cypher: string, params?: Record<string, unknown>): Promise<QueryResult> {
     const backend = this.requireBackend();
     const buf = await backend.execute(cypher, params);
-    return decodeTable(buf);
+    const result = decodeTable(buf);
+    this.rememberResult(result, "Cypher result");
+    return result;
   }
 
   async invokeVerb(
@@ -340,7 +342,9 @@ export class GraphForgeSession implements vscode.Disposable {
       default:
         throw new Error(`Unknown verb: ${verb}`);
     }
-    return decodeTable(buf);
+    const result = decodeTable(buf);
+    this.rememberResult(result, verb);
+    return result;
   }
 
   /**
@@ -1152,8 +1156,7 @@ export class GraphForgeSession implements vscode.Disposable {
    * Graph` can refresh/re-resolve without re-running the query or verb.
    */
   async toGraphPayload(result: QueryResult, title?: string): Promise<GraphPayload> {
-    this.lastResult = result;
-    this.lastResultTitle = title;
+    this.rememberResult(result, title);
 
     const nodes = new Map<string, GraphNode>();
     const edges: GraphEdge[] = [];
@@ -1283,6 +1286,16 @@ export class GraphForgeSession implements vscode.Disposable {
 
   get hasLastResult(): boolean {
     return this.lastResult !== undefined;
+  }
+
+  /** Last Cypher/verb table result for Figure presets (#62) — undefined until one runs. */
+  getLastResult(): QueryResult | undefined {
+    return this.lastResult;
+  }
+
+  private rememberResult(result: QueryResult, title?: string): void {
+    this.lastResult = result;
+    this.lastResultTitle = title;
   }
 
   /**

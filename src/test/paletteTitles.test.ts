@@ -63,6 +63,7 @@ const ZERO_PROMPT_COMMAND_IDS = [
   "graphforge.listAssertions",
   "graphforge.showOntology",
   "graphforge.showResultGraph",
+  "graphforge.showFigure",
   "graphforge.showCapabilities",
   "graphforge.openOntologyFile",
   "graphforge.explainOntologyMode",

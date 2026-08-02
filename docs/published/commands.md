@@ -120,6 +120,8 @@ UUIDv7 (engine-enforced). Knowledge-ledger writes require the Node runtime.
 |---|---|
 | GraphForge: Show Result Graph | `graphforge.showResultGraph` |
 | GraphForge: Result Graph (Advanced)… | `graphforge.showResultGraphAdvanced` |
+| GraphForge: Show Figure | `graphforge.showFigure` |
+| GraphForge: Figure from Result… | `graphforge.figureFromResult` |
 | GraphForge: Show Project Capabilities | `graphforge.showCapabilities` |
 
 See [`agent-interop.md`](agent-interop.md) for which of these accept structured arguments and

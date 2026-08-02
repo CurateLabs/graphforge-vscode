@@ -24,6 +24,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         settings: resolve(here, "src/settings/main.ts"),
+        figure: resolve(here, "src/figure/main.ts"),
       },
       output: {
         entryFileNames: "[name].js",

@@ -67,7 +67,7 @@ export class SettingsPanel {
     return SettingsPanel.current;
   }
 
-  private async updateSetting(key: string, value: string | boolean): Promise<void> {
+  private async updateSetting(key: string, value: string | boolean | number): Promise<void> {
     const descriptor = allSettingDescriptors().find((setting) => setting.key === key);
     if (!descriptor) {
       return; // unknown key from a stale webview — ignore, never write
@@ -75,6 +75,10 @@ export class SettingsPanel {
     if (descriptor.type === "enum") {
       const valid = descriptor.options?.some((option) => option.value === value);
       if (!valid) {
+        return;
+      }
+    } else if (descriptor.type === "number") {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
         return;
       }
     } else if (typeof value !== (descriptor.type === "boolean" ? "boolean" : "string")) {

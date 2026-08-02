@@ -12,7 +12,7 @@
  * docs/DESIGN.md Voice: no infra jargon, always name the next action.
  */
 
-export type SettingValue = string | boolean;
+export type SettingValue = string | boolean | number;
 
 export interface SettingEnumOption {
   value: string;
@@ -26,7 +26,7 @@ export interface SettingDescriptor {
   label: string;
   /** One or two analyst-facing sentences. */
   description: string;
-  type: "boolean" | "string" | "enum";
+  type: "boolean" | "string" | "enum" | "number";
   default: SettingValue;
   /** Present iff `type === "enum"`. */
   options?: readonly SettingEnumOption[];
@@ -146,6 +146,36 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         type: "string",
         default: "",
         placeholder: "Auto-detect (Python extension, .venv, PATH)",
+      },
+      {
+        key: "figureLimitsEnabled",
+        label: "Enforce Figure size limits",
+        description:
+          "When on, reject Plotly figures that exceed max traces, points, or JSON bytes. Off by default so agents are not capped unless you opt in.",
+        type: "boolean",
+        default: false,
+      },
+      {
+        key: "figureMaxTraces",
+        label: "Figure max traces",
+        description: "Maximum number of Plotly traces when Figure size limits are enabled.",
+        type: "number",
+        default: 50,
+      },
+      {
+        key: "figureMaxPoints",
+        label: "Figure max points",
+        description:
+          "Approximate maximum x/y points across traces when Figure size limits are enabled.",
+        type: "number",
+        default: 100000,
+      },
+      {
+        key: "figureMaxBytes",
+        label: "Figure max JSON bytes",
+        description: "Maximum serialized figure JSON size when Figure size limits are enabled.",
+        type: "number",
+        default: 10000000,
       },
     ],
   },
