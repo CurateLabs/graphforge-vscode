@@ -11,11 +11,16 @@ import {
   resolveProjectMutationPath,
   scanProjectArtifacts,
   VISUALIZATION_SPEC_FORMAT,
+  VISUALIZATION_SPEC_FORMAT_V2,
   writeProjectMutation,
   writeProjectQuery,
   writeProjectQueryTemplate,
   writeProjectVisualization,
 } from "../session/projectArtifacts";
+import {
+  createDefaultChartSpec,
+  createDefaultResultGraphSpec,
+} from "../session/visualizationRegistry";
 
 suite("project artifacts", () => {
   test("writes, scans, and reloads query and visualization files", () => {
@@ -80,6 +85,85 @@ suite("project artifacts", () => {
     assert.match(
       readProjectVisualization(root, visualizationPath).name,
       /^vis-\d{8}-\d{6}-\d{3}$/,
+    );
+  });
+
+  test("reads existing v1 visualization JSON exactly without migration", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-artifact-v1-"));
+    fs.mkdirSync(path.join(root, "visualizations"), { recursive: true });
+    const original = {
+      format: VISUALIZATION_SPEC_FORMAT,
+      name: "Legacy routes",
+      kind: "result-graph",
+      result: "results/routes.json",
+      graph: { renderer: "cytoscape", layout: { gravity: 0.7 } },
+    };
+    const artifactPath = "visualizations/legacy.gfviz.json";
+    fs.writeFileSync(path.join(root, artifactPath), `${JSON.stringify(original, null, 2)}\n`);
+
+    const loaded = readProjectVisualization(root, artifactPath);
+
+    assert.deepEqual(loaded, original);
+    assert.equal(loaded.format, "graphforge.visualization/v1");
+    assert.equal(fs.readFileSync(path.join(root, artifactPath), "utf8"), `${JSON.stringify(original, null, 2)}\n`);
+  });
+
+  test("writes, scans, and reloads strict v2 graph and chart artifacts", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-artifact-v2-"));
+    fs.mkdirSync(path.join(root, "results"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "results", "routes.json"),
+      JSON.stringify({ columns: ["origin", "distance"], rows: [], rowCount: 0 }),
+    );
+    const graph = createDefaultResultGraphSpec({
+      name: "Routes",
+      result: "results/routes.json",
+    });
+    const chart = createDefaultChartSpec({
+      name: "Distances",
+      result: "results/routes.json",
+      mark: "bar",
+      x: "origin",
+      y: "distance",
+    });
+
+    const graphPath = writeProjectVisualization(root, graph.name, graph);
+    const chartPath = writeProjectVisualization(root, chart.name, chart);
+
+    assert.equal(readProjectVisualization(root, graphPath).format, VISUALIZATION_SPEC_FORMAT_V2);
+    assert.equal(readProjectVisualization(root, chartPath).kind, "chart");
+    assert.deepEqual(
+      scanProjectArtifacts(root).visualizations.map((item) => item.kind).sort(),
+      ["chart", "result-graph"],
+    );
+  });
+
+  test("rejects invalid v2 renderer, remote result, and executable values", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-artifact-v2-invalid-"));
+    fs.mkdirSync(path.join(root, "visualizations"), { recursive: true });
+    const graph = createDefaultResultGraphSpec({
+      name: "Routes",
+      result: "results/routes.json",
+    });
+    const invalidPath = path.join(root, "visualizations", "invalid.gfviz.json");
+    fs.writeFileSync(
+      invalidPath,
+      JSON.stringify({ ...graph, renderer: { id: "mystery", backend: "canvas" } }),
+    );
+    assert.throws(
+      () => readProjectVisualization(root, "visualizations/invalid.gfviz.json"),
+      /Invalid GraphForge visualization spec/,
+    );
+    assert.throws(
+      () => writeProjectVisualization(root, "remote", { ...graph, result: "https://example.com/result.json" }),
+      /Visualization settings are incomplete/,
+    );
+    assert.throws(
+      () => writeProjectVisualization(root, "executable", {
+        ...graph,
+        graph: { ...graph.graph, callback: () => undefined },
+      } as never),
+      /Visualization settings are incomplete/,
     );
   });
 

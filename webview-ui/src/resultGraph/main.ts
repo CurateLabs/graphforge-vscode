@@ -1,22 +1,41 @@
 import cytoscape, { type Core, type LayoutOptions } from "cytoscape";
-import Graph from "graphology";
+import {
+  EdgeEvent,
+  Graph as G6Graph,
+  NodeEvent,
+  type ElementDatum,
+  type GraphOptions,
+} from "@antv/g6";
+import Graphology from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import Sigma from "sigma";
+import { EdgeArrowProgram, EdgeRectangleProgram } from "sigma/rendering";
 import type { GraphPayload } from "../../../src/session/types";
 import {
   CLASS_COLOR_PALETTE,
   type HostToWebview,
+  type ResultGraphRenderPhase,
   type WebviewToHost,
 } from "../../../src/webview/protocol";
 import {
   classColor,
   classOf,
+  edgeLabel,
   graphItemColor,
   nodeLabel,
-  type ResultGraphLayoutOptions,
+  resolveResultGraphCytoscapeOptions,
+  resolveResultGraphG6Options,
+  resolveResultGraphSigmaOptions,
+  type EnabledResultGraphTimebarOptions,
   type ResultGraphRenderer,
+  type ResultGraphViewOptions,
 } from "../../../src/webview/resultGraphModel";
 import { scheduleInitialResultGraphLayout } from "../../../src/webview/resultGraphLayout";
+import type {
+  ResultGraphLayoutWorkerRequest,
+  ResultGraphLayoutWorkerResponse,
+} from "./layout.worker";
+import InlineLayoutWorker from "./layout.worker?worker&inline";
 import "./resultGraph.css";
 
 interface RendererHandle {
@@ -37,10 +56,12 @@ const banner = document.getElementById("banner");
 const footer = document.getElementById("footer");
 const fitButton = document.getElementById("fit") as HTMLButtonElement | null;
 const relayoutButton = document.getElementById("relayout") as HTMLButtonElement | null;
+const saveArtifactButton = document.getElementById("save-artifact") as HTMLButtonElement | null;
+const revertArtifactButton = document.getElementById("revert-artifact") as HTMLButtonElement | null;
 
 let payload: GraphPayload | undefined;
-let rendererKind: ResultGraphRenderer = "cytoscape";
-let layoutOptions: ResultGraphLayoutOptions = {};
+let rendererKind: ResultGraphRenderer = "g6";
+let viewOptions: Omit<ResultGraphViewOptions, "renderer"> = {};
 let renderer: RendererHandle | undefined;
 let runtimeBanner: string | undefined;
 
@@ -144,7 +165,11 @@ function renderChrome(current: GraphPayload): void {
   }
   if (rendererLabel) {
     rendererLabel.textContent =
-      rendererKind === "cytoscape" ? "Cytoscape renderer" : "Sigma renderer";
+      rendererKind === "g6"
+        ? "AntV G6 · Canvas"
+        : rendererKind === "cytoscape"
+          ? "Cytoscape renderer"
+          : "Sigma renderer";
   }
   renderLegend(current);
   showBanner();
@@ -166,20 +191,22 @@ function initialPosition(index: number, count: number): { x: number; y: number }
 }
 
 function cytoscapeLayout(cy: Core, fit: boolean): void {
-  const count = cy.nodes().length;
+  const resolved = resolveResultGraphCytoscapeOptions(
+    viewOptions,
+    cy.nodes().length,
+    cy.edges().length,
+  );
   const options: LayoutOptions = {
     name: "cose",
     animate: false,
     randomize: false,
     fit,
     padding: 36,
-    nodeRepulsion: () =>
-      layoutOptions.nodeRepulsion ?? (count > 400 ? 180_000 : 90_000),
-    idealEdgeLength: () =>
-      layoutOptions.idealEdgeLength ?? (count > 400 ? 42 : 70),
+    nodeRepulsion: () => resolved.layout.nodeRepulsion,
+    idealEdgeLength: () => resolved.layout.idealEdgeLength,
     edgeElasticity: () => 100,
-    gravity: layoutOptions.gravity ?? 0.7,
-    numIter: count > 400 ? 400 : 900,
+    gravity: resolved.layout.gravity,
+    numIter: resolved.layout.maxIterations,
   };
   cy.layout(options).run();
 }
@@ -191,7 +218,12 @@ function createCytoscape(current: GraphPayload): RendererHandle {
   const foreground = themeValue("--vscode-editor-foreground", "#cccccc");
   const muted = themeValue("--vscode-descriptionForeground", "#8c8c8c");
   const knownNodes = new Set(current.nodes.map((node) => node.id));
-  const showEdgeLabels = current.edges.length <= 350;
+  const resolved = resolveResultGraphCytoscapeOptions(
+    viewOptions,
+    current.nodes.length,
+    current.edges.length,
+  );
+  const density = resolved.visualDensity;
   const cy = cytoscape({
     container: graphElement,
     elements: [
@@ -199,7 +231,9 @@ function createCytoscape(current: GraphPayload): RendererHandle {
         group: "nodes" as const,
         data: {
           id: node.id,
-          label: nodeLabel(node).slice(0, 32),
+          label: density.showNodeLabels
+            ? nodeLabel(node, viewOptions.labels).slice(0, 32)
+            : "",
           classLabel: classOf(node).slice(0, 14),
           color: graphItemColor(node, current),
         },
@@ -213,7 +247,9 @@ function createCytoscape(current: GraphPayload): RendererHandle {
             id: edge.id,
             source: edge.source,
             target: edge.target,
-            label: showEdgeLabels ? edge.type : "",
+            label: density.showEdgeLabels
+              ? edgeLabel(edge, viewOptions.labels)
+              : "",
             color: graphItemColor(edge, current),
           },
         })),
@@ -232,19 +268,19 @@ function createCytoscape(current: GraphPayload): RendererHandle {
           "text-margin-y": 7,
           "text-outline-color": themeValue("--vscode-editor-background", "#1e1e1e"),
           "text-outline-width": 2,
-          width: current.nodes.length > 400 ? 12 : 22,
-          height: current.nodes.length > 400 ? 12 : 22,
+          width: density.nodeSize,
+          height: density.nodeSize,
         },
       },
       {
         selector: "edge",
         style: {
-          width: current.edges.length > 2_000 ? 0.55 : 1.3,
+          width: density.edgeWidth,
           "line-color":
             current.styleMode === "class-only" ? muted : "data(color)",
           "target-arrow-color":
             current.styleMode === "class-only" ? muted : "data(color)",
-          "target-arrow-shape": current.edges.length > 2_000 ? "none" : "triangle",
+          "target-arrow-shape": density.arrowheads ? "triangle" : "none",
           "curve-style": "bezier",
           label: "data(label)",
           color: muted,
@@ -316,13 +352,25 @@ function createSigma(current: GraphPayload): RendererHandle {
   if (!graphElement) {
     throw new Error("Graph container missing");
   }
-  const graph = new Graph({ multi: true, type: "directed", allowSelfLoops: true });
+  const graph = new Graphology({
+    multi: true,
+    type: "directed",
+    allowSelfLoops: true,
+  });
+  const resolved = resolveResultGraphSigmaOptions(
+    viewOptions,
+    current.nodes.length,
+    current.edges.length,
+  );
+  const density = resolved.visualDensity;
   for (const [index, node] of current.nodes.entries()) {
     graph.addNode(node.id, {
       ...initialPosition(index, current.nodes.length),
-      size: current.nodes.length > 400 ? 2.5 : 5,
+      size: density.nodeSize,
       color: graphItemColor(node, current),
-      label: nodeLabel(node).slice(0, 40),
+      label: density.showNodeLabels
+        ? nodeLabel(node, viewOptions.labels).slice(0, 40)
+        : "",
     });
   }
   const edgeKeys = new Set<string>();
@@ -341,19 +389,28 @@ function createSigma(current: GraphPayload): RendererHandle {
         : graphItemColor(edge, current);
     graph.addDirectedEdgeWithKey(key, edge.source, edge.target, {
       payloadId: edge.id,
-      size: current.edges.length > 2_000 ? 0.35 : 1,
+      size: density.edgeWidth,
       color,
       baseColor: color,
-      label: current.edges.length <= 350 ? edge.type : "",
+      label: density.showEdgeLabels
+        ? edgeLabel(edge, viewOptions.labels)
+        : "",
     });
   }
 
-  const iterations = current.nodes.length > 400 ? 45 : 90;
+  const artifact = viewOptions.source === "artifact-v2";
   const sigma = new Sigma(graph, graphElement, {
     enableEdgeEvents: true,
-    renderEdgeLabels: current.edges.length <= 350,
+    renderLabels: density.showNodeLabels,
+    renderEdgeLabels: density.showEdgeLabels,
+    edgeProgramClasses: {
+      arrow: EdgeArrowProgram,
+      rectangle: EdgeRectangleProgram,
+    },
+    defaultEdgeType: density.arrowheads ? "arrow" : "rectangle",
     labelColor: { color: themeValue("--vscode-editor-foreground", "#cccccc") },
-    labelDensity: current.nodes.length > 400 ? 0.25 : 1,
+    labelDensity: artifact ? 1 : current.nodes.length > 400 ? 0.25 : 1,
+    ...(artifact ? { labelRenderedSizeThreshold: 0 } : {}),
     minCameraRatio: 0.02,
     maxCameraRatio: 12,
   });
@@ -382,13 +439,12 @@ function createSigma(current: GraphPayload): RendererHandle {
     },
     relayout: () => {
       forceAtlas2.assign(graph, {
-        iterations,
+        iterations: resolved.layout.iterations,
         settings: {
           ...forceAtlas2.inferSettings(graph),
-          barnesHutOptimize: current.nodes.length > 200,
-          gravity: layoutOptions.gravity ?? 1,
-          slowDown:
-            layoutOptions.slowDown ?? (current.nodes.length > 400 ? 8 : 3),
+          barnesHutOptimize: resolved.layout.barnesHutOptimize,
+          gravity: resolved.layout.gravity,
+          slowDown: resolved.layout.slowDown,
         },
       });
       sigma.refresh();
@@ -403,8 +459,8 @@ function createSigma(current: GraphPayload): RendererHandle {
           node,
           "size",
           selectedNodes.has(node)
-            ? (current.nodes.length > 400 ? 5 : 9)
-            : (current.nodes.length > 400 ? 2.5 : 5),
+            ? density.nodeSize * 1.8
+            : density.nodeSize,
         );
       });
       graph.forEachEdge((edge) => {
@@ -413,7 +469,7 @@ function createSigma(current: GraphPayload): RendererHandle {
           "size",
           selectedEdges.has(edge)
             ? 4
-            : (current.edges.length > 2_000 ? 0.35 : 1),
+            : density.edgeWidth,
         );
         graph.setEdgeAttribute(
           edge,
@@ -426,6 +482,521 @@ function createSigma(current: GraphPayload): RendererHandle {
       sigma.refresh();
     },
   };
+}
+
+class ResultGraphRuntimeError extends Error {
+  constructor(
+    readonly phase: ResultGraphRenderPhase,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ResultGraphRuntimeError";
+  }
+}
+
+class ResultGraphLayoutCancelled extends Error {
+  constructor() {
+    super("The superseded G6 layout was cancelled.");
+    this.name = "ResultGraphLayoutCancelled";
+  }
+}
+
+interface G6LayoutTask {
+  promise: Promise<ResultGraphLayoutWorkerResponse & { ok: true }>;
+  cancel(): void;
+}
+
+function startG6Layout(request: ResultGraphLayoutWorkerRequest): G6LayoutTask {
+  const worker = new InlineLayoutWorker({ type: "module" });
+  let settled = false;
+  let rejectTask: (error: Error) => void = () => undefined;
+  const promise = new Promise<ResultGraphLayoutWorkerResponse & { ok: true }>(
+    (resolve, reject) => {
+      rejectTask = reject;
+      worker.onmessage = (
+        event: MessageEvent<ResultGraphLayoutWorkerResponse>,
+      ) => {
+        if (settled) return;
+        settled = true;
+        worker.terminate();
+        if (event.data.ok) {
+          resolve(event.data);
+        } else {
+          reject(
+            new ResultGraphRuntimeError(
+              "layout",
+              event.data.code,
+              event.data.message,
+            ),
+          );
+        }
+      };
+      worker.onerror = () => {
+        if (settled) return;
+        settled = true;
+        worker.terminate();
+        reject(
+          new ResultGraphRuntimeError(
+            "layout",
+            "GF_G6_LAYOUT_WORKER_FAILED",
+            "The G6 layout worker could not start.",
+          ),
+        );
+      };
+      worker.postMessage(request);
+    },
+  );
+  return {
+    promise,
+    cancel: () => {
+      if (settled) return;
+      settled = true;
+      worker.terminate();
+      rejectTask(new ResultGraphLayoutCancelled());
+    },
+  };
+}
+
+function parseTimebarValue(
+  raw: unknown,
+  field: string,
+  options: EnabledResultGraphTimebarOptions,
+): number {
+  if (options.format === "epoch-ms") {
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return raw;
+    }
+    throw new ResultGraphRuntimeError(
+      "initialize",
+      "GF_G6_TIMEBAR_VALUE_INVALID",
+      `Timebar field ${field} must contain finite epoch-millisecond numbers.`,
+    );
+  }
+  if (
+    typeof raw !== "string" ||
+    !/(?:Z|[+-]\d{2}:\d{2})$/.test(raw)
+  ) {
+    throw new ResultGraphRuntimeError(
+      "initialize",
+      "GF_G6_TIMEBAR_VALUE_INVALID",
+      `Timebar field ${field} must contain ISO-8601 timestamps with an explicit offset.`,
+    );
+  }
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) {
+    throw new ResultGraphRuntimeError(
+      "initialize",
+      "GF_G6_TIMEBAR_VALUE_INVALID",
+      `Timebar field ${field} contains an invalid ISO-8601 timestamp.`,
+    );
+  }
+  return parsed;
+}
+
+function prepareTimebar(
+  current: GraphPayload,
+  renderedEdges: GraphPayload["edges"],
+  options: EnabledResultGraphTimebarOptions | undefined,
+): {
+  nodeTimes: Map<string, number>;
+  edgeTimes: Map<string, number>;
+  data: number[];
+} {
+  const nodeTimes = new Map<string, number>();
+  const edgeTimes = new Map<string, number>();
+  if (!options) {
+    return { nodeTimes, edgeTimes, data: [] };
+  }
+  if (
+    options.elementTypes.length === 0 ||
+    !options.values.every(Number.isFinite) ||
+    options.values[0] > options.values[1]
+  ) {
+    throw new ResultGraphRuntimeError(
+      "initialize",
+      "GF_G6_TIMEBAR_OPTIONS_INVALID",
+      "The saved Timebar configuration is incomplete or invalid.",
+    );
+  }
+  if (options.elementTypes.includes("node")) {
+    if (!options.nodeField) {
+      throw new ResultGraphRuntimeError("initialize", "GF_G6_TIMEBAR_OPTIONS_INVALID", "Node Timebar filtering requires nodeField.");
+    }
+    for (const node of current.nodes) {
+      nodeTimes.set(
+        node.id,
+        parseTimebarValue(node.properties[options.nodeField], options.nodeField, options),
+      );
+    }
+  }
+  if (options.elementTypes.includes("edge")) {
+    if (!options.edgeField) {
+      throw new ResultGraphRuntimeError("initialize", "GF_G6_TIMEBAR_OPTIONS_INVALID", "Edge Timebar filtering requires edgeField.");
+    }
+    for (const edge of renderedEdges) {
+      edgeTimes.set(
+        edge.id,
+        parseTimebarValue(edge.properties?.[options.edgeField], options.edgeField, options),
+      );
+    }
+  }
+  return {
+    nodeTimes,
+    edgeTimes,
+    data: [...new Set([...nodeTimes.values(), ...edgeTimes.values()])].sort(
+      (left, right) => left - right,
+    ),
+  };
+}
+
+function createG6(current: GraphPayload): RendererHandle {
+  if (!graphElement) {
+    throw new ResultGraphRuntimeError(
+      "initialize",
+      "GF_G6_CONTAINER_MISSING",
+      "Graph container missing.",
+    );
+  }
+
+  const options = resolveResultGraphG6Options(viewOptions);
+  if (options.backend !== "canvas") {
+    throw new ResultGraphRuntimeError(
+      "initialize",
+      "GF_G6_BACKEND_UNSUPPORTED",
+      `G6 backend ${String(options.backend)} is not installed.`,
+    );
+  }
+
+  const foreground = themeValue("--vscode-editor-foreground", "#cccccc");
+  const muted = themeValue("--vscode-descriptionForeground", "#8c8c8c");
+  const focus = themeValue("--vscode-focusBorder", "#4c6ef5");
+  const knownNodes = new Set(current.nodes.map((node) => node.id));
+  const renderedEdges = current.edges.filter(
+    (edge) => knownNodes.has(edge.source) && knownNodes.has(edge.target),
+  );
+  const temporal = prepareTimebar(current, renderedEdges, options.timebar);
+  const plugins: GraphOptions["plugins"] = options.timebar
+    ? [
+        {
+          type: "timebar",
+          key: "graphforge-timebar",
+          data: temporal.data,
+          timebarType: "time",
+          elementTypes: options.timebar.elementTypes,
+          mode: "visibility",
+          values: options.timebar.values,
+          position: options.timebar.position,
+          width: options.timebar.width,
+          height: options.timebar.height,
+          loop: options.timebar.loop,
+          getTime: (datum: ElementDatum) => {
+            const time = datum.data?.graphforgeTime;
+            return typeof time === "number" ? time : Number.NaN;
+          },
+          onChange: (values: number | [number, number]) => {
+            post({
+              type: "graphforge/timebarChanged",
+              values: Array.isArray(values) ? values : [values, values],
+            });
+          },
+        },
+      ]
+    : [];
+  const density = options.visualDensity;
+  const g6 = new G6Graph({
+    container: graphElement,
+    data: {
+      nodes: current.nodes.map((node, index) => ({
+        id: node.id,
+        data: { graphforgeTime: temporal.nodeTimes.get(node.id) },
+        style: {
+          ...initialPosition(index, current.nodes.length),
+          size: density.nodeSize,
+          fill: graphItemColor(node, current),
+          stroke: foreground,
+          lineWidth: 1,
+          labelText: density.showNodeLabels
+            ? nodeLabel(node, viewOptions.labels).slice(0, 40)
+            : "",
+          labelFill: foreground,
+          labelFontSize: 10,
+          labelOffsetY: 7,
+          labelBackground: false,
+        },
+      })),
+      edges: renderedEdges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        data: { graphforgeTime: temporal.edgeTimes.get(edge.id) },
+        style: {
+          stroke:
+            current.styleMode === "class-only"
+              ? muted
+              : graphItemColor(edge, current),
+          lineWidth: density.edgeWidth,
+          endArrow: density.arrowheads,
+          labelText: density.showEdgeLabels
+            ? edgeLabel(edge, viewOptions.labels)
+            : "",
+          labelFill: muted,
+          labelFontSize: 8,
+          labelBackground: false,
+        },
+      })),
+    },
+    animation: false,
+    padding: options.timebar
+      ? [16, 16, options.timebar.height + 16, 16]
+      : 16,
+    zoomRange: [0.03, 8],
+    behaviors: [
+      "drag-canvas",
+      "zoom-canvas",
+      { type: "click-select", multiple: true, state: "selected" },
+    ],
+    plugins,
+    node: {
+      state: {
+        selected: { stroke: focus, lineWidth: 4, halo: true },
+        highlight: { stroke: focus, lineWidth: 4, halo: true },
+      },
+    },
+    edge: {
+      state: {
+        selected: { stroke: focus, lineWidth: 4 },
+        highlight: { stroke: focus, lineWidth: 4 },
+      },
+    },
+  });
+
+  g6.on(NodeEvent.CLICK, (event) => {
+    const id = (event as unknown as { target: { id: string } }).target.id;
+    post({
+      type: "graphforge/selectNode",
+      id,
+      shiftKey: shiftKeyFromPointerPayload(event),
+    });
+  });
+  g6.on(EdgeEvent.CLICK, (event) => {
+    const id = (event as unknown as { target: { id: string } }).target.id;
+    post({
+      type: "graphforge/selectEdge",
+      id,
+      shiftKey: shiftKeyFromPointerPayload(event),
+    });
+  });
+
+  let destroyed = false;
+  let hasRendered = false;
+  let activeLayout: G6LayoutTask | undefined;
+  let highlighted = new Set<string>();
+  const renderStartedAt = performance.now();
+  let renderInProgress = false;
+  let renderRuntimeError: Error | undefined;
+
+  const captureRenderError = (event: ErrorEvent): void => {
+    if (!renderInProgress || renderRuntimeError) return;
+    renderRuntimeError =
+      event.error instanceof Error
+        ? event.error
+        : new Error(event.message || "The Canvas renderer raised an asynchronous error.");
+  };
+  window.addEventListener("error", captureRenderError);
+
+  const waitForCanvasPaint = async (): Promise<void> => {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    if (renderRuntimeError) {
+      throw new ResultGraphRuntimeError(
+        "render",
+        "GF_G6_CANVAS_RENDER_ERROR",
+        renderRuntimeError.message,
+      );
+    }
+    const canvases = [...graphElement.querySelectorAll("canvas")];
+    const hasVisiblePixels = canvases.some((canvas) => {
+      const context = canvas.getContext("2d");
+      if (!context || canvas.width === 0 || canvas.height === 0) return false;
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      for (let alpha = 3; alpha < pixels.length; alpha += 4) {
+        if (pixels[alpha] !== 0) return true;
+      }
+      return false;
+    });
+    if (!hasVisiblePixels) {
+      throw new ResultGraphRuntimeError(
+        "render",
+        "GF_G6_CANVAS_EMPTY",
+        "G6 completed without painting visible Canvas pixels.",
+      );
+    }
+  };
+
+  const reportAsyncFailure = (error: unknown): void => {
+    if (destroyed || error instanceof ResultGraphLayoutCancelled) return;
+    const failure =
+      error instanceof ResultGraphRuntimeError
+        ? error
+        : new ResultGraphRuntimeError(
+            hasRendered ? "render" : "initialize",
+            "GF_G6_RENDER_FAILED",
+            error instanceof Error ? error.message : String(error),
+          );
+    reportRenderFailure("g6", failure);
+    if (!hasRendered) {
+      destroyed = true;
+      g6.destroy();
+      setEmpty("The G6 graph could not be rendered.");
+      if (fitButton) fitButton.disabled = true;
+      if (relayoutButton) relayoutButton.disabled = true;
+    }
+  };
+
+  const relayout = async (): Promise<void> => {
+    const width = graphElement.clientWidth;
+    const height = graphElement.clientHeight;
+    if (!(width > 0) || !(height > 0)) {
+      throw new ResultGraphRuntimeError(
+        "layout",
+        "GF_G6_INVALID_VIEWPORT",
+        "The graph viewport has no measurable size.",
+      );
+    }
+    activeLayout?.cancel();
+    const layoutStartedAt = performance.now();
+    post({
+      type: "graphforge/layoutStarted",
+      renderer: "g6",
+      layout: options.layout.type,
+      execution: options.layout.execution,
+    });
+    activeLayout = startG6Layout({
+      nodes: current.nodes.map((node, index) => ({
+        id: node.id,
+        ...initialPosition(index, current.nodes.length),
+      })),
+      edges: renderedEdges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+      })),
+      width,
+      height,
+      options: {
+        maxIteration: options.layout.maxIteration,
+        barnesHut: options.layout.barnesHut,
+        prune: options.layout.prune,
+        preventOverlap: options.layout.preventOverlap,
+        dissuadeHubs: options.layout.dissuadeHubs,
+        nodeSize: options.layout.nodeSize,
+        nodeSpacing: options.layout.nodeSpacing,
+        kr: options.layout.kr,
+        kg: options.layout.kg,
+        ks: options.layout.ks,
+        ksmax: options.layout.ksmax,
+        tao: options.layout.tao,
+        mode: options.layout.mode,
+      },
+    });
+    const result = await activeLayout.promise;
+    post({
+      type: "graphforge/layoutReady",
+      renderer: "g6",
+      layout: options.layout.type,
+      execution: options.layout.execution,
+      durationMs: performance.now() - layoutStartedAt,
+    });
+    if (destroyed) return;
+    g6.updateNodeData(
+      result.positions.map((position) => ({
+        id: position.id,
+        style: { x: position.x, y: position.y },
+      })),
+    );
+    renderRuntimeError = undefined;
+    renderInProgress = true;
+    try {
+      if (hasRendered) {
+        await g6.draw();
+      } else {
+        await g6.render();
+      }
+      await g6.fitView({ when: "always" }, false);
+      await waitForCanvasPaint();
+    } finally {
+      renderInProgress = false;
+    }
+    if (!hasRendered) {
+      hasRendered = true;
+      post({
+        type: "graphforge/renderReady",
+        renderer: "g6",
+        backend: options.backend,
+        nodeCount: current.nodes.length,
+        edgeCount: renderedEdges.length,
+        durationMs: performance.now() - renderStartedAt,
+      });
+    }
+  };
+
+  return {
+    destroy: () => {
+      destroyed = true;
+      activeLayout?.cancel();
+      window.removeEventListener("error", captureRenderError);
+      g6.destroy();
+    },
+    fit: () => {
+      if (hasRendered) {
+        void g6.fitView({ when: "always" }, false).catch(reportAsyncFailure);
+      }
+    },
+    relayout: () => {
+      void relayout().catch(reportAsyncFailure);
+    },
+    highlight: (nodeIds, edgeIds) => {
+      if (!hasRendered) return;
+      const next = new Set([...nodeIds, ...edgeIds]);
+      const states: Record<string, string[]> = {};
+      for (const id of highlighted) states[id] = [];
+      for (const id of next) states[id] = ["highlight"];
+      highlighted = next;
+      void g6
+        .setElementState(states, false)
+        .then(() => (next.size > 0 ? g6.focusElement([...next], false) : undefined))
+        .catch(reportAsyncFailure);
+    },
+  };
+}
+
+function reportRenderFailure(
+  failedRenderer: ResultGraphRenderer,
+  error: unknown,
+): void {
+  const failure =
+    error instanceof ResultGraphRuntimeError
+      ? error
+      : new ResultGraphRuntimeError(
+          "initialize",
+          "GF_RESULT_GRAPH_RENDER_FAILED",
+          error instanceof Error ? error.message : String(error),
+        );
+  const resolved =
+    failedRenderer === "g6" ? resolveResultGraphG6Options(viewOptions) : undefined;
+  post({
+    type: "graphforge/renderFailed",
+    renderer: failedRenderer,
+    phase: failure.phase,
+    code: failure.code,
+    backend: resolved?.backend,
+    layout: resolved?.layout.type,
+    message: failure.message,
+  });
+  runtimeBanner = `${failedRenderer === "g6" ? "AntV G6" : failedRenderer === "sigma" ? "Sigma" : "Cytoscape"} failed during ${failure.phase} (${failure.code}): ${failure.message}`;
+  showBanner();
 }
 
 function bindRenderer(nextRenderer: RendererHandle): void {
@@ -464,25 +1035,81 @@ function render(): void {
   if (fitButton) fitButton.disabled = false;
   if (relayoutButton) relayoutButton.disabled = false;
   try {
-    bindRenderer(
-      rendererKind === "sigma" ? createSigma(payload) : createCytoscape(payload),
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    post({ type: "graphforge/renderFailed", renderer: rendererKind, message });
-    if (rendererKind === "sigma") {
-      runtimeBanner = `Sigma could not start (${message}). Showing Cytoscape for this graph.`;
-      bindRenderer(createCytoscape(payload));
-    } else {
-      runtimeBanner = `Could not render graph: ${message}`;
-      setEmpty("The graph could not be rendered.");
+    const renderStartedAt = performance.now();
+    post({
+      type: "graphforge/renderStarted",
+      renderer: rendererKind,
+      backend: viewOptions.backend,
+      layout: viewOptions.layout?.type,
+      nodeCount: payload.nodes.length,
+      edgeCount: payload.edges.length,
+    });
+    const nextRenderer =
+      rendererKind === "g6"
+        ? createG6(payload)
+        : rendererKind === "sigma"
+          ? createSigma(payload)
+          : createCytoscape(payload);
+    bindRenderer(nextRenderer);
+    if (rendererKind !== "g6") {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (renderer === nextRenderer) {
+            post({
+              type: "graphforge/renderReady",
+              renderer: rendererKind,
+              backend: viewOptions.backend,
+              nodeCount: payload?.nodes.length ?? 0,
+              edgeCount: payload?.edges.length ?? 0,
+              durationMs: performance.now() - renderStartedAt,
+            });
+          }
+        });
+      });
     }
-    showBanner();
+  } catch (error) {
+    reportRenderFailure(rendererKind, error);
+    setEmpty("The selected graph renderer could not be started.");
+    if (fitButton) fitButton.disabled = true;
+    if (relayoutButton) relayoutButton.disabled = true;
   }
 }
 
-fitButton?.addEventListener("click", () => renderer?.fit());
-relayoutButton?.addEventListener("click", () => renderer?.relayout());
+function runRendererAction(
+  phase: ResultGraphRenderPhase,
+  code: string,
+  action: () => void,
+): void {
+  try {
+    action();
+  } catch (error) {
+    reportRenderFailure(
+      rendererKind,
+      new ResultGraphRuntimeError(
+        phase,
+        code,
+        error instanceof Error ? error.message : String(error),
+      ),
+    );
+  }
+}
+
+fitButton?.addEventListener("click", () => {
+  runRendererAction("interaction", "GF_RESULT_GRAPH_FIT_FAILED", () =>
+    renderer?.fit(),
+  );
+});
+relayoutButton?.addEventListener("click", () => {
+  runRendererAction("layout", "GF_RESULT_GRAPH_LAYOUT_FAILED", () =>
+    renderer?.relayout(),
+  );
+});
+saveArtifactButton?.addEventListener("click", () => {
+  post({ type: "graphforge/saveGraphArtifactState" });
+});
+revertArtifactButton?.addEventListener("click", () => {
+  post({ type: "graphforge/revertGraphArtifactState" });
+});
 
 window.addEventListener("message", (event: MessageEvent<HostToWebview>) => {
   const message = event.data;
@@ -499,18 +1126,40 @@ window.addEventListener("message", (event: MessageEvent<HostToWebview>) => {
       render();
     }
   } else if (message.type === "graphforge/graphOptions") {
-    layoutOptions = message.layout ?? {};
+    viewOptions = {
+      backend: message.backend,
+      source: message.source,
+      layout: message.layout,
+      visualDensity: message.visualDensity,
+      labels: message.labels,
+      timebar: message.timebar,
+    };
     if (renderer && payload) {
       render();
     }
+  } else if (message.type === "graphforge/graphArtifactState") {
+    if (saveArtifactButton) {
+      saveArtifactButton.hidden = !message.saved;
+      saveArtifactButton.disabled = !message.dirty;
+    }
+    if (revertArtifactButton) {
+      revertArtifactButton.hidden = !message.saved;
+      revertArtifactButton.disabled = !message.dirty;
+    }
   } else if (message.type === "graphforge/highlightGraphElements") {
-    renderer?.highlight(message.nodeIds, message.edgeIds);
+    runRendererAction(
+      "interaction",
+      "GF_RESULT_GRAPH_HIGHLIGHT_FAILED",
+      () => renderer?.highlight(message.nodeIds, message.edgeIds),
+    );
   }
 });
 
 window.addEventListener("resize", () => {
   if (renderer && payload) {
-    renderer.fit();
+    runRendererAction("interaction", "GF_RESULT_GRAPH_RESIZE_FAILED", () =>
+      renderer?.fit(),
+    );
   }
 });
 

@@ -98,6 +98,11 @@ export class ResultTableViewProvider
     this.postState();
   }
 
+  /** Link a visualization's accessible companion row through the Results surface. */
+  selectRow(rowIndex: number): void {
+    this.selectResult(rowIndex);
+  }
+
   /** Reopen the Results panel from persistent workbench controls. */
   async reveal(): Promise<void> {
     await vscode.commands.executeCommand(

@@ -28,6 +28,7 @@ Requires `@vscode/test-electron` ≥ 3.1.0 on macOS (VS Code 1.110+ ships `Code`
 | Result Graph | `src/test/resultGraphModel.test.ts`, `settingsSchema.test.ts`, `extension.test.ts` | Renderer default/options, styling helpers, selection-message resolution, live setting-switch host smoke |
 | Module activation | `src/test/extension.test.ts` | First-party module commands, exported registration API, and Module Bay command/panel activation |
 | Results ↔ graph linking | `src/test/resultTableModel.test.ts`, `quickstart.e2e.test.ts` | Identity/endpoint matching plus the air-routes-scale integration path |
+| Visualization artifacts (#67) | `src/test/projectArtifacts.test.ts`, `settingsSchema.test.ts`, `quickstartSample.test.ts` | v1 read compatibility; strict v2 validation; explicit G6/G2/L7 defaults, bindings, coordinates, and time configuration; project-owned sample artifacts |
 
 ### Python runtime testing notes (#12)
 
@@ -65,21 +66,85 @@ CI’s required `build` job does **not** install the native peer; the e2e case i
 expected to skip there. Local/dev hosts with a sibling
 `../graphforge/crates/graphforge-bindings-node` (or installed peer) should see it pass.
 
-## Result Graph manual EH matrix (#65)
+## Visualization Extension Development Host matrix (#67)
 
-Run the Extension Development Host in both light and dark themes:
+Run the packaged extension in light, dark, and high-contrast themes. Keep the
+developer console open to catch CSP and worker errors.
 
-1. Open an epistemic payload and a class-only payload with Cytoscape; verify legends,
-   banner/empty states, pan, zoom, Fit, Re-layout, node inspect, and edge inspect.
-2. Keep the panel open and change **Result Graph renderer** to Sigma in GraphForge Settings;
-   verify the same payload re-renders without reloading the host and repeat the interactions.
-3. Run the quickstart air-routes query (roughly 586 nodes / 7.4k edges) in both renderers;
-   verify layout completes and pan/zoom remains usable. Large-graph label/arrow reduction is
-   expected.
-4. Disable WebGL (or use a host without it), select Sigma, and verify the in-panel fallback
-   banner appears and Cytoscape renders the retained payload.
-5. Confirm both Get Started result CTAs still open distinct panels: Result Graph uses the
-   selected graph renderer and Figure remains Plotly.
+1. Create a Result Graph through the normal UI. Inspect its saved v2 artifact and
+   confirm it explicitly records G6, Canvas, ForceAtlas2 worker execution,
+   animation, styling, interaction, and filters before the panel opens.
+2. Reopen the artifact, change the global default, and reopen it again. The saved
+   renderer and behavior must not change. Then create a new artifact and confirm
+   only the new file uses the changed creation default.
+3. Open committed v1 Cytoscape, Sigma, and Plotly fixtures. Confirm they render
+   without rewriting their bytes. Exercise pan, zoom, Fit, Re-layout, selection,
+   and linked Results behavior for each applicable graph renderer.
+4. Create and reopen a G2 analytical artifact with explicit encodings,
+   transforms, filters, scales, and presentation. Exercise the retained raw
+   Plotly preview and confirm it is visibly unsaved until **Save visualization**
+   creates a project artifact.
+5. Create and reopen an L7 geospatial artifact with explicit longitude/latitude
+   or GeoJSON binding, CRS, projection, layer order, blank offline basemap, and
+   viewport. Disable the network and confirm there are no fetch attempts, tokens,
+   CSP violations, or hidden remote tiles.
+6. Create and reopen a G2 temporal artifact with explicit timestamp, timezone,
+   granularity, range, aggregation, and playback. Enable G6 Timebar only through
+   explicit graph bindings; a date-like column alone must not create one.
+7. Change material UI state, verify a visible dirty state, then exercise Save and
+   Revert. Reload the Extension Development Host and confirm saved state reopens
+   while hover, transient selection, and the current playback frame do not become
+   persistent accidentally.
+8. Force G6, G2, L7, Sigma, and Plotly construction failures. Confirm a stable
+   `renderFailed` code and next action, the original artifact remains unchanged,
+   and no renderer, backend, layout, field, sampling, or projection fallback
+   occurs.
+9. Use keyboard-only navigation and a screen reader to verify controls, textual
+   summary, underlying rows/entities, current filters/range, and selection
+   details. Enable reduced motion and confirm layout animation, playback, and
+   transitions respect it.
+10. Run the quickstart's graph, analytical, geospatial, and temporal artifacts at
+    the documented air-routes scale. Confirm lifecycle ordering and usable
+    interaction; record browser renderer/layout timings separately from the
+    preparation-only benchmark below.
+11. For G6 Canvas, confirm `renderReady` follows layout, fit, two browser paint
+   frames, and a non-empty Canvas pixel check. A scene that remains interactive
+   through hit-testing but paints no pixels must report `GF_G6_CANVAS_EMPTY` (or
+   `GF_G6_CANVAS_RENDER_ERROR` for an asynchronous renderer exception), never
+   readiness. The medium sample keeps all 579 nodes and 7,430 edges while its
+   artifact explicitly disables edge labels and arrowheads.
+
+The required Extension Development Host job should retain bounded construction,
+reopen, schema, and lifecycle smoke coverage. Browser stress and comparative
+performance remain opt-in evidence rather than a PR gate.
+
+## Opt-in visualization benchmark (#67)
+
+Run the existing package script manually:
+
+```bash
+npm run benchmark:visualizations -- --layout-tier all --output /tmp/graphforge-viz-benchmark.json
+```
+
+`scripts/benchmark-visualizations.mjs` uses identical deterministic payloads for
+G6, Cytoscape, and Sigma at three tiers: generated small, the vendored real
+air-routes sample as medium, and generated large. The JSON report records exact
+renderer/backend/layout configuration, node/edge counts, preparation timing,
+serialized bytes, a checksum, and optional Node layout timing. Layout algorithms
+run in isolated workers with a configurable, recorded 60-second default budget;
+a large layout that exceeds the budget is recorded as timed out rather than
+hanging the benchmark or changing a product default.
+
+This is **Node preparation and algorithm evidence only**. Heap delta is recorded
+where available, not peak memory. It does not construct a browser renderer or
+measure Canvas/WebGL paint, browser worker/WASM behavior, interaction, playback,
+CSP, browser peak memory, or accessibility. Use the Extension Development Host
+matrix for those claims.
+
+The script must remain absent from `compile`, `test`, `test:unit`, prepublish,
+PR, push, scheduled, required, and release workflows. Its output is local evidence
+to attach to the implementation PR, not a committed product default or an
+automatic renderer-selection threshold.
 
 ## Module Bay manual EH matrix
 
@@ -111,6 +176,7 @@ Run the Extension Development Host in light, dark, and high-contrast themes:
 
 - Optional CI job that installs `@curatelabs/graphforge` and fails if quickstart e2e skips
 - Browser-level automation for canvas/WebGL interaction and CSP console violations
+- Automated browser-level G6/G2/L7 interaction, accessibility, and renderer-memory evidence
 - Browser-level automation for Module Bay filtering, keyboard behavior, themes,
   and host-authoritative action refreshes
 - Integration coverage for module activation/deactivation disposal, side-load

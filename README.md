@@ -14,7 +14,8 @@ Publisher: **CurateLabsAI** (`CurateLabsAI.graphforge`).
 | **Projects** | Activity-bar explorer for folders with a valid `FORMAT` marker |
 | **Ontology** | Mode badge + entity/relation tree; Ontology Viewer webview with a helpful exploratory empty state, **Load Ontology…**, and an Advanced section (open `ontology.json`, explain mode) |
 | **Knowledge** | Inspect and create assertions: list/empty states, **Create Assertion…** (minimal fields), **Show Assertion** / **Show on Graph**, plus Advanced attach-evidence / assess-confidence / record-status commands |
-| **Result Graph** | Webview shell: nodes/edges styled by class + epistemic status |
+| **Result Graph** | AntV G6 Canvas by default, with retained Cytoscape and Sigma adapters; explicit artifact-owned layout, styling, interactions, and optional time configuration |
+| **Charts, maps, and timelines** | AntV G2 analytical/temporal charts and L7 geospatial views from saved project artifacts; retained Plotly figure and v1 artifact compatibility |
 | **Results** | Interactive table in the bottom Panel; expandable nested JSON and row/cell selection linked to matching Result Graph nodes/edges |
 | **Modules** | One Module Bay for default, non-removable Query/Visualize/Import modules, future GraphForge-catalog modules, and advanced side-loads |
 
@@ -34,6 +35,14 @@ npm run compile
 ```
 
 Press **F5** (`Run Extension`) to open an Extension Development Host.
+
+For one-off renderer-adapter evidence, run
+`npm run benchmark:visualizations -- --layout-tier all --output /tmp/graphforge-viz.json`.
+It uses the same small, real-sample medium, and generated large graph tiers for
+G6, Cytoscape, and Sigma. Layouts run in isolated Node workers with an explicit
+60-second per-layout evidence budget. This is opt-in and does not claim browser
+paint, interaction, accessibility, or peak-memory performance; it is intentionally
+absent from CI and release gates.
 
 ### Runtimes: Node (default) and Python (alternative)
 
@@ -161,19 +170,32 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 - **Ontology** — `Show Ontology Viewer`, `Load Ontology…`, `Open ontology.json`, `Explain Ontology Mode`
 - **Knowledge ledger** — `List Assertions`, `Create Assertion…`, `Show Assertion…`, `Show Assertion on Graph…`, `Attach Evidence…` / `Assess Confidence…` / `Record Assertion Status…` (Advanced)
 - **Result views** — `Show Result Graph` (+ `Show Result Graph (Advanced)…`), `Show Project Capabilities`
+- **Visualization artifacts** — `Create Project Visualization` (`graphforge.createProjectVisualization`) creates a complete v2 graph, chart, geospatial, or temporal artifact from explicit bindings; `Save Project Visualization` and `Open Saved Visualization` return the saved `path` and `spec` (plus panel status when opened)
 
 Get Started's **Hub / Query / Visualize** pages are an editor over durable
 project files: `queries/*.cypher`, `results/*`, `visualizations/*.gfviz.json`,
-and `mutations/*.cypher`. The air-routes sample copies its query and
-visualization specs into this layout and generates its seed mutation there
-before execution; no quickstart query or chart binding is hardcoded in the
-extension.
+and `mutations/*.cypher`. New visualizations use the strict
+`graphforge.visualization/v2` contract; existing v1 Cytoscape/Sigma/Plotly files
+remain readable and are not rewritten on open. The G6/G2 settings are creation
+templates only: the resolved renderer, backend, layout, bindings, filters,
+coordinates, time settings, and presentation are saved into the artifact and
+remain authoritative when global defaults change. Missing or unsupported
+configuration fails visibly—there is no hidden field inference, size threshold,
+renderer substitution, or layout fallback.
+
+G2/L7/temporal panels expose the filtered rows in an accessible companion table.
+Material viewport or temporal-range changes become visibly dirty and require an
+explicit **Save**; **Revert** restores the committed artifact. The air-routes
+sample copies its queries, results, and v1/v2 visualization specs into this
+layout and generates its seed mutation there before execution; its bindings are
+project files rather than extension constants.
 
 Selecting a Results cell that contains a node/edge identity (including airport-style codes)
 highlights that element in an open Result Graph. Selecting a metric cell or whole row falls back
 to graph identities and `source`/`target` endpoints in that row. Graph clicks also reveal matching
-table rows. Figure linking is not included in this v0 because arbitrary Plotly traces do not retain
-reliable source-row provenance.
+table rows. Chart/map/timeline panels expose their filtered rows as a companion
+surface, but point-to-row linking is not claimed because arbitrary G2/Plotly/L7
+marks do not yet retain a stable source-row identity contract.
 
 See [`docs/published/commands.md`](docs/published/commands.md) for the full command-ID table.
 The module manifest, catalog-first distribution path, and side-load security

@@ -4,4 +4,6 @@ RETURN a.code AS source,
        type(r) AS type,
        a.code AS label,
        r.dist AS dist,
-       a.region AS region
+       a.region AS region,
+       a.lon AS longitude,
+       a.lat AS latitude

@@ -26,3 +26,4 @@ carries inline guidance), then add a row to the log below.
 |---|---|---|---|
 | [0001](./0001-plotly-figure-webview-csp.md) | Plotly Figure webview under Settings-strict CSP | Accepted | 2026-08-01 |
 | [0002](./0002-unified-module-lifecycle.md) | Catalog-first unified module lifecycle | Accepted | 2026-08-02 |
+| [0003](./0003-antv-visualization-artifacts.md) | AntV defaults with explicit visualization artifacts | Accepted | 2026-08-02 |

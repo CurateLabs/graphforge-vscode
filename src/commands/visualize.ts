@@ -2,16 +2,11 @@ import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { GraphPayload } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
-import type {
-  ResultGraphLayoutOptions,
-  ResultGraphRenderer,
-} from "../webview/resultGraphModel";
+import type { ResultGraphViewOptions } from "../webview/resultGraphModel";
 
-export interface ShowResultGraphArgs {
+export interface ShowResultGraphArgs extends ResultGraphViewOptions {
   title?: string;
   payload?: GraphPayload;
-  renderer?: ResultGraphRenderer;
-  layout?: ResultGraphLayoutOptions;
 }
 
 export function registerVisualizationCommands(
@@ -30,7 +25,12 @@ export function registerVisualizationCommands(
             : await session.lastGraphPayload());
         ResultGraphPanel.show(context.extensionUri, payload, {
           renderer: args?.renderer,
+          backend: args?.backend,
+          source: args?.source,
           layout: args?.layout,
+          visualDensity: args?.visualDensity,
+          labels: args?.labels,
+          timebar: args?.timebar,
         });
         session.markSeenResultGraph();
         return {

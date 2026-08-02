@@ -20,13 +20,16 @@
       `graphforge.openSampleProject`.
    3. **Run your first query** — with the sample open, use **Run sample query**.
       This executes `queries/templates/routes-overview.cypher` from the project.
-   4. **See your results** — open **Result Graph** (airport route network) and **Chart this
-      result** (Plotly Figure of route distances). Both stay closed until you ask; neither
-      replaces the other.
+   4. **See your results** — open the saved G6 route network, G2 route-distance
+      chart, L7 airport map, or G2 route-activity timeline. The sample also keeps
+      v1 Cytoscape and Plotly artifacts so compatibility is visible rather than
+      hidden. Views stay closed until you ask.
 5. Use the Hub, Query, and Visualize icons in the Get Started view title. Query
    saves reusable templates under `queries/templates/` and reopens timestamped
-   `results/` history. Visualize saves Result Graph or Plotly settings under
-   `visualizations/`.
+   `results/` history. Visualize saves strict v2 graph, chart, geospatial, or
+   temporal settings under `visualizations/`; existing v1 artifacts remain
+   readable. G6/G2 settings affect newly created files only because resolved
+   behavior is stored in each artifact.
 
 Prefer the Command Palette, or driving the extension from an agent? Run
 **`GraphForge: Check Environment`** — it reports both runtimes' full diagnostics and always

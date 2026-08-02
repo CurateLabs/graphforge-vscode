@@ -30,7 +30,7 @@ flowchart LR
   Native --> ProjectDir["Parquet project dir"]
   PyPkg --> ProjectDir
   Session --> Trees["Projects / Ontology / Knowledge"]
-  Session --> Webviews["Result Graph / Ontology Viewer"]
+  Session --> Webviews["Results / Result Graph / Chart / Map / Timeline / Ontology"]
   Vscode --> Modules["ModuleManager"]
   Modules --> Builtins["Query / Visualize / Import"]
   Modules --> Catalog["GraphForge moduleCatalog()"]
@@ -50,11 +50,11 @@ flowchart LR
 | `nodeEngineBackend` / `pythonBridge` | `EngineBackend` implementations over Node / Python | `types.EngineBackend` |
 | `runtime` / `runtimeSelection` | Choose Node vs. Python per `graphforge.runtime`; open the backend | nativeLoader, pythonLoader, both backends |
 | `GraphForgeSession` | Open project, execute/verbs, IPC→rows, graph payload | `EngineBackend` + arrow |
-| `projectArtifacts` | Validate, scan, read, filter, and write project-owned queries/results/visualization specs | Node fs + project root |
+| `projectArtifacts` / `visualizationRegistry` | Read v1 compatibility specs; validate/write strict v2 project-owned specs; materialize centralized renderer defaults | Node fs + project root |
 | Tree providers | Projects, Ontology, Knowledge sidebars | Session |
 | Commands | Run Query, verbs, open panels, load ontology, Setup (Native/Python) | Session, webviews |
-| Webviews | Results Panel + Result Graph + Ontology Viewer + Settings + Modules + Figure + message protocol | QueryResult rows (Results); Session payloads (Result Graph/Ontology); configuration/module state; Plotly figure JSON |
-| `webview-ui/` | Vite-built browser bundles for webview panels/views (Results, Settings, Modules, Figure, Result Graph) | shared schemas/view models, `GraphPayload`, Cytoscape/Sigma |
+| Webviews | Results + Result Graph + artifact visualization + Ontology + Settings + Modules + retained Plotly Figure | QueryResult, `GraphPayload`, validated artifact specs, module/configuration state |
+| `webview-ui/` | Vite-built browser bundles for webview panels/views | shared schemas/view models, G6/G2/L7, retained Cytoscape/Sigma/Plotly |
 
 ### Build tooling (Vite, #24)
 
@@ -68,12 +68,15 @@ complete). Two configs with opposite semantics:
   `dist/test/` and copies `src/test/fixtures/` alongside them.
 - **Webview UI (`webview-ui/vite.config.mts`):** browser-side webview apps (config inside this
   package — no monorepo/workspace split). Emits fixed-name bundles to `dist/webview-ui/`
-  (e.g. `results.*`, `settings.*`, `figure.*`, `resultGraph.*`), which panel hosts load via
+  (e.g. `results.*`, `settings.*`, `figure.*`, `resultGraph.*`,
+  `artifactVisualization.*`), which panel hosts load via
   `webview.asWebviewUri` under a nonce-based, Settings-strict CSP. Results, Settings, Figure, and
-  Result Graph are Vite-built; new webviews should start here rather than as inline HTML
-  template strings. Figure bundles full `plotly.js` locally and consumes Plotly figure JSON —
-  see ADR-0001; Dash is not an in-IDE host. Result Graph bundles Cytoscape, Sigma, Graphology,
-  and synchronous ForceAtlas2 locally; no renderer code or data comes from a CDN.
+  Result Graph and artifact visualizations are Vite-built. Figure bundles full
+  `plotly.js` locally—see ADR-0001. Result Graph bundles G6, Cytoscape, Sigma,
+  Graphology, and worker/main-thread layouts; the artifact panel bundles G2 and
+  L7. No renderer code, map provider, or result data comes from a CDN or remote
+  fetch. The nonce CSP retains only extension/data/blob resources and worker
+  allowances required by local bundles.
 - `npm run compile` runs both (`compile:host` then `compile:webview`); `npm run check`
   type-checks both TS projects (`tsconfig.json` and `webview-ui/tsconfig.json`). The
   `webview-ui` app shares vscode-free modules from `src/` (e.g. `settingsSchema.ts`) by direct
@@ -160,9 +163,13 @@ any breaking wire change, and document it here.
 - **QueryResult** — columns/rows from Arrow tables
 - **GraphPayload** — nodes/edges with `epistemicStatus`, `ontologyType`, legend
 - **OntologyDoc** — entity_types, relation_types, properties (from workspace participant)
-- **ProjectVisualizationSpec** — `graphforge.visualization/v1` JSON referencing
-  one `results/*.json`, with either Result Graph renderer/force settings or
-  Plotly chart mappings and an optional equality/contains row filter
+- **ProjectVisualizationSpecV1** — compatibility reader for existing
+  `graphforge.visualization/v1` Cytoscape/Sigma result graphs and Plotly charts;
+  opening does not migrate or rewrite the file.
+- **ProjectVisualizationSpecV2** — strict writer contract for `result-graph`,
+  `chart`, `geospatial`, and `temporal`. It references a project result and
+  explicitly records renderer, bindings, filters, layout/coordinate/time, and
+  presentation configuration.
 
 Workbench artifact layout:
 
@@ -185,6 +192,7 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 | Ontology mode | exploratory / advisory / strict | Engine; viewer displays |
 | Epistemic status | Belief state on knowledge subjects | Engine ledgers; UI colors extension-owned |
 | Result graph | Visualization of query/verb rows | Extension webview |
+| Visualization artifact | Reproducible presentation of a durable result | Studio project file; never GraphForge Core computation |
 
 ## Key flows
 
@@ -212,13 +220,27 @@ intentionally out of v0 rather than inferred from point order.
 
 ### Render and inspect a result graph
 
-1. Host posts the current `GraphPayload` and configured renderer to the Vite webview.
-2. Cytoscape runs COSE or Sigma runs Graphology ForceAtlas2, then enables pan/zoom/fit.
+1. Host reads the saved artifact or materializes the creation template, then posts
+   the current `GraphPayload` and explicit renderer/layout to the Vite webview.
+2. G6 runs the saved worker ForceAtlas2 configuration; Cytoscape/Sigma run only
+   when their saved adapters are selected. The host does not select by graph size.
 3. A node/edge click posts the reserved `selectNode` / `selectEdge` protocol message.
 4. The host validates the id against the current payload. Assertion-shaped nodes dispatch
    `graphforge.showAssertion`; other nodes and edges open a read-only JSON summary.
-5. `graphforge.resultGraph.renderer` configuration changes are observed by the live panel,
-   which re-renders the retained payload without an extension-host reload.
+5. A saved artifact remains authoritative when global creation defaults change.
+   Renderer/layout failure reports a stable error without silent substitution.
+
+### Open and edit a v2 chart, map, or timeline
+
+1. `openProjectVisualization` validates the v2 spec, resolves its project result,
+   and applies only its explicit filters.
+2. The host opens the G2/L7 artifact panel. An explicitly selected v2 Plotly
+   **chart** uses the retained Figure adapter; v2 temporal artifacts are G2-only.
+   The command returns the artifact path, complete spec, and panel outcome.
+3. The webview renders an accessible filtered-row companion and reports local
+   lifecycle events without graph properties, rows, coordinates, timestamps, or paths.
+4. Viewport or temporal-range changes create a host-validated draft and visible
+   dirty state. Save atomically replaces the artifact; Revert restores committed JSON.
 
 ### Open ontology
 
@@ -231,7 +253,8 @@ intentionally out of v0 rather than inferred from point order.
 - **Error handling:** Fail closed on missing binding or invalid FORMAT; `showErrorMessage`. When
   no runtime is usable, the message and recovery actions cover **both** Setup commands (#12).
 - **Configuration:** `graphforge.nativeModulePath`, `graphforge.openResultGraphOnQuery`,
-  `graphforge.resultGraph.renderer` (`cytoscape` default or `sigma`), `graphforge.runtime`,
+  `graphforge.resultGraph.renderer` (`g6` creation default; retained `cytoscape`/`sigma`),
+  `graphforge.chart.renderer` (`g2` creation default; retained `plotly`), `graphforge.runtime`,
   `graphforge.pythonInterpreterPath`, `graphforge.experienceMode`
   (`guided` | `autonomous`, default `guided` — set from the Get Started Welcome screen; see
   `docs/DESIGN.md` "Welcome + experience modes").
@@ -246,18 +269,23 @@ intentionally out of v0 rather than inferred from point order.
   Side-loaded modules are declarative by default. A contained CommonJS entrypoint
   can execute only behind a machine-scoped dangerous user setting, Workspace
   Trust, and a per-install confirmation; disabling the setting deactivates it.
+  Visualization specs are JSON-only: no callbacks, `eval`, remote data sources,
+  implicit map tiles, or embedded credentials. Invalid specs fail closed.
 - **Observability:** Status bar shows project name, ontology mode, and active runtime (Node /
   Python), or a "no runtime" warning with both setup paths in the tooltip.
 - **Performance:** Python interpreter/`graphforge`-import probes are cached for 15s
   (`pythonLoader.ts`) and invalidated on `graphforge.pythonInterpreterPath`/`graphforge.runtime`
   config changes, workspace folder changes, and (best-effort) Python-extension interpreter
   changes — see `extension.ts`.
+  Visualization preparation and isolated Node-layout comparison is an explicit
+  bounded `npm run benchmark:visualizations` command, not a CI gate or browser-rendering claim.
 
 ## Decisions
 
 - Optional peer on `@curatelabs/graphforge` so scaffold installs without a prebuilt napi binary.
-- Cytoscape is the Result Graph default; Sigma is an opt-in WebGL renderer. Both consume the
-  same `GraphPayload`, use extension-owned colors, and keep selection messages additive.
+- AntV G6 Canvas and G2 are creation defaults; L7 is the geospatial adapter.
+  Cytoscape, Sigma, and Plotly remain explicit alternatives. v1 remains readable,
+  v2 is written, and saved artifacts—not current settings or hidden thresholds—own behavior.
 - Demo graph when result rows are not graph-shaped, so the epistemic/class legend is reviewable without data.
 - Python is reached via a **long-lived subprocess bridge**, not per-call spawns: engine startup
   cost and the project's single-writer lock make a fresh interpreter per request impractical (#12).

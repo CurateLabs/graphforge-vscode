@@ -1,0 +1,18 @@
+{
+  "format": "graphforge.visualization/v2",
+  "name": "US route origins",
+  "kind": "geospatial",
+  "result": "results/query-result.json",
+  "filters": [],
+  "renderer": { "id": "l7", "backend": "device" },
+  "geospatial": {
+    "source": { "type": "coordinates", "longitudeField": "longitude", "latitudeField": "latitude" },
+    "sourceCrs": "EPSG:4326",
+    "projection": "EPSG:3857",
+    "aggregation": "none",
+    "layers": [{ "id": "route-origins", "type": "point", "colorField": null, "sizeField": null, "shapeField": null, "color": "#4c6ef5", "opacity": 0.75, "size": 5 }],
+    "basemap": { "type": "blank" },
+    "viewport": { "longitude": -98.5, "latitude": 39.5, "zoom": 3, "bearing": 0, "pitch": 0, "bounds": null },
+    "presentation": { "title": "US route origins", "legend": false, "theme": "editor" }
+  }
+}

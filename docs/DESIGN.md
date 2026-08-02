@@ -45,6 +45,8 @@ effective settings, exact `FORMAT` marker status, absolute artifact paths, and
 canonical/latest result paths. Query, result, visualization, and mutation
 commands accept paths/URIs directly. Mutations remain visibly separate under
 `mutations/` and require explicit `{ confirm: true }` for non-interactive use.
+Visualization creation requires explicit kind and field bindings and returns the
+saved `{ path, spec, panel? }`; agents do not need to infer state from a canvas.
 The quickstart project carries an `AGENTS.md` copy of this local contract.
 
 ## Kilo-inspired workbench onboarding
@@ -63,13 +65,16 @@ First-run, missing-runtime, and no-project states share one **Get Started** side
   than ending as a completed checklist.
 - The control hub has **Hub / Query / Visualize** pages. Query authors save
   `.cypher` files and reopen durable result history; visualization settings are
-  saved as `.gfviz.json` files referencing a project result. Renderer, force,
-  Plotly mapping, and simple row-filter settings are project state, not VS Code
-  workspace state.
+  saved as `.gfviz.json` files referencing a project result. Renderer/backend,
+  layout, bindings, filters, chart encodings, geospatial coordinates/projection,
+  and temporal range/playback are project state, not hidden webview state.
 - Buttons dispatch palette commands. Sample actions name project files under
   `queries/` and `visualizations/`; query text and chart bindings never live in
   extension constants. Nothing auto-opens both viz surfaces in Guided mode.
-- **Result Graph ≠ Figure** — graph stays on GraphPayload / FR-7; analytical charts stay on Plotly figure JSON / FR-19. Do not unify renderers.
+- Semantic kinds remain distinct even though their adapters share one artifact
+  policy: Result Graph consumes `GraphPayload`; charts and timelines consume
+  tabular results; maps consume explicit coordinate or GeoJSON fields. Raw
+  Plotly Figure JSON remains a separate preview/interchange path.
 - **Check Environment** link for full JSON diagnostics — never inline stack traces in the panel or toasts
 - Status bar click and setup recovery (`offerSetupRecovery`) open Get Started; capabilities doc only when a project is already open
 
@@ -109,7 +114,7 @@ second store: reads/writes go through `workspace.getConfiguration`, and the
 panel live-syncs with edits made in the VS Code Settings UI.
 
 - Categories: **Runtime** (engine choice) / **Experience** (mode, Result Graph
-  auto-open, Cytoscape/Sigma renderer) / **Advanced** (manual binding/interpreter paths). Copy is
+  auto-open, G6/Cytoscape/Sigma and G2/Plotly creation templates) / **Advanced** (manual binding/interpreter paths). Copy is
   analyst-facing; "Project" waits until a project-scoped setting exists (no
   stub categories).
 - Accessibility is part of the contract, not a retrofit: the left nav is a
@@ -155,31 +160,46 @@ repository, come from GraphForge's catalog, or were side-loaded from a manifest.
 The manifest and provider contracts live in
 [`engineering/MODULES.md`](./engineering/MODULES.md).
 
-## Figure panel (analytical charts, #62)
+## Figure and analytical charts (#62 / #67)
 
-Separate from Result Graph: a Vite-built **Figure** webview renders **Plotly figure JSON**
-(`data` / `layout` / optional `frames`) for notebook-style charts (bar, scatter, histogram,
-line). Agents call `graphforge.showFigure({ figure })` or
-`graphforge.figureFromResult({ chartType, x, y, … })`. Optional size limits exist but
-default **off**. Dash is not the IDE host — see ADR-0001 for CSP. Result Graph remains the
-epistemic network surface.
+New saved analytical and temporal artifacts use G2 by default. Their complete
+encodings, transforms, filters, axes, theme, timezone, range, and playback
+configuration live in v2 JSON. The Vite-built **Figure** webview remains for raw
+Plotly JSON, v1 Plotly artifacts, and an explicit v2 Plotly choice. Agents may
+still call `showFigure({ figure })` or `figureFromResult(...)`; this preview does
+not replace the project artifact contract. Optional Plotly limits default off.
+Dash is not the IDE host—see ADR-0001.
 
 ## Result Graph workbench (#65)
 
-Result Graph is a Vite-built interactive network canvas over the existing `GraphPayload`
-contract. **Cytoscape is the default**; **Sigma** is selectable under Experience for dense,
-WebGL-backed exploration. Both preserve epistemic/class/demo colors, legends, banner, and
-empty states while adding force layout, pan, zoom, fit, re-layout, and click-to-inspect.
-Changing `graphforge.resultGraph.renderer` updates an open panel without reloading the
-extension host. Assertion-shaped nodes open the assertion detail path; other nodes and edges
-open a read-only JSON summary. At air-routes scale, labels and arrowheads reduce automatically
-to keep the topology responsive without changing the payload or epistemic meaning.
+Result Graph is a Vite-built interactive network canvas over the existing
+`GraphPayload` contract. New artifacts default to **G6 Canvas** with an explicit
+worker ForceAtlas2 configuration; Cytoscape Canvas and Sigma WebGL remain
+selectable adapters. All preserve epistemic/class colors, legends, empty states,
+pan, zoom, fit, re-layout, and click-to-inspect. The renderer setting chooses the
+next artifact template only. Saved configuration wins on reopen, and failures
+remain visible rather than changing renderer/layout or applying graph-size magic.
+The G6 creation template keeps all graph elements but explicitly starts with
+edge labels and arrowheads disabled; those optional per-edge decorations remain
+editable and saved in the artifact. Readiness requires visible Canvas output, so
+an invisible scene graph with working hit targets is reported as a render failure.
+
+## Geospatial and temporal artifacts (#67)
+
+L7 renders geospatial artifacts from explicit longitude/latitude or GeoJSON
+bindings, CRS, projection, layers, explicit blank offline basemap, and viewport. G2 renders
+temporal artifacts from explicit timestamp, timezone, granularity, value/series,
+range, window, and playback settings. Neither surface guesses fields or reaches
+for a remote provider. Both include a textual summary and accessible filtered
+data table. Material viewport/range changes produce visible dirty state; Save
+commits validated JSON and Revert restores the last committed artifact.
 
 ## Visual notes
 
 - Activity Bar icon: simple node/edge mark (`media/graphforge.svg`).
-- Result Graph: bundled Cytoscape/Sigma canvas in `webview-ui` with strict CSP and the stable `GraphPayload` protocol.
-- Figure panel: full bundled `plotly.js` in `webview-ui` (`figure.js` / `figure.css`).
+- Result Graph: bundled G6/Cytoscape/Sigma adapters under strict CSP and the stable `GraphPayload` protocol.
+- Artifact visualization panel: bundled G2/L7 chart, map, and timeline adapters with Save/Revert and accessible rows.
+- Figure panel: retained full bundled `plotly.js` (`figure.js` / `figure.css`).
 - Prefer VS Code theme tokens in webviews; status colors are the intentional exception for belief state.
 
 ## Voice

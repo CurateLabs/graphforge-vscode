@@ -118,6 +118,10 @@
         "title": "GraphForge: Save Project Visualization"
       },
       {
+        "command": "graphforge.createProjectVisualization",
+        "title": "GraphForge: Create Project Visualization"
+      },
+      {
         "command": "graphforge.openProjectArtifact",
         "title": "GraphForge: Open Project Artifact"
       },
@@ -535,15 +539,30 @@
         "graphforge.resultGraph.renderer": {
           "type": "string",
           "enum": [
+            "g6",
             "cytoscape",
             "sigma"
           ],
           "enumDescriptions": [
-            "Canvas-based default with force layout, pan, zoom, fit, and selection.",
+            "AntV G6 Canvas renderer with an explicit worker ForceAtlas2 layout.",
+            "Canvas renderer with force layout, pan, zoom, fit, and selection.",
             "WebGL renderer optimized for larger result graphs, with ForceAtlas2 layout and selection."
           ],
-          "default": "cytoscape",
-          "description": "Renderer used by the Result Graph. Changes apply immediately to an open panel."
+          "default": "g6",
+          "description": "Renderer template for newly created Result Graph artifacts. Saved artifacts keep their recorded renderer."
+        },
+        "graphforge.chart.renderer": {
+          "type": "string",
+          "enum": [
+            "g2",
+            "plotly"
+          ],
+          "enumDescriptions": [
+            "AntV G2 declarative chart renderer.",
+            "Plotly renderer and Python/JavaScript figure JSON interchange."
+          ],
+          "default": "g2",
+          "description": "Renderer template for newly created chart artifacts. Saved artifacts keep their recorded renderer."
         },
         "graphforge.runtime": {
           "type": "string",
@@ -625,10 +644,16 @@
     "check": "tsc --noEmit && tsc --noEmit -p webview-ui",
     "lint": "npm run check",
     "test": "npm run compile:host && vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/quickstartSample.test.js dist/test/projectArtifacts.test.js dist/test/agentContext.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js dist/test/figureFromResult.test.js dist/test/figureSchema.test.js dist/test/resultGraphModel.test.js dist/test/resultTableModel.test.js dist/test/entityMutation.test.js dist/test/resultDocument.test.js dist/test/moduleManifest.test.js dist/test/workspaceScript.test.js dist/test/importData.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/quickstartSample.test.js dist/test/projectArtifacts.test.js dist/test/visualizationRegistry.test.js dist/test/visualizationDocumentState.test.js dist/test/agentContext.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js dist/test/figureFromResult.test.js dist/test/figureSchema.test.js dist/test/resultGraphModel.test.js dist/test/resultTableModel.test.js dist/test/entityMutation.test.js dist/test/resultDocument.test.js dist/test/moduleManifest.test.js dist/test/workspaceScript.test.js dist/test/importData.test.js",
+    "benchmark:visualizations": "node scripts/benchmark-visualizations.mjs",
     "package": "vsce package"
   },
   "dependencies": {
+    "@antv/g2": "^5.4.8",
+    "@antv/g6": "^5.1.1",
+    "@antv/l7": "^2.29.1",
+    "@antv/l7-maps": "^2.29.1",
+    "@antv/layout": "^2.0.0",
     "apache-arrow": "^21.2.0",
     "cytoscape": "^3.34.0",
     "graphology": "^0.26.0",

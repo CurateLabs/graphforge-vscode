@@ -23,6 +23,7 @@ flowchart TD
     C --> A
     D -->|result.error present| B
     D -->|success| E["Read the result from the return value or the opened document"]
+    E --> F["createProjectVisualization({ result, kind, explicit bindings })"]
 ```
 
 1. **Check Environment** — `executeCommand("graphforge.checkEnvironment", { silent: true })`.
@@ -39,6 +40,9 @@ flowchart TD
    the command also writes for a human pairing with the agent. On failure, the returned
    object's `error` / `code` / `nextAction` fields tell you exactly what to do next — never a
    bare exception or a silent no-op.
+5. **Save visualization work** — call `graphforge.createProjectVisualization`
+   with a result path, semantic kind, and complete bindings. It writes a strict
+   v2 artifact before opening and returns `{ path, spec, panel? }`.
 
 ## What's structured vs. interactive
 
@@ -59,7 +63,27 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.openSampleProject` | `{ path?, force? }` | `{ path, project, seeded }` |
 | `graphforge.runQuery` / `runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown> }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) |
 | `graphforge.runProjectQuery` | `string \| Uri \| { path, resultName? }` | `QueryResult` |
-| `graphforge.openProjectResult` / `openProjectVisualization` | `string \| Uri \| { path }` | Structured open outcome |
+| `graphforge.openProjectResult` | `string \| Uri \| { path }` | `{ path, absolutePath, columns, rowCount }` |
+| `graphforge.openProjectVisualization` | `string \| Uri \| { path, waitForReady?, timeoutMs? }` | `{ path, absolutePath, kind, spec, panel?, lifecycle? }` |
+| `graphforge.createProjectVisualization` | `{ name?, result, kind, renderer?, explicit bindings, filter?, open? }` | `{ path, spec, panel? }` |
+| `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` | `{ path, spec, panel? }` |
+
+### Exact visualization creation arguments
+
+Pass a project-relative `result`, a `kind`, and flattened kind-specific fields
+to `graphforge.createProjectVisualization`. Common optional fields are `name`,
+`open`, and `filter: { column, operator: "equals" | "contains", value }`.
+
+- `result-graph`: optional `renderer: "g6" | "cytoscape" | "sigma"`.
+- `chart`: `mark: "bar" | "scatter" | "line" | "histogram"`, `x`, `y`
+  (except histogram), optional `color`, and optional
+  `renderer: "g2" | "plotly"`.
+- `geospatial`: `longitude` and `latitude` (L7).
+- `temporal`: `timestamp` and `y`, plus optional `color`, `mark`, IANA
+  `timezone`, and `granularity` (G2).
+
+There is no nested `bindings` argument. The saved strict v2 artifact contains
+the complete renderer, layout, mapping, and presentation choices.
 | `graphforge.applyProjectMutation` | `{ path: string \| Uri; confirm: true }` | `{ path, absolutePath, columns, rowCount }` |
 | `graphforge.importData` | `{ path: string \| Uri; label: string; mode?: "create" \| "merge"; idColumn?: string; confirm: true }` | `{ path, format, label, mode, idColumn?, imported, result }` |
 | `graphforge.rank` / `cluster` / `paths` / `analyze` / `similar` (and `…Advanced…`) | Not yet — still QuickPick-driven | Verb result object (`{ verb, by, label, columns, rows, rowCount, algorithm? }`) |
@@ -97,8 +121,12 @@ The full per-command contract (prompt-by-prompt) lives in
 
 Project files are also a public contract: exact `FORMAT` marker; `.cypher`/`.cql`
 or `{ cypher, params }` query specs; `{ columns, rows, rowCount }` results;
-`graphforge.visualization/v1` `.gfviz.json`; and reviewed writes under
-`mutations/`. Absolute and project-relative paths are accepted, but traversal
+strict `graphforge.visualization/v2` `.gfviz.json` files for graph, chart,
+geospatial, and temporal work; readable v1 Cytoscape/Sigma/Plotly files; and
+reviewed writes under `mutations/`. V2 artifacts explicitly own renderer,
+backend, layout, bindings, filters, coordinates/time, and presentation—settings
+only choose the next creation template. Absolute and project-relative command
+paths are accepted, but traversal
 outside the project is rejected. The bundled sample includes `AGENTS.md` beside
 these folders so a repository-aware agent can discover the contract directly.
 

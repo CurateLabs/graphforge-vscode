@@ -1,0 +1,40 @@
+{
+  "format": "graphforge.visualization/v2",
+  "name": "US routes network — AntV G6",
+  "kind": "result-graph",
+  "result": "results/query-result.json",
+  "filters": [],
+  "renderer": { "id": "g6", "backend": "canvas" },
+  "graph": {
+    "layout": {
+      "type": "force-atlas2",
+      "execution": "worker",
+      "animation": false,
+      "maxIteration": 500,
+      "barnesHut": true,
+      "prune": true,
+      "preventOverlap": true,
+      "dissuadeHubs": false,
+      "nodeSize": 22,
+      "nodeSpacing": 4,
+      "kr": 5,
+      "kg": 1,
+      "ks": 0.1,
+      "ksmax": 10,
+      "tao": 0.1,
+      "mode": "normal"
+    },
+    "style": {
+      "preset": "graphforge-epistemic/v1",
+      "nodeLabelFields": ["name", "label"],
+      "nodeLabelFallback": "label-or-id",
+      "edgeLabelField": "type",
+      "showEdgeLabels": false,
+      "nodeSize": 22,
+      "edgeWidth": 1.3,
+      "arrowheads": false
+    },
+    "interactions": { "pan": true, "zoom": true, "select": true, "fit": true, "relayout": true },
+    "timebar": { "enabled": false }
+  }
+}

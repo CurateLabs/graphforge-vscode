@@ -50,10 +50,24 @@ Every command below is a stable ID, invokable from the Command Palette or progra
 | Command | ID | Args |
 |---|---|---|
 | Open Saved Result | `graphforge.openProjectResult` | String, URI, or `{ path }` — restores a `results/*.json` file into the Results table and session views. |
-| Open Saved Visualization | `graphforge.openProjectVisualization` | String, URI, or `{ path }` — loads a `.gfviz.json`, its referenced result/filter, and opens Result Graph or Figure. |
-| Save Project Visualization | `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` — writes under `visualizations/`; unnamed files use `vis-YYYYMMDD-HHMMSS-mmm`. |
+| Open Saved Visualization | `graphforge.openProjectVisualization` | String, URI, or `{ path, waitForReady?, timeoutMs? }` — validates v1/v2, loads its referenced result/filters, opens the recorded adapter, and returns `{ path, absolutePath, kind, spec, panel?, lifecycle? }`. `waitForReady: true` explicitly waits 1–60 seconds (30 seconds by default) for `renderReady` or a structured terminal failure. |
+| Create Project Visualization | `graphforge.createProjectVisualization` | `{ name?, result, kind, renderer?, explicit bindings, filter?, open? }` — materializes and saves a complete v2 graph/chart/geospatial/temporal spec before opening; returns `{ path, spec, panel? }`. |
+| Save Project Visualization | `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` — validates and writes under `visualizations/`; returns `{ path, spec, panel? }`. |
 | Open Project Artifact | `graphforge.openProjectArtifact` | String, URI, or `{ path }` — opens a project file in the editor. |
 | Apply Project Mutation… | `graphforge.applyProjectMutation` | `{ path, confirm: true }` for non-interactive use; confines executable `.cypher`/`.cql`/JSON specs to `mutations/`. |
+
+`graphforge.createProjectVisualization` uses flattened arguments, not a nested
+bindings object. In addition to the project-relative `result` and `kind`, pass:
+
+- `result-graph`: optional `renderer` (`g6`, `cytoscape`, or `sigma`).
+- `chart`: `mark`, `x`, `y` (except histogram), optional `color`, and optional
+  `renderer` (`g2` or `plotly`).
+- `geospatial`: `longitude` and `latitude` (L7 is persisted).
+- `temporal`: `timestamp` and `y`, plus optional `color`, `mark`, IANA
+  `timezone`, and `granularity` (G2 is persisted).
+
+All kinds also accept optional `name`, `open`, and
+`filter: { column, operator: "equals" | "contains", value }`.
 
 ## Analyst verbs
 
@@ -154,17 +168,20 @@ UUIDv7 (engine-enforced). Knowledge-ledger writes require the Node runtime.
 | GraphForge: Figure from Result… | `graphforge.figureFromResult` |
 | GraphForge: Show Project Capabilities | `graphforge.showCapabilities` |
 
-Result Graph uses Cytoscape by default. Choose Sigma with
-`graphforge.resultGraph.renderer` in **GraphForge: Settings**; an open graph switches
-immediately while retaining its current payload. Both renderers support force re-layout,
-pan/zoom/fit, and click-to-inspect for nodes and edges.
+New Result Graph artifacts default to G6 Canvas; G2 is the default for new chart
+and temporal artifacts, and L7 renders geospatial artifacts. Cytoscape, Sigma,
+and Plotly remain explicit adapters. `graphforge.resultGraph.renderer` and
+`graphforge.chart.renderer` choose creation templates only: a saved artifact
+continues using its recorded renderer, backend, layout, bindings, and filters.
+Unsupported configuration reports a failure and never silently switches adapter.
 
 Successful Cypher and analyst-verb commands reveal **GraphForge Results** in the bottom Panel
 instead of opening a disposable JSON/Markdown editor tab. Run Query still persists
 `results/query-result.json` and `results/query-result.md`; the panel's JSON and Markdown buttons
 open those durable files on demand. Table selection links to matching IDs/codes/endpoints in an
-open Result Graph, and graph selection highlights matching rows. Figure point linking is not part
-of v0 because arbitrary Plotly figures do not preserve source-row provenance.
+open Result Graph, and graph selection highlights matching rows. Chart/map/time
+panels expose an accessible filtered-data companion, but point-to-row linking is
+not claimed because arbitrary marks do not preserve source-row provenance.
 
 See [`agent-interop.md`](agent-interop.md) for which of these accept structured arguments and
 return structured results for programmatic (agent) callers, and the source-of-truth test
