@@ -36,6 +36,7 @@ let currentColumns: string[] = [];
 let chart: Chart | undefined;
 let scene: Scene | undefined;
 let playbackTimer: number | undefined;
+let playbackUpdateInProgress = false;
 let viewportTimer: number | undefined;
 let renderToken = 0;
 
@@ -65,6 +66,7 @@ function stopPlayback(): void {
     window.clearInterval(playbackTimer);
     playbackTimer = undefined;
   }
+  playbackUpdateInProgress = false;
 }
 
 function destroyRenderer(): void {
@@ -249,10 +251,13 @@ function temporalBucket(value: unknown, spec: TemporalVisualizationSpecV2): stri
     return `${record.year}-Q${Math.floor((Number(record.month) - 1) / 3) + 1}`;
   }
   if (temporal.granularity === "week") {
-    const zoned = new Date(`${record.year}-${record.month}-${record.day}T00:00:00Z`);
-    const start = new Date(Date.UTC(zoned.getUTCFullYear(), 0, 1));
-    const week = Math.ceil((((zoned.getTime() - start.getTime()) / 86_400_000) + start.getUTCDay() + 1) / 7);
-    return `${record.year}-W${String(week).padStart(2, "0")}`;
+    const zoned = new Date(Date.UTC(Number(record.year), Number(record.month) - 1, Number(record.day)));
+    const weekday = zoned.getUTCDay() || 7;
+    zoned.setUTCDate(zoned.getUTCDate() + 4 - weekday);
+    const weekYear = zoned.getUTCFullYear();
+    const yearStart = new Date(Date.UTC(weekYear, 0, 1));
+    const week = Math.ceil((((zoned.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7);
+    return `${weekYear}-W${String(week).padStart(2, "0")}`;
   }
   return [record.year, record.month, record.day, record.hour, record.minute, record.second, record.fractionalSecond]
     .filter((part) => part !== undefined)
@@ -275,11 +280,10 @@ function temporalRows(spec: TemporalVisualizationSpecV2, rows: TableRow[]): Tabl
   });
 }
 
-async function renderTemporal(spec: TemporalVisualizationSpecV2, rows: TableRow[]): Promise<void> {
-  if (!container) throw new Error("Visualization container missing");
+function preparedTemporalRows(spec: TemporalVisualizationSpecV2, rows: TableRow[]): TableRow[] {
   const bucketed = temporalRows(spec, rows);
   const { temporal } = spec;
-  const prepared = aggregateRows(
+  return aggregateRows(
     bucketed,
     "__graphforgeTimeBucket",
     temporal.valueField,
@@ -289,6 +293,12 @@ async function renderTemporal(spec: TemporalVisualizationSpecV2, rows: TableRow[
     const compared = compareValues(left.__graphforgeTimeBucket, right.__graphforgeTimeBucket);
     return temporal.sort === "ascending" ? compared : -compared;
   });
+}
+
+async function renderTemporal(spec: TemporalVisualizationSpecV2, rows: TableRow[]): Promise<void> {
+  if (!container) throw new Error("Visualization container missing");
+  const prepared = preparedTemporalRows(spec, rows);
+  const { temporal } = spec;
   const encode: Record<string, string> = { x: "__graphforgeTimeBucket", y: temporal.valueField };
   if (temporal.seriesField) encode.color = temporal.seriesField;
   chart = new Chart({ container, autoFit: true });
@@ -459,6 +469,7 @@ async function render(spec: ArtifactVisualizationSpec, rows: TableRow[]): Promis
 
 function updateTemporalRange(): void {
   if (currentSpec?.kind !== "temporal") return;
+  stopPlayback();
   const start = rangeStart?.value.trim() || null;
   const end = rangeEnd?.value.trim() || null;
   if ((start && !Number.isFinite(Date.parse(start))) || (end && !Number.isFinite(Date.parse(end)))) {
@@ -483,15 +494,36 @@ function startPlayback(): void {
   if (!timestamps.length) return;
   let index = 0;
   playbackTimer = window.setInterval(() => {
+    if (playbackUpdateInProgress) return;
     if (currentSpec?.kind !== "temporal") return stopPlayback();
-    const step = currentSpec.temporal.playback.enabled ? currentSpec.temporal.playback.step : 1;
+    playbackUpdateInProgress = true;
+    const playbackSpec = currentSpec;
+    const step = playbackSpec.temporal.playback.enabled ? playbackSpec.temporal.playback.step : 1;
     index = Math.min(index + step, timestamps.length - 1);
     const end = new Date(timestamps[index]).toISOString();
-    currentSpec = { ...currentSpec, temporal: { ...currentSpec.temporal, range: { ...currentSpec.temporal.range, end } } };
+    currentSpec = { ...playbackSpec, temporal: { ...playbackSpec.temporal, range: { ...playbackSpec.temporal.range, end } } };
+    const nextSpec = currentSpec;
     if (rangeEnd) rangeEnd.value = end;
-    post({ type: "graphforge/artifactStateChanged", spec: currentSpec });
-    void render(currentSpec, currentRows);
-    if (index >= timestamps.length - 1) stopPlayback();
+    post({ type: "graphforge/artifactStateChanged", spec: nextSpec });
+    const activeChart = chart;
+    void activeChart?.changeData({ type: "inline", value: preparedTemporalRows(nextSpec, currentRows) } as never)
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        showBanner(`Could not update temporal playback: ${message}`);
+        post({
+          type: "graphforge/renderFailed",
+          kind: "temporal",
+          renderer: nextSpec.renderer.id,
+          phase: "render",
+          code: "G2_PLAYBACK_UPDATE_FAILED",
+          message,
+        });
+        stopPlayback();
+      })
+      .finally(() => {
+        playbackUpdateInProgress = false;
+        if (index >= timestamps.length - 1) stopPlayback();
+      });
   }, currentSpec.temporal.playback.speedMs);
 }
 

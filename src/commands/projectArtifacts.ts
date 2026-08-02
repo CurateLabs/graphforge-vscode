@@ -152,36 +152,59 @@ type ArtifactPathInput = string | vscode.Uri | ArtifactPathArgs;
 function waitForResultGraphLifecycle(
   renderer: "g6" | "cytoscape" | "sigma",
   timeoutMs: number,
-): Promise<ResultGraphLifecycleMessage> {
-  return new Promise((resolve) => {
-    let disposable: vscode.Disposable | undefined;
-    let timer: NodeJS.Timeout | undefined;
-    const finish = (message: ResultGraphLifecycleMessage): void => {
-      disposable?.dispose();
-      if (timer) clearTimeout(timer);
-      resolve(message);
-    };
-    disposable = ResultGraphPanel.onDidLifecycle((message) => {
-      if (
-        message.renderer === renderer &&
-        (message.type === "graphforge/renderReady" ||
-          message.type === "graphforge/renderFailed")
-      ) {
-        finish(message);
-      }
-    });
-    timer = setTimeout(
-      () =>
-        finish({
-          type: "graphforge/renderFailed",
-          renderer,
-          phase: "render",
-          code: "GF_RENDER_LIFECYCLE_TIMEOUT",
-          message: `Renderer did not reach a terminal lifecycle state within ${timeoutMs} ms.`,
-        }),
-      timeoutMs,
-    );
+): { promise: Promise<ResultGraphLifecycleMessage>; dispose: () => void } {
+  let disposable: vscode.Disposable | undefined;
+  let timer: NodeJS.Timeout | undefined;
+  let settled = false;
+  let resolvePromise: ((message: ResultGraphLifecycleMessage) => void) | undefined;
+  const dispose = (): void => {
+    disposable?.dispose();
+    disposable = undefined;
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+  };
+  const promise = new Promise<ResultGraphLifecycleMessage>((resolve) => {
+    resolvePromise = resolve;
   });
+  const finish = (message: ResultGraphLifecycleMessage): void => {
+    if (settled) return;
+    settled = true;
+    dispose();
+    resolvePromise?.(message);
+  };
+  disposable = ResultGraphPanel.onDidLifecycle((message) => {
+    if (
+      message.renderer === renderer &&
+      (message.type === "graphforge/renderReady" ||
+        message.type === "graphforge/renderFailed")
+    ) {
+      finish(message);
+    }
+  });
+  timer = setTimeout(
+    () =>
+      finish({
+        type: "graphforge/renderFailed",
+        renderer,
+        phase: "render",
+        code: "GF_RENDER_LIFECYCLE_TIMEOUT",
+        message: `Renderer did not reach a terminal lifecycle state within ${timeoutMs} ms.`,
+      }),
+    timeoutMs,
+  );
+  return { promise, dispose };
+}
+
+function configuredGraphRenderer(config: vscode.WorkspaceConfiguration): "g6" | "cytoscape" | "sigma" {
+  const renderer = config.get<unknown>("resultGraph.renderer", "g6");
+  if (renderer === "g6" || renderer === "cytoscape" || renderer === "sigma") return renderer;
+  throw new Error(`Configured result graph renderer ${String(renderer)} is invalid. Use g6, cytoscape, or sigma.`);
+}
+
+function configuredChartRenderer(config: vscode.WorkspaceConfiguration): "g2" | "plotly" {
+  const renderer = config.get<unknown>("chart.renderer", "g2");
+  if (renderer === "g2" || renderer === "plotly") return renderer;
+  throw new Error(`Configured chart renderer ${String(renderer)} is invalid. Use g2 or plotly.`);
 }
 
 interface ApplyMutationArgs extends ArtifactPathArgs {
@@ -294,7 +317,8 @@ export function registerProjectArtifacts(
               typeof args.filter.column !== "string" ||
               args.filter.column.trim().length === 0 ||
               (args.filter.operator !== "equals" && args.filter.operator !== "contains") ||
-              typeof args.filter.value !== "string"
+              typeof args.filter.value !== "string" ||
+              args.filter.value.trim().length === 0
             )
           ) {
             throw new Error("Visualization filter requires column, operator, and value.");
@@ -317,10 +341,7 @@ export function registerProjectArtifacts(
               name,
               result: args.result,
               filters,
-              renderer:
-                args.renderer === "g6" || args.renderer === "cytoscape" || args.renderer === "sigma"
-                  ? args.renderer
-                  : config.get("resultGraph.renderer", "g6"),
+              renderer: args.renderer ?? configuredGraphRenderer(config),
             });
           } else if (args.kind === "chart") {
             if (
@@ -345,7 +366,7 @@ export function registerProjectArtifacts(
               name,
               result: args.result,
               filters,
-              renderer: args.renderer === "plotly" ? "plotly" : config.get("chart.renderer", "g2"),
+              renderer: args.renderer ?? configuredChartRenderer(config),
               mark: args.mark as ChartMarkV2,
               x: args.x,
               y: args.mark === "histogram" ? null : args.y ?? null,
@@ -590,44 +611,54 @@ export function registerProjectArtifacts(
               typeof args === "object" &&
               !(args instanceof vscode.Uri) &&
               args.waitForReady === true;
-            const timeoutMs =
-              typeof args === "object" &&
-              !(args instanceof vscode.Uri) &&
-              Number.isInteger(args.timeoutMs) &&
-              (args.timeoutMs ?? 0) >= 1_000 &&
-              (args.timeoutMs ?? 0) <= 60_000
-                ? args.timeoutMs!
-                : 30_000;
+            const requestedTimeout =
+              typeof args === "object" && !(args instanceof vscode.Uri)
+                ? args.timeoutMs
+                : undefined;
+            if (
+              requestedTimeout !== undefined &&
+              (!Number.isInteger(requestedTimeout) || requestedTimeout < 1_000 || requestedTimeout > 60_000)
+            ) {
+              throw new Error("Visualization timeoutMs must be an integer from 1000 through 60000.");
+            }
+            const timeoutMs = requestedTimeout ?? 30_000;
             const lifecycle = waitForReady
               ? waitForResultGraphLifecycle(renderer, timeoutMs)
               : undefined;
-            const outcome = await vscode.commands.executeCommand(
-              "graphforge.showResultGraph",
-              {
-                title: spec.name,
-                payload: graphPayload,
-                ...options,
-              },
-            );
-            if (spec.format === "graphforge.visualization/v2") {
-              ResultGraphPanel.current?.attachArtifact(
-                projectRoot,
-                relativePath,
-                spec,
-                () => session.notifyChanged(),
+            try {
+              const outcome = await vscode.commands.executeCommand<Record<string, unknown>>(
+                "graphforge.showResultGraph",
+                {
+                  title: spec.name,
+                  payload: graphPayload,
+                  ...options,
+                },
               );
+              if (outcome?.panel === "cancelled") {
+                return { path: relativePath, absolutePath, kind: spec.kind, spec, ...outcome };
+              }
+              if (spec.format === "graphforge.visualization/v2") {
+                ResultGraphPanel.current?.attachArtifact(
+                  projectRoot,
+                  relativePath,
+                  spec,
+                  () => session.notifyChanged(),
+                );
+              }
+              const terminalLifecycle = lifecycle ? await lifecycle.promise : undefined;
+              return {
+                path: relativePath,
+                absolutePath,
+                kind: spec.kind,
+                spec,
+                ...(terminalLifecycle ? { lifecycle: terminalLifecycle } : {}),
+                ...(outcome && typeof outcome === "object"
+                  ? outcome
+                  : { outcome }),
+              };
+            } finally {
+              lifecycle?.dispose();
             }
-            const terminalLifecycle = lifecycle ? await lifecycle : undefined;
-            return {
-              path: relativePath,
-              absolutePath,
-              kind: spec.kind,
-              spec,
-              ...(terminalLifecycle ? { lifecycle: terminalLifecycle } : {}),
-              ...(outcome && typeof outcome === "object"
-                ? outcome
-                : { outcome }),
-            };
           }
 
           if (spec.kind === "plotly") {
@@ -650,7 +681,7 @@ export function registerProjectArtifacts(
             return { path: relativePath, absolutePath, kind: spec.kind, spec, outcome };
           }
 
-          const shown = ArtifactVisualizationPanel.show(
+          const shown = await ArtifactVisualizationPanel.show(
             context.extensionUri,
             projectRoot,
             relativePath,

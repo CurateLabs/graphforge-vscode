@@ -805,6 +805,15 @@ function createG6(current: GraphPayload): RendererHandle {
   };
   window.addEventListener("error", captureRenderError);
 
+  const destroyG6 = (): void => {
+    if (destroyed) return;
+    destroyed = true;
+    renderInProgress = false;
+    activeLayout?.cancel();
+    window.removeEventListener("error", captureRenderError);
+    g6.destroy();
+  };
+
   const waitForCanvasPaint = async (): Promise<void> => {
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
@@ -818,9 +827,16 @@ function createG6(current: GraphPayload): RendererHandle {
     }
     const canvases = [...graphElement.querySelectorAll("canvas")];
     const hasVisiblePixels = canvases.some((canvas) => {
-      const context = canvas.getContext("2d");
-      if (!context || canvas.width === 0 || canvas.height === 0) return false;
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      if (canvas.width === 0 || canvas.height === 0) return false;
+      const maximumProbeDimension = 256;
+      const scale = Math.min(1, maximumProbeDimension / Math.max(canvas.width, canvas.height));
+      const probe = document.createElement("canvas");
+      probe.width = Math.max(1, Math.ceil(canvas.width * scale));
+      probe.height = Math.max(1, Math.ceil(canvas.height * scale));
+      const context = probe.getContext("2d", { willReadFrequently: true });
+      if (!context) return false;
+      context.drawImage(canvas, 0, 0, probe.width, probe.height);
+      const pixels = context.getImageData(0, 0, probe.width, probe.height).data;
       for (let alpha = 3; alpha < pixels.length; alpha += 4) {
         if (pixels[alpha] !== 0) return true;
       }
@@ -847,8 +863,8 @@ function createG6(current: GraphPayload): RendererHandle {
           );
     reportRenderFailure("g6", failure);
     if (!hasRendered) {
-      destroyed = true;
-      g6.destroy();
+      if (renderer?.destroy === destroyG6) destroyRenderer();
+      else destroyG6();
       setEmpty("The G6 graph could not be rendered.");
       if (fitButton) fitButton.disabled = true;
       if (relayoutButton) relayoutButton.disabled = true;
@@ -943,12 +959,7 @@ function createG6(current: GraphPayload): RendererHandle {
   };
 
   return {
-    destroy: () => {
-      destroyed = true;
-      activeLayout?.cancel();
-      window.removeEventListener("error", captureRenderError);
-      g6.destroy();
-    },
+    destroy: destroyG6,
     fit: () => {
       if (hasRendered) {
         void g6.fitView({ when: "always" }, false).catch(reportAsyncFailure);

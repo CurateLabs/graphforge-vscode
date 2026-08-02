@@ -8,6 +8,7 @@ import {
   filterQueryResult,
   readProjectQuery,
   readProjectVisualization,
+  replaceProjectVisualization,
   resolveProjectMutationPath,
   scanProjectArtifacts,
   VISUALIZATION_SPEC_FORMAT,
@@ -217,6 +218,31 @@ suite("project artifacts", () => {
       () => readProjectQuery(root, "../outside.cypher"),
       /must stay inside the open project/,
     );
+  });
+
+  test("rejects replacement through a visualization directory symlink", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-artifacts-symlink-"));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "gf-artifacts-outside-"));
+    fs.mkdirSync(path.join(root, "results"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "results", "routes.json"),
+      JSON.stringify({ columns: ["origin"], rows: [{ origin: "ATL" }], rowCount: 1 }),
+    );
+    fs.symlinkSync(outside, path.join(root, "visualizations"), "dir");
+    const outsideArtifact = path.join(outside, "routes.gfviz.json");
+    const original = "outside content\n";
+    fs.writeFileSync(outsideArtifact, original);
+    const spec = createDefaultResultGraphSpec({
+      name: "Routes",
+      result: "results/routes.json",
+    });
+
+    assert.throws(
+      () => replaceProjectVisualization(root, "visualizations/routes.gfviz.json", spec),
+      /Visualization directory must stay inside the open project/,
+    );
+    assert.equal(fs.readFileSync(outsideArtifact, "utf8"), original);
+    assert.deepEqual(fs.readdirSync(outside), ["routes.gfviz.json"]);
   });
 
   test("requires executable mutation paths to stay under mutations", () => {

@@ -447,10 +447,20 @@ export function replaceProjectVisualization(
   if (!fs.existsSync(filePath)) {
     throw new Error(`Visualization does not exist: ${relativeProjectPath(projectRoot, filePath)}.`);
   }
-  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  const canonicalProjectRoot = fs.realpathSync(projectRoot);
+  const canonicalVisualizationRoot = fs.realpathSync(visualizationRoot);
+  if (!isInsideProject(canonicalProjectRoot, canonicalVisualizationRoot)) {
+    throw new Error(`Visualization directory must stay inside the open project.`);
+  }
+  const canonicalParent = fs.realpathSync(path.dirname(filePath));
+  if (!isInsideProject(canonicalVisualizationRoot, canonicalParent)) {
+    throw new Error(`Visualization must stay inside ${PROJECT_VISUALIZATIONS_DIR}/.`);
+  }
+  const canonicalFilePath = path.join(canonicalParent, path.basename(filePath));
+  const temporaryPath = `${canonicalFilePath}.${process.pid}.${randomUUID()}.tmp`;
   try {
     fs.writeFileSync(temporaryPath, `${JSON.stringify(spec, null, 2)}\n`, "utf8");
-    fs.renameSync(temporaryPath, filePath);
+    fs.renameSync(temporaryPath, canonicalFilePath);
   } catch (error) {
     fs.rmSync(temporaryPath, { force: true });
     throw error;

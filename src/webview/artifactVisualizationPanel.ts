@@ -82,7 +82,7 @@ export class ArtifactVisualizationPanel {
     this.updateTitle();
   }
 
-  static show(
+  static async show(
     extensionUri: vscode.Uri,
     projectRoot: string,
     artifactPath: string,
@@ -90,9 +90,19 @@ export class ArtifactVisualizationPanel {
     result: QueryResult,
     onSaved?: () => void,
     onSelectRow?: (rowIndex: number) => void,
-  ): { panel: ArtifactVisualizationPanel; status: "opened" | "updated" } {
+  ): Promise<{ panel: ArtifactVisualizationPanel; status: "opened" | "updated" | "cancelled" }> {
     if (ArtifactVisualizationPanel.current) {
       revealVizPanel(ArtifactVisualizationPanel.current.panel);
+      if (ArtifactVisualizationPanel.current.state.dirty) {
+        const choice = await vscode.window.showWarningMessage(
+          "This visualization has unsaved artifact changes. Discard them and open the requested visualization?",
+          { modal: true },
+          "Discard changes",
+        );
+        if (choice !== "Discard changes") {
+          return { panel: ArtifactVisualizationPanel.current, status: "cancelled" };
+        }
+      }
       ArtifactVisualizationPanel.current.replace(
         projectRoot,
         artifactPath,

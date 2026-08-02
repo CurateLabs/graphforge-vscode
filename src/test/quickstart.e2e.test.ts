@@ -134,7 +134,7 @@ suite("Quickstart e2e (#63)", () => {
           {
             result: "results/query-result.json",
             kind: "result-graph",
-            filter: { column: "region", operator: "equals" },
+            filter: { column: "region", operator: "equals", value: "   " },
             open: false,
           },
         ),
@@ -169,6 +169,12 @@ suite("Quickstart e2e (#63)", () => {
         visualizationCountBeforeRejectedCreates,
         "invalid creation input must not persist an artifact",
       );
+
+      const invalidTimeout = await vscode.commands.executeCommand<{ error?: string }>(
+        "graphforge.openProjectVisualization",
+        { path: graphSpec.path, waitForReady: true, timeoutMs: 999 },
+      );
+      assert.match(invalidTimeout?.error ?? "", /timeoutMs must be an integer from 1000 through 60000/);
 
       const graph = await vscode.commands.executeCommand<{
         panel?: string;

@@ -379,10 +379,10 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
         <option value="temporal">Temporal chart</option>
       </select></label>
       <div id="graph-settings">
-        <label>Renderer<select id="viz-renderer"><option value="g6">AntV G6</option><option value="cytoscape">Cytoscape</option><option value="sigma">Sigma</option></select></label>
+        <label>Renderer<select id="viz-renderer"><option value="">Use configured default</option><option value="g6">AntV G6</option><option value="cytoscape">Cytoscape</option><option value="sigma">Sigma</option></select></label>
       </div>
       <div id="chart-settings" hidden>
-        <label>Renderer<select id="viz-chart-renderer"><option value="g2">AntV G2</option><option value="plotly">Plotly</option></select></label>
+        <label>Renderer<select id="viz-chart-renderer"><option value="">Use configured default</option><option value="g2">AntV G2</option><option value="plotly">Plotly</option></select></label>
         <label>Chart type<select id="viz-chart-type">
           <option>scatter</option><option>bar</option><option>line</option><option>histogram</option>
         </select></label>
@@ -561,10 +561,10 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
       };
       const args = kind === 'result-graph' ? {
         ...common,
-        renderer: byId('viz-renderer').value,
+        renderer: byId('viz-renderer').value || undefined,
       } : kind === 'chart' ? {
         ...common,
-        renderer: byId('viz-chart-renderer').value,
+        renderer: byId('viz-chart-renderer').value || undefined,
         mark: byId('viz-chart-type').value,
         x: byId('viz-x').value,
         y: byId('viz-chart-type').value === 'histogram' ? undefined : byId('viz-y').value,

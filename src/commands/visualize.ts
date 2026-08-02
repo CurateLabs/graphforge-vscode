@@ -17,13 +17,12 @@ export function registerVisualizationCommands(
     vscode.commands.registerCommand(
       "graphforge.showResultGraph",
       async (args?: ShowResultGraphArgs) => {
-        const hadPanel = Boolean(ResultGraphPanel.current);
         const result = session.getLastResult();
         const payload = args?.payload ??
           (args?.title && result
             ? await session.toGraphPayload(result, args.title)
             : await session.lastGraphPayload());
-        ResultGraphPanel.show(context.extensionUri, payload, {
+        const shown = await ResultGraphPanel.show(context.extensionUri, payload, {
           renderer: args?.renderer,
           backend: args?.backend,
           source: args?.source,
@@ -32,9 +31,9 @@ export function registerVisualizationCommands(
           labels: args?.labels,
           timebar: args?.timebar,
         });
-        session.markSeenResultGraph();
+        if (shown.status !== "cancelled") session.markSeenResultGraph();
         return {
-          panel: hadPanel ? ("updated" as const) : ("opened" as const),
+          panel: shown.status,
           nodes: payload.nodes.length,
           edges: payload.edges.length,
           styleMode: payload.styleMode,

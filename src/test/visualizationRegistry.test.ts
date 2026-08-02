@@ -162,6 +162,93 @@ suite("visualization registry", () => {
     );
   });
 
+  test("factories reject contradictory chart, geospatial, and temporal settings", () => {
+    const histogram = createDefaultChartSpec({
+      name: "Histogram",
+      result: "results/routes.json",
+      mark: "histogram",
+      x: "distance",
+      y: "ignored",
+    });
+    assert.equal(histogram.chart.bindings.y, null);
+    assert.equal(isVisualizationSpecV2(histogram), true);
+    assert.throws(
+      () => createDefaultChartSpec({
+        name: "Conflicting",
+        result: "results/routes.json",
+        mark: "bar",
+        x: "origin",
+        y: "distance",
+        color: "region",
+        series: "carrier",
+      }),
+      /either color or series/,
+    );
+
+    const layer = {
+      id: "features",
+      type: "point" as const,
+      colorField: null,
+      sizeField: null,
+      shapeField: null,
+      color: "#4c6ef5",
+      opacity: 1,
+      size: 5,
+    };
+    const geoBase = {
+      name: "Map",
+      result: "results/routes.json",
+      source: { type: "coordinates" as const, longitudeField: "lon", latitudeField: "lat" },
+      sourceCrs: "EPSG:4326" as const,
+      projection: "EPSG:3857" as const,
+      viewport: { longitude: 0, latitude: 0, zoom: 1, bearing: 0, pitch: 0, bounds: null },
+    };
+    assert.throws(() => createDefaultGeospatialSpec({ ...geoBase, layers: [] }), /at least one layer/);
+    assert.throws(
+      () => createDefaultGeospatialSpec({ ...geoBase, layers: [{ ...layer, type: "line" as const }] }),
+      /point layers only/,
+    );
+    assert.throws(
+      () => createDefaultTemporalSpec({
+        name: "Timeline",
+        result: "results/routes.json",
+        mark: "line",
+        timestampField: "observed_at",
+        timezone: "Not/A-Timezone",
+        granularity: "day",
+        valueField: "count",
+      }),
+      /valid IANA timezone/,
+    );
+  });
+
+  test("strict v2 filters and playback steps remain explicit", () => {
+    const graph = createDefaultResultGraphSpec({
+      name: "Routes",
+      result: "results/routes.json",
+      filters: [{ column: "region", operator: "equals", value: "   " }],
+    });
+    assert.equal(isVisualizationSpecV2(graph), false);
+
+    const temporal = createDefaultTemporalSpec({
+      name: "Traffic",
+      result: "results/traffic.json",
+      mark: "line",
+      timestampField: "observed_at",
+      timezone: "UTC",
+      granularity: "hour",
+      valueField: "flights",
+    });
+    assert.equal(isVisualizationSpecV2({
+      ...temporal,
+      temporal: { ...temporal.temporal, playback: { enabled: true, step: 1.5, speedMs: 100 } },
+    }), false);
+    assert.equal(isVisualizationSpecV2({
+      ...temporal,
+      temporal: { ...temporal.temporal, playback: { enabled: true, step: 2, speedMs: 100 } },
+    }), true);
+  });
+
   test("rejects coercible enum values but permits shared acyclic JSON values", () => {
     const sharedFilter = { column: "region", operator: "equals" as const, value: "US" };
     const graph = createDefaultResultGraphSpec({

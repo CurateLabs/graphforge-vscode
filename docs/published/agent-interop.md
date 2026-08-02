@@ -67,23 +67,6 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.openProjectVisualization` | `string \| Uri \| { path, waitForReady?, timeoutMs? }` | `{ path, absolutePath, kind, spec, panel?, lifecycle? }` |
 | `graphforge.createProjectVisualization` | `{ name?, result, kind, renderer?, explicit bindings, filter?, open? }` | `{ path, spec, panel? }` |
 | `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` | `{ path, spec, panel? }` |
-
-### Exact visualization creation arguments
-
-Pass a project-relative `result`, a `kind`, and flattened kind-specific fields
-to `graphforge.createProjectVisualization`. Common optional fields are `name`,
-`open`, and `filter: { column, operator: "equals" | "contains", value }`.
-
-- `result-graph`: optional `renderer: "g6" | "cytoscape" | "sigma"`.
-- `chart`: `mark: "bar" | "scatter" | "line" | "histogram"`, `x`, `y`
-  (except histogram), optional `color`, and optional
-  `renderer: "g2" | "plotly"`.
-- `geospatial`: `longitude` and `latitude` (L7).
-- `temporal`: `timestamp` and `y`, plus optional `color`, `mark`, IANA
-  `timezone`, and `granularity` (G2).
-
-There is no nested `bindings` argument. The saved strict v2 artifact contains
-the complete renderer, layout, mapping, and presentation choices.
 | `graphforge.applyProjectMutation` | `{ path: string \| Uri; confirm: true }` | `{ path, absolutePath, columns, rowCount }` |
 | `graphforge.importData` | `{ path: string \| Uri; label: string; mode?: "create" \| "merge"; idColumn?: string; confirm: true }` | `{ path, format, label, mode, idColumn?, imported, result }` |
 | `graphforge.rank` / `cluster` / `paths` / `analyze` / `similar` (and `…Advanced…`) | Not yet — still QuickPick-driven | Verb result object (`{ verb, by, label, columns, rows, rowCount, algorithm? }`) |
@@ -114,6 +97,23 @@ the complete renderer, layout, mapping, and presentation choices.
 | `graphforge.recordAssertionStatus` | `{ assertionUuid?, status?, provenanceUuid? }` | `QueryResult` |
 | `graphforge.setupNativeBinding` / `setupPythonBinding` / `initializeProjectHere` / `loadOntology` / `showResultGraphAdvanced` | No — these are inherently human choices (which folder, which binding source) | — |
 | `graphforge.showOntology` / `showResultGraph` / `showCapabilities` / `openOntologyFile` / `explainOntologyMode` / `refreshExplorer` / `getStarted` / `chooseExperienceMode` / `openSettings` / `manageModules` / `statusBarClick` | No prompts to skip | — (view-openers; their effect is the UI they open) |
+
+### Exact visualization creation arguments
+
+Pass a project-relative `result`, a `kind`, and flattened kind-specific fields
+to `graphforge.createProjectVisualization`. Common optional fields are `name`,
+`open`, and `filter: { column, operator: "equals" | "contains", value }`.
+
+- `result-graph`: optional `renderer: "g6" | "cytoscape" | "sigma"`.
+- `chart`: `mark: "bar" | "scatter" | "line" | "histogram"`, `x`, `y`
+  (except histogram), optional `color`, and optional
+  `renderer: "g2" | "plotly"`.
+- `geospatial`: `longitude` and `latitude` (L7).
+- `temporal`: `timestamp` and `y`, plus optional `color`, `mark`, IANA
+  `timezone`, and `granularity` (G2).
+
+There is no nested `bindings` argument. The saved strict v2 artifact contains
+the complete renderer, layout, mapping, and presentation choices.
 
 The full per-command contract (prompt-by-prompt) lives in
 `docs/experience/agent-interop.md` in the repository, proven by the

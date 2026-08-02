@@ -207,19 +207,29 @@ export class ResultGraphPanel {
     this.panel.webview.html = this.getHtml(this.panel.webview, extensionUri);
   }
 
-  static show(
+  static async show(
     extensionUri: vscode.Uri,
     payload?: GraphPayload,
     options: ResultGraphViewOptions = {},
-  ): ResultGraphPanel {
+  ): Promise<{ panel: ResultGraphPanel; status: "opened" | "updated" | "cancelled" }> {
     if (ResultGraphPanel.current) {
       revealVizPanel(ResultGraphPanel.current.panel);
+      if (ResultGraphPanel.current.artifact?.state.dirty) {
+        const choice = await vscode.window.showWarningMessage(
+          "This result graph has unsaved artifact changes. Discard them and open the requested graph?",
+          { modal: true },
+          "Discard changes",
+        );
+        if (choice !== "Discard changes") {
+          return { panel: ResultGraphPanel.current, status: "cancelled" };
+        }
+      }
       ResultGraphPanel.current.detachArtifact();
       ResultGraphPanel.current.setViewOptions(options);
       if (payload) {
         ResultGraphPanel.current.update(payload);
       }
-      return ResultGraphPanel.current;
+      return { panel: ResultGraphPanel.current, status: "updated" };
     }
 
     const showOptions = graphForgeVizShowOptions();
@@ -238,7 +248,7 @@ export class ResultGraphPanel {
     if (payload) {
       ResultGraphPanel.current.update(payload);
     }
-    return ResultGraphPanel.current;
+    return { panel: ResultGraphPanel.current, status: "opened" };
   }
 
   update(payload: GraphPayload): void {

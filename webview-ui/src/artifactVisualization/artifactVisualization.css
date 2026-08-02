@@ -61,6 +61,8 @@ button:disabled { cursor: default; opacity: 0.5; }
   border-top: 1px solid var(--vscode-panel-border);
 }
 
+#temporal-controls[hidden] { display: none; }
+
 #temporal-controls label { display: grid; gap: 4px; font-size: 12px; }
 
 input {

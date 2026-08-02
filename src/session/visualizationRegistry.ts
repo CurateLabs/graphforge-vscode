@@ -333,6 +333,9 @@ export function createDefaultChartSpec(
     renderer?: ChartRendererV2["id"];
   },
 ): ChartVisualizationSpecV2 {
+  if (input.color != null && input.series != null) {
+    throw new Error("Chart creation accepts either color or series, not both.");
+  }
   return {
     format: VISUALIZATION_SPEC_FORMAT_V2,
     name: input.name,
@@ -344,7 +347,7 @@ export function createDefaultChartSpec(
       mark: input.mark,
       bindings: {
         x: input.x,
-        y: input.y,
+        y: input.mark === "histogram" ? null : input.y,
         color: input.color ?? null,
         size: input.size ?? null,
         shape: input.shape ?? null,
@@ -373,6 +376,12 @@ export function createDefaultGeospatialSpec(
     viewport: GeospatialVisualizationSpecV2["geospatial"]["viewport"];
   },
 ): GeospatialVisualizationSpecV2 {
+  if (input.layers.length === 0) {
+    throw new Error("Geospatial creation requires at least one layer.");
+  }
+  if (input.source.type === "coordinates" && input.layers.some((layer) => layer.type !== "point")) {
+    throw new Error("Coordinate geospatial sources support point layers only.");
+  }
   return {
     format: VISUALIZATION_SPEC_FORMAT_V2,
     name: input.name,
@@ -404,6 +413,9 @@ export function createDefaultTemporalSpec(
     title?: string | null;
   },
 ): TemporalVisualizationSpecV2 {
+  if (!isTimeZone(input.timezone)) {
+    throw new Error(`Temporal timezone ${input.timezone} is not a valid IANA timezone.`);
+  }
   return {
     format: VISUALIZATION_SPEC_FORMAT_V2,
     name: input.name,
@@ -511,7 +523,7 @@ function isFilter(value: unknown): value is ResultFilter {
   return (
     isNonEmptyString(value.column) &&
     (value.operator === "equals" || value.operator === "contains") &&
-    typeof value.value === "string" &&
+    isNonEmptyString(value.value) &&
     isSafeString(value.value)
   );
 }
@@ -704,7 +716,7 @@ function isTemporalV2(value: Record<string, unknown>): boolean {
     (range.start === null || range.end === null || Date.parse(range.start) <= Date.parse(range.end)) &&
     isRecord(window) && onlyKeys(window, ["size", "unit"]) && window.size === null && window.unit === "point" &&
     isRecord(playback) && ((playback.enabled === false && onlyKeys(playback, ["enabled", "step", "speedMs"]) && playback.step === null && playback.speedMs === null) ||
-      (playback.enabled === true && onlyKeys(playback, ["enabled", "step", "speedMs"]) && isFiniteNumber(playback.step) && playback.step > 0 && isFiniteNumber(playback.speedMs) && playback.speedMs > 0)) &&
+      (playback.enabled === true && onlyKeys(playback, ["enabled", "step", "speedMs"]) && Number.isSafeInteger(playback.step) && (playback.step as number) > 0 && isFiniteNumber(playback.speedMs) && playback.speedMs > 0)) &&
     isRecord(axes) && onlyKeys(axes, ["time", "value"]) && typeof axes.time === "boolean" && typeof axes.value === "boolean" &&
     typeof value.temporal.legend === "boolean" && value.temporal.theme === "editor" && value.temporal.animation === false &&
     (value.temporal.title === null || (typeof value.temporal.title === "string" && isSafeString(value.temporal.title)))
