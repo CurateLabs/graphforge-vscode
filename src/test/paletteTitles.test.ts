@@ -19,15 +19,28 @@ import * as path from "node:path";
 interface ContributedCommand {
   command: string;
   title: string;
+  icon?: string;
 }
 
-function contributedCommands(): ContributedCommand[] {
+interface ViewTitleMenuItem {
+  command: string;
+  when?: string;
+  group?: string;
+}
+
+function contributionManifest(): {
+  commands: ContributedCommand[];
+  menus: { "view/title": ViewTitleMenuItem[] };
+} {
   // dist/test/paletteTitles.test.js → repo root is two levels up.
   const packageJsonPath = path.join(__dirname, "..", "..", "package.json");
   const manifest = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
-    contributes: { commands: ContributedCommand[] };
+    contributes: {
+      commands: ContributedCommand[];
+      menus: { "view/title": ViewTitleMenuItem[] };
+    };
   };
-  return manifest.contributes.commands;
+  return manifest.contributes;
 }
 
 /** The Power/engineer command set (`src/commands/power.ts`). */
@@ -54,6 +67,8 @@ const ZERO_PROMPT_COMMAND_IDS = [
   "graphforge.refreshExplorer",
   "graphforge.checkEnvironment",
   "graphforge.copyEnvironmentReport",
+  "graphforge.agent.getContext",
+  "graphforge.agent.listArtifacts",
   "graphforge.indexAdjacency",
   "graphforge.inspectAdjacency",
   "graphforge.rebuildAdjacency",
@@ -62,6 +77,7 @@ const ZERO_PROMPT_COMMAND_IDS = [
   "graphforge.listAlgorithmRuns",
   "graphforge.listAssertions",
   "graphforge.showOntology",
+  "graphforge.showResultsTable",
   "graphforge.showResultGraph",
   "graphforge.showFigure",
   "graphforge.showCapabilities",
@@ -69,10 +85,15 @@ const ZERO_PROMPT_COMMAND_IDS = [
   "graphforge.explainOntologyMode",
   "graphforge.openSettings",
   "graphforge.getStarted",
+  "graphforge.getStarted.showHub",
+  "graphforge.getStarted.showQuery",
+  "graphforge.getStarted.showVisualize",
+  "graphforge.openSampleProject",
+  "graphforge.closeProject",
 ];
 
 suite("palette titles ↔ package.json contributes.commands (#41)", () => {
-  const commands = contributedCommands();
+  const { commands, menus } = contributionManifest();
   const byId = new Map(commands.map((c) => [c.command, c.title]));
 
   test("every title carries the uniform GraphForge: prefix", () => {
@@ -134,5 +155,27 @@ suite("palette titles ↔ package.json contributes.commands (#41)", () => {
       assert.ok(title, `${id} not contributed`);
       assert.ok(!title.endsWith("…"), `${id}: "${title}" is zero-prompt — drop the …`);
     }
+  });
+
+  test("Get Started uses three ordered VS Code title actions", () => {
+    const expected = [
+      ["graphforge.getStarted.showHub", "$(home)", "navigation@1"],
+      ["graphforge.getStarted.showQuery", "$(search)", "navigation@2"],
+      ["graphforge.getStarted.showVisualize", "$(graph)", "navigation@3"],
+    ] as const;
+    const getStartedItems = menus["view/title"].filter(
+      (item) => item.when === "view == graphforge.getStarted",
+    );
+    assert.deepEqual(
+      getStartedItems.map((item) => [item.command, item.group]),
+      expected.map(([command, _icon, group]) => [command, group]),
+    );
+    for (const [command, icon] of expected) {
+      assert.equal(commands.find((item) => item.command === command)?.icon, icon);
+    }
+    assert.ok(
+      !getStartedItems.some((item) => item.command === "graphforge.getStarted"),
+      "the old rocket action must not duplicate the Hub title action",
+    );
   });
 });

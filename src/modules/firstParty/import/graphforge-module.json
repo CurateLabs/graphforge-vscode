@@ -1,0 +1,10 @@
+{
+  "format": "graphforge.module/v1",
+  "id": "graphforge.import",
+  "name": "Import",
+  "version": "1.0.0",
+  "publisher": "GraphForge",
+  "description": "Import CSV, JSON, or JSON Lines records as nodes through the active GraphForge runtime.",
+  "capabilities": ["import"],
+  "entrypoint": { "kind": "builtin" }
+}

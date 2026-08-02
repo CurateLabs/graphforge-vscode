@@ -80,7 +80,9 @@ export function registerFigures(
           presentError(`GraphForge Figure: ${checked.error}`);
           return { error: checked.error, code: checked.code };
         }
-        return presentFigure(context.extensionUri, checked.figure);
+        const shown = presentFigure(context.extensionUri, checked.figure);
+        session.markSeenFigure();
+        return shown;
       },
     ),
 
@@ -133,6 +135,7 @@ export function registerFigures(
         }
 
         const shown = presentFigure(context.extensionUri, checked.figure);
+        session.markSeenFigure();
         return { ...shown, chartType: chartType! };
       },
     ),

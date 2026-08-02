@@ -97,6 +97,9 @@ export class GraphForgeSession implements vscode.Disposable {
   private algorithmContractsCache: AlgorithmDescriptorContract[] | undefined;
   private lastResult: QueryResult | undefined;
   private lastResultTitle: string | undefined;
+  /** Get Started “see results” step — shown this session (#63). */
+  private seenResultGraph = false;
+  private seenFigure = false;
   private beliefPolicy: BeliefPolicySettings = { ...DEFAULT_BELIEF_POLICY };
   private readonly statusBar: vscode.StatusBarItem;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
@@ -170,6 +173,24 @@ export class GraphForgeSession implements vscode.Disposable {
     await this.attachBackend(rootPath);
   }
 
+  /** Detach the engine backend and clear session result/viz state (#63 e2e teardown). */
+  async closeProject(): Promise<void> {
+    const previous = this.backend;
+    this.backend = undefined;
+    this.activeProject = undefined;
+    this.algorithmContractsCache = undefined;
+    this.lastResult = undefined;
+    this.lastResultTitle = undefined;
+    this.seenResultGraph = false;
+    this.seenFigure = false;
+    this.activeWriteMode = "single_writer";
+    if (previous) {
+      void previous.dispose();
+    }
+    this.refreshStatus();
+    this._onDidChange.fire();
+  }
+
   /**
    * Open `rootPath` via the engine's `open_or_initialize_project` contract:
    * an empty directory is initialized as the first committed generation, a
@@ -220,6 +241,8 @@ export class GraphForgeSession implements vscode.Disposable {
     this.algorithmContractsCache = undefined;
     this.lastResult = undefined;
     this.lastResultTitle = undefined;
+    this.seenResultGraph = false;
+    this.seenFigure = false;
     // Write-mode coordination is Node-only; a Python-backed session always
     // reports the (only meaningful) single-writer default.
     this.activeWriteMode = backend.runtime === "node" ? writeMode : "single_writer";
@@ -274,6 +297,27 @@ export class GraphForgeSession implements vscode.Disposable {
     const buf = await backend.execute(cypher, params);
     const result = decodeTable(buf);
     this.rememberResult(result, "Cypher result");
+    return result;
+  }
+
+  /**
+   * Manifests published by the active GraphForge runtime/project. These are
+   * catalog metadata, not extension-host JavaScript, so engine-owned modules
+   * can appear beside VSIX and built-in modules without living in this repo.
+   */
+  async graphForgeModuleCatalog(): Promise<unknown[]> {
+    const backend = this.requireBackend();
+    return backend.moduleCatalog ? backend.moduleCatalog() : [];
+  }
+
+  /** Apply a write without replacing the user's current table/graph result. */
+  async executeMutation(
+    cypher: string,
+    params?: Record<string, unknown>,
+  ): Promise<QueryResult> {
+    const backend = this.requireBackend();
+    const result = decodeTable(await backend.execute(cypher, params));
+    this._onDidChange.fire();
     return result;
   }
 
@@ -1293,9 +1337,47 @@ export class GraphForgeSession implements vscode.Disposable {
     return this.lastResult;
   }
 
+  /** Restore a durable project result as the active table/graph/figure source. */
+  restoreResult(result: QueryResult, title = "Saved result"): void {
+    this.rememberResult(result, title);
+  }
+
+  /**
+   * Drop the remembered table result (e.g. after quickstart seed CREATE so
+   * Get Started still waits for the sample MATCH — #63).
+   */
+  clearLastResult(): void {
+    this.lastResult = undefined;
+    this.lastResultTitle = undefined;
+    this._onDidChange.fire();
+  }
+
+  get hasSeenResultGraph(): boolean {
+    return this.seenResultGraph;
+  }
+
+  get hasSeenFigure(): boolean {
+    return this.seenFigure;
+  }
+
+  markSeenResultGraph(): void {
+    if (!this.seenResultGraph) {
+      this.seenResultGraph = true;
+      this._onDidChange.fire();
+    }
+  }
+
+  markSeenFigure(): void {
+    if (!this.seenFigure) {
+      this.seenFigure = true;
+      this._onDidChange.fire();
+    }
+  }
+
   private rememberResult(result: QueryResult, title?: string): void {
     this.lastResult = result;
     this.lastResultTitle = title;
+    this._onDidChange.fire();
   }
 
   /**

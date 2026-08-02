@@ -1,0 +1,14 @@
+{
+  "format": "graphforge.visualization/v1",
+  "name": "US routes network",
+  "kind": "result-graph",
+  "result": "results/query-result.json",
+  "graph": {
+    "renderer": "cytoscape",
+    "layout": {
+      "nodeRepulsion": 180000,
+      "idealEdgeLength": 42,
+      "gravity": 0.7
+    }
+  }
+}

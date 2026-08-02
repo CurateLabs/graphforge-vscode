@@ -5,9 +5,13 @@ import { UnsupportedByBindingError } from "../session/graphForgeSession";
 import { isGraphForgeProject } from "../session/projectDetector";
 import type { QueryResult } from "../session/types";
 import { OntologyPanel } from "../webview/ontologyPanel";
-import { ResultGraphPanel } from "../webview/resultGraphPanel";
 import { SettingsPanel } from "../webview/settingsPanel";
-import { GetStartedViewProvider, revealGetStarted } from "../views/getStartedView";
+import {
+  GetStartedViewProvider,
+  revealGetStarted,
+  revealGetStartedPage,
+  type GetStartedPage,
+} from "../views/getStartedView";
 import { ensureProjectOrRecover, presentError, reportEngineError } from "./shared";
 
 export function registerOpenViews(
@@ -15,11 +19,29 @@ export function registerOpenViews(
   session: GraphForgeSession,
   refreshTrees: () => void,
 ): void {
+  const showGetStartedPage = async (page: GetStartedPage) => {
+    const provider = GetStartedViewProvider.instance;
+    if (provider) {
+      await revealGetStartedPage(provider, page);
+    } else {
+      await vscode.commands.executeCommand("workbench.view.extension.graphforge");
+      await vscode.commands.executeCommand("graphforge.getStarted.focus");
+    }
+  };
+  const projectPathFromArg = (
+    arg?: string | vscode.Uri | { path?: string | vscode.Uri },
+  ): string | undefined => {
+    if (typeof arg === "string") return arg.trim() || undefined;
+    if (arg && typeof arg === "object" && "fsPath" in arg) return arg.fsPath;
+    const value = arg?.path;
+    return typeof value === "string" ? value.trim() || undefined : value?.fsPath;
+  };
+
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "graphforge.openProject",
-      async (pathArg?: string) => {
-        let rootPath = typeof pathArg === "string" ? pathArg : undefined;
+      async (pathArg?: string | vscode.Uri | { path?: string | vscode.Uri }) => {
+        let rootPath = projectPathFromArg(pathArg);
         if (!rootPath) {
           const uri = await vscode.window.showOpenDialog({
             canSelectFiles: false,
@@ -44,8 +66,9 @@ export function registerOpenViews(
           void vscode.window.showInformationMessage(
             `Opened GraphForge project: ${rootPath}`,
           );
+          return { path: rootPath, project: session.project };
         } catch (err) {
-          reportEngineError("open project failed", err);
+          return reportEngineError("open project failed", err);
         }
       },
     ),
@@ -67,45 +90,6 @@ export function registerOpenViews(
       });
     }),
 
-    vscode.commands.registerCommand("graphforge.showResultGraph", async () => {
-      // Refresh from the last query/verb result when there is one; an
-      // explicit demo graph only when nothing has run yet in this session.
-      const payload = await session.lastGraphPayload();
-      ResultGraphPanel.show(context.extensionUri, payload);
-    }),
-
-    vscode.commands.registerCommand("graphforge.showResultGraphAdvanced", async () => {
-      const current = session.getBeliefPolicy();
-      const enabledPick = await vscode.window.showQuickPick(
-        [
-          { label: "Enabled", picked: current.enabled, value: true },
-          { label: "Disabled (always class-only)", picked: !current.enabled, value: false },
-        ],
-        { title: "GraphForge: Result Graph — resolve epistemic status from ledger?" },
-      );
-      if (!enabledPick) {
-        return;
-      }
-      const maxNodesRaw = await vscode.window.showInputBox({
-        title: "GraphForge: Result Graph — max nodes to resolve",
-        prompt: "Bounds belief/status lookups per render (higher = slower on large graphs)",
-        value: String(current.maxNodes),
-        validateInput: (value) =>
-          Number.isFinite(Number(value)) && Number(value) > 0
-            ? undefined
-            : "Enter a positive number",
-      });
-      if (maxNodesRaw === undefined) {
-        return;
-      }
-      session.setBeliefPolicy({
-        enabled: enabledPick.value,
-        maxNodes: Math.max(1, Math.trunc(Number(maxNodesRaw)) || current.maxNodes),
-      });
-      const payload = await session.lastGraphPayload();
-      ResultGraphPanel.show(context.extensionUri, payload);
-    }),
-
     vscode.commands.registerCommand("graphforge.openSettings", () => {
       SettingsPanel.show(context.extensionUri);
     }),
@@ -119,6 +103,18 @@ export function registerOpenViews(
         await vscode.commands.executeCommand("graphforge.getStarted.focus");
       }
     }),
+
+    vscode.commands.registerCommand("graphforge.getStarted.showHub", () =>
+      showGetStartedPage("hub"),
+    ),
+
+    vscode.commands.registerCommand("graphforge.getStarted.showQuery", () =>
+      showGetStartedPage("query"),
+    ),
+
+    vscode.commands.registerCommand("graphforge.getStarted.showVisualize", () =>
+      showGetStartedPage("visualize"),
+    ),
 
     vscode.commands.registerCommand("graphforge.chooseExperienceMode", async () => {
       const provider = GetStartedViewProvider.instance;

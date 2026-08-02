@@ -8,6 +8,12 @@ human clicking through menus.
 
 ## The core loop
 
+Start with `executeCommand("graphforge.agent.getContext")`. Its
+`graphforge.agent-context/v1` result includes the environment report, effective
+settings, project marker, absolute artifact paths, last-result paths, file
+schemas, and the compact path-driven command set. Use
+`graphforge.agent.listArtifacts` when only the artifact index is needed.
+
 ```mermaid
 flowchart TD
     A["checkEnvironment({ silent: true })"] -->|runtime.active == 'none'| B["setupNativeBinding or setupPythonBinding"]
@@ -48,8 +54,14 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 |---|---|---|
 | `graphforge.checkEnvironment` | `{ silent?: boolean }` | `EnvironmentReport` always |
 | `graphforge.copyEnvironmentReport` | none needed | `EnvironmentReport` (also copied to the clipboard) |
-| `graphforge.openProject` | `pathArg?: string` | — |
+| `graphforge.agent.getContext` / `agent.listArtifacts` | `{ projectPath?: string \| Uri }` | Versioned context / artifact index JSON |
+| `graphforge.openProject` | `string \| Uri \| { path }` | `{ path, project }` |
+| `graphforge.openSampleProject` | `{ path?, force? }` | `{ path, project, seeded }` |
 | `graphforge.runQuery` / `runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown> }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) |
+| `graphforge.runProjectQuery` | `string \| Uri \| { path, resultName? }` | `QueryResult` |
+| `graphforge.openProjectResult` / `openProjectVisualization` | `string \| Uri \| { path }` | Structured open outcome |
+| `graphforge.applyProjectMutation` | `{ path: string \| Uri; confirm: true }` | `{ path, absolutePath, columns, rowCount }` |
+| `graphforge.importData` | `{ path: string \| Uri; label: string; mode?: "create" \| "merge"; idColumn?: string; confirm: true }` | `{ path, format, label, mode, idColumn?, imported, result }` |
 | `graphforge.rank` / `cluster` / `paths` / `analyze` / `similar` (and `…Advanced…`) | Not yet — still QuickPick-driven | Verb result object (`{ verb, by, label, columns, rows, rowCount, algorithm? }`) |
 | `graphforge.find` | Not yet — still prompt-driven | `QueryResult & { verb: "find", query, label? }`; a missing-index failure returns `{ error, code?, nextAction }` naming `graphforge.indexText` |
 | `graphforge.createCheckpoint` / `listCheckpoints` / `diffCheckpoints` | `{ name?, description? }` / `{ limit? }` / `{ from?, to?, scope?, detail? }` | `QueryResult` |
@@ -77,11 +89,23 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.assessConfidence` | `{ assertionUuid?, policy?, value? }` | `QueryResult` |
 | `graphforge.recordAssertionStatus` | `{ assertionUuid?, status?, provenanceUuid? }` | `QueryResult` |
 | `graphforge.setupNativeBinding` / `setupPythonBinding` / `initializeProjectHere` / `loadOntology` / `showResultGraphAdvanced` | No — these are inherently human choices (which folder, which binding source) | — |
-| `graphforge.showOntology` / `showResultGraph` / `showCapabilities` / `openOntologyFile` / `explainOntologyMode` / `refreshExplorer` / `getStarted` / `chooseExperienceMode` / `openSettings` / `statusBarClick` | No prompts to skip | — (view-openers; their effect is the UI they open) |
+| `graphforge.showOntology` / `showResultGraph` / `showCapabilities` / `openOntologyFile` / `explainOntologyMode` / `refreshExplorer` / `getStarted` / `chooseExperienceMode` / `openSettings` / `manageModules` / `statusBarClick` | No prompts to skip | — (view-openers; their effect is the UI they open) |
 
 The full per-command contract (prompt-by-prompt) lives in
 `docs/experience/agent-interop.md` in the repository, proven by the
 `src/test/extension.test.ts` safe-commands suites in CI.
+
+Project files are also a public contract: exact `FORMAT` marker; `.cypher`/`.cql`
+or `{ cypher, params }` query specs; `{ columns, rows, rowCount }` results;
+`graphforge.visualization/v1` `.gfviz.json`; and reviewed writes under
+`mutations/`. Absolute and project-relative paths are accepted, but traversal
+outside the project is rejected. The bundled sample includes `AGENTS.md` beside
+these folders so a repository-aware agent can discover the contract directly.
+
+GraphForge does not contribute a VS Code Language Model Tool on its current
+`^1.96` engine floor because that version's stable extension API does not expose
+tool registration. Commands, JSON returns, and project files are the portable
+surface for Copilot, Cursor, and MCP bridges until the engine floor can move.
 
 ## Runtime awareness
 

@@ -1,0 +1,10 @@
+{
+  "format": "graphforge.module/v1",
+  "id": "graphforge.visualize",
+  "name": "Visualize",
+  "version": "1.0.0",
+  "publisher": "GraphForge",
+  "description": "Turn query results into linked graph and Plotly views inside the workbench.",
+  "capabilities": ["visualize"],
+  "entrypoint": { "kind": "builtin" }
+}

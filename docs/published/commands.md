@@ -13,18 +13,47 @@ Every command below is a stable ID, invokable from the Command Palette or progra
 | GraphForge: Setup Native Binding | `graphforge.setupNativeBinding` | QuickPick to link/browse/install `@curatelabs/graphforge`. |
 | GraphForge: Setup Python Binding | `graphforge.setupPythonBinding` | QuickPick to select a Python interpreter or install `graphforge` via `uv`. |
 | GraphForge: Initialize Project Here | `graphforge.initializeProjectHere` | Creates a new GraphForge project in an empty/uninitialized folder. |
-| GraphForge: Open Project | `graphforge.openProject` | Opens an existing `FORMAT`-marked project; accepts an optional path string arg. |
+| GraphForge: Open Project | `graphforge.openProject` | Opens an existing `FORMAT`-marked project; accepts a string, URI, or `{ path }`. |
+| GraphForge: Open Sample Project | `graphforge.openSampleProject` | Seeds/opens the vendored US air-routes sample (Apache-2.0); accepts `{ path?, force? }` (skips Guided confirms when args are passed). |
+| GraphForge: Close Project | `graphforge.closeProject` | Detaches the active engine session (no folder delete). |
 | GraphForge: Refresh Explorer | `graphforge.refreshExplorer` | Refreshes the Projects Activity Bar view. |
-| GraphForge: Get Started | `graphforge.getStarted` | Opens the Get Started sidebar (Welcome mode picker on first use, then the runtime → project → query checklist). |
+| GraphForge: Agent: Get Context | `graphforge.agent.getContext` | Returns `graphforge.agent-context/v1` runtime, settings, marker, artifact, last-result, schema, and command JSON; optional `{ projectPath }`. |
+| GraphForge: Agent: List Project Artifacts | `graphforge.agent.listArtifacts` | Returns `graphforge.artifact-index/v1` with project-relative and absolute paths; optional `{ projectPath }`. |
+| GraphForge: Get Started | `graphforge.getStarted` | Opens the Get Started sidebar: guided milestones before the first result, then a persistent project/query/results control hub. |
+| GraphForge: Show Hub | `graphforge.getStarted.showHub` | Opens Get Started's Hub surface; contributed as its Home title action. |
+| GraphForge: Show Query | `graphforge.getStarted.showQuery` | Opens Get Started's Query surface; contributed as its Search title action. |
+| GraphForge: Show Visualize | `graphforge.getStarted.showVisualize` | Opens Get Started's Visualize surface; contributed as its Graph title action. |
 | GraphForge: Choose Experience Mode… | `graphforge.chooseExperienceMode` | Reopens the Welcome mode picker (Guided/Autonomous) inside Get Started. |
 | GraphForge: Settings | `graphforge.openSettings` | Opens the GraphForge Settings panel — left-nav categories (Runtime / Experience / Advanced) over the same `graphforge.*` settings as the VS Code Settings UI. |
+
+## Modules and import
+
+| Command | ID | What it does |
+|---|---|---|
+| GraphForge: Manage Modules | `graphforge.manageModules` | Opens the Module Bay for default, GraphForge-catalog, and side-loaded modules. |
+| GraphForge: Install Module from File… | `graphforge.installModuleFromFile` | Installs a validated manifest file or a folder containing `graphforge-module.json`. |
+| GraphForge: Refresh Modules | `graphforge.refreshModules` | Refreshes manifests published by the active GraphForge runtime/project. |
+| GraphForge: Import Data… | `graphforge.importData` | Imports CSV/JSON/JSONL/NDJSON objects as nodes; programmatic callers pass `{ path, label, mode?, idColumn?, confirm: true }`. |
 
 ## Cypher
 
 | Command | ID | What it does |
 |---|---|---|
-| GraphForge: Run Query | `graphforge.runQuery` | Runs Cypher from the editor selection, the whole document, or an input box; accepts `{ cypher?, params? }` to skip prompts. |
+| GraphForge: Run Query | `graphforge.runQuery` | Runs Cypher from the editor selection, the whole document, or an input box; accepts `{ cypher?, params?, resultName? }` to skip prompts and optionally name the durable result. |
 | GraphForge: Run Query with Parameters… | `graphforge.runQueryWithParams` | Same as Run Query, plus a JSON parameters prompt (or pass `{ cypher, params }` directly). |
+| GraphForge: Run Project Query | `graphforge.runProjectQuery` | Reads and runs a string, URI, or `{ path, resultName? }` inside the open project. |
+| GraphForge: Save Project Query | `graphforge.saveProjectQuery` | Writes `{ name?, cypher, run?, resultName? }` under `queries/`. |
+| GraphForge: Save Project Query Template | `graphforge.saveProjectQueryTemplate` | Writes `{ name?, cypher, run?, resultName? }` under `queries/templates/`; unnamed templates use `query-YYYYMMDD-HHMMSS-mmm`. |
+
+## Project artifacts
+
+| Command | ID | Args |
+|---|---|---|
+| Open Saved Result | `graphforge.openProjectResult` | String, URI, or `{ path }` — restores a `results/*.json` file into the Results table and session views. |
+| Open Saved Visualization | `graphforge.openProjectVisualization` | String, URI, or `{ path }` — loads a `.gfviz.json`, its referenced result/filter, and opens Result Graph or Figure. |
+| Save Project Visualization | `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` — writes under `visualizations/`; unnamed files use `vis-YYYYMMDD-HHMMSS-mmm`. |
+| Open Project Artifact | `graphforge.openProjectArtifact` | String, URI, or `{ path }` — opens a project file in the editor. |
+| Apply Project Mutation… | `graphforge.applyProjectMutation` | `{ path, confirm: true }` for non-interactive use; confines executable `.cypher`/`.cql`/JSON specs to `mutations/`. |
 
 ## Analyst verbs
 
@@ -118,11 +147,24 @@ UUIDv7 (engine-enforced). Knowledge-ledger writes require the Node runtime.
 
 | Command | ID |
 |---|---|
+| GraphForge: Show Results Table | `graphforge.showResultsTable` |
 | GraphForge: Show Result Graph | `graphforge.showResultGraph` |
 | GraphForge: Result Graph (Advanced)… | `graphforge.showResultGraphAdvanced` |
 | GraphForge: Show Figure | `graphforge.showFigure` |
 | GraphForge: Figure from Result… | `graphforge.figureFromResult` |
 | GraphForge: Show Project Capabilities | `graphforge.showCapabilities` |
+
+Result Graph uses Cytoscape by default. Choose Sigma with
+`graphforge.resultGraph.renderer` in **GraphForge: Settings**; an open graph switches
+immediately while retaining its current payload. Both renderers support force re-layout,
+pan/zoom/fit, and click-to-inspect for nodes and edges.
+
+Successful Cypher and analyst-verb commands reveal **GraphForge Results** in the bottom Panel
+instead of opening a disposable JSON/Markdown editor tab. Run Query still persists
+`results/query-result.json` and `results/query-result.md`; the panel's JSON and Markdown buttons
+open those durable files on demand. Table selection links to matching IDs/codes/endpoints in an
+open Result Graph, and graph selection highlights matching rows. Figure point linking is not part
+of v0 because arbitrary Plotly figures do not preserve source-row provenance.
 
 See [`agent-interop.md`](agent-interop.md) for which of these accept structured arguments and
 return structured results for programmatic (agent) callers, and the source-of-truth test

@@ -19,6 +19,7 @@ interface ContributedProperty {
   type: string;
   default?: unknown;
   enum?: string[];
+  scope?: string;
 }
 
 function contributedProperties(): Record<string, ContributedProperty> {
@@ -104,5 +105,17 @@ suite("settingsSchema ↔ package.json contributes.configuration", () => {
         }
       }
     }
+  });
+
+  test("workspace JavaScript opt-in is machine-scoped and off by default", () => {
+    const setting = contributedProperties()[
+      "graphforge.modules.dangerouslyAllowWorkspaceJavaScript"
+    ];
+    assert.equal(setting.default, false);
+    assert.equal(
+      setting.scope,
+      "machine",
+      "a repository must not enable workspace JavaScript through workspace settings",
+    );
   });
 });

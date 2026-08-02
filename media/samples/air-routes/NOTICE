@@ -1,0 +1,23 @@
+Air Routes sample (US airports + domestic routes)
+================================================
+
+This directory contains a US-only subset of the **air-routes** graph published by
+Kelvin R. Lawrence as part of *Practical Gremlin — An Apache TinkerPop Tutorial*:
+
+  https://github.com/krlawrence/graph
+
+Upstream project license: Apache License 2.0
+Copyright for the air-routes dataset: Kelvin R. Lawrence
+
+The full upstream CSVs (`air-routes-latest-nodes.csv` /
+`air-routes-latest-edges.csv`) were filtered to:
+
+  - airports with `country == US`
+  - routes whose endpoints are both in that US airport set
+
+No airport or route records were invented. Column names were normalized for
+GraphForge seeding (`id`, `code`, `city`, `region`, `runways`, `elev`, `lat`,
+`lon`, `desc` for airports; `from`, `to`, `dist` for routes).
+
+See `LICENSE` in this directory (Apache-2.0) and the upstream repository for
+the complete license text.

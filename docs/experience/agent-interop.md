@@ -16,7 +16,7 @@ An analyst pairing with a coding agent (or an agent working unattended) can chec
 
 ## Current journey
 
-Before this work: `graphforge.runQuery` only accepted no arguments — it always resolved input from the active editor selection/document or a `showInputBox`, so an agent that already had a Cypher string had no way to skip that prompt. `graphforge.checkEnvironment` returned `undefined` from `executeCommand` (data was only visible in an opened JSON document and a toast), and a missing-project failure inside `runQuery` awaited a button-bearing `showErrorMessage`, which — called programmatically — blocks the calling promise until a human dismisses a dialog they may never see. There was also no test asserting the command surface beyond a 9-command smoke list, and no single doc listing the stable IDs.
+Before the agent context surface, an agent had to combine `checkEnvironment`, project-directory searches, configuration reads, and knowledge of `results/query-result.json` to reconstruct state. Project-artifact commands accepted `{ path }` only, despite VS Code tools commonly passing a plain absolute path or `Uri`. Mutations were visible as files but had no explicit command contract: an agent could run their Cypher as an ordinary query, which obscured write intent and provided no confirmation guard. `graphforge.agent.getContext`, flexible path inputs, and `graphforge.applyProjectMutation` close those gaps.
 
 ## Opportunity and hypothesis
 
@@ -36,7 +36,17 @@ Then the call resolves (does not throw or hang) with an `EnvironmentReport` obje
 **Scenario: Agent runs a known Cypher query without any UI**
 Given a project is open and the binding is available
 When the agent calls `executeCommand("graphforge.runQuery", { cypher: "MATCH (n) RETURN n LIMIT 5" })`
-Then no QuickPick/InputBox appears, the call resolves with `{ columns, rows, rowCount }`, and (per the existing `graphforge.openResultGraphOnQuery` setting) a results document and/or graph webview may also open for a human pairing with the agent.
+Then no QuickPick/InputBox appears, the call resolves with `{ columns, rows, rowCount }`, writes `results/query-result.json` plus a readable Markdown companion inside the open project, and (per the existing `graphforge.openResultGraphOnQuery` setting) a result preview and/or graph webview may also open for a human pairing with the agent.
+
+**Scenario: Agent discovers project state and files in one call**
+Given the extension is activated
+When the agent calls `executeCommand("graphforge.agent.getContext")`
+Then it receives `graphforge.agent-context/v1` JSON containing environment/runtime state, the exact project marker, effective settings, discovered projects, canonical/latest result paths, absolute artifact paths, file-schema summaries, and the compact command set below.
+
+**Scenario: Agent applies a reviewed mutation file**
+Given a project is open and `mutations/add-airport.cypher` has been reviewed
+When the agent calls `executeCommand("graphforge.applyProjectMutation", { path: "/absolute/project/mutations/add-airport.cypher", confirm: true })`
+Then GraphForge verifies the path stays under `mutations/`, applies the write without replacing the current table/graph result, and returns `{ path, absolutePath, columns, rowCount }`. Omitting `confirm: true` returns `CONFIRMATION_REQUIRED` without opening a modal.
 
 **Scenario: Agent hits a missing binding and self-recovers**
 Given `@curatelabs/graphforge` is not resolvable
@@ -70,7 +80,7 @@ Then the call resolves immediately (it does not wait for a human to dismiss the 
 
 ## Command ID table (agent-facing contract)
 
-Source of truth: `package.json#contributes.commands`. All IDs are invoked as `vscode.commands.executeCommand("<id>", ...)`. The table covers every contributed command (#36) — nothing is silently outside the contract.
+Source of truth: `package.json#contributes.commands` (80 contributed commands on this branch). All IDs are invoked as `vscode.commands.executeCommand("<id>", ...)`. The table groups the operational/agent-relevant surface; view-navigation variants such as `graphforge.getStarted.showQuery` remain discoverable in the manifest.
 
 **Shared outcome union.** Every command that does engine work returns `CommandOutcome<T>` (`src/commands/shared.ts`): the success payload `T` listed below, or `SetupRecovery` (`{ error, code?, nextAction }`) when no runtime/project is usable, or `{ cancelled: true }` when a human dismisses an interactive prompt, or `{ error, code? }` when the engine call fails. No handler resolves `undefined` on those paths.
 
@@ -84,8 +94,21 @@ Source of truth: `package.json#contributes.commands`. All IDs are invoked as `vs
 | `graphforge.setupPythonBinding` | none | `void` | 1 QuickPick (use detected interpreter / browse / install via `uv`) | No (this *sets up* the Python runtime, #12) |
 | `graphforge.initializeProjectHere` | none | `void` | 1 QuickPick (workspace folder vs. browse), plus confirmation dialogs for non-empty/missing targets | Needs a usable runtime first (fails closed with "Setup Native Binding" / "Setup Python Binding" action buttons otherwise) |
 | `graphforge.openProject` | `pathArg?: string` | `void` | Folder picker only when `pathArg` omitted | Needs the target to already be a valid `FORMAT` project |
-| `graphforge.runQuery` | `{ cypher?: string; params?: Record<string, unknown> }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) | Editor selection → whole doc → `showInputBox` only when `args.cypher` omitted/blank | Yes |
-| `graphforge.runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown> }` | Same as `runQuery` | Same cypher resolution as `runQuery`; params `showInputBox` (JSON) only when `args.params` omitted | Yes |
+| `graphforge.openSampleProject` | `{ path?, force? }` | `{ path, project, seeded }` or `{ error, code, nextAction? }` / `{ cancelled: true }` | Guided confirm when called with no args; skipped when args object passed | Needs a usable runtime; materializes project-owned air-routes data/query/viz/mutation files |
+| `graphforge.closeProject` | none | `{ closed: true }` | None | No |
+| `graphforge.agent.getContext` | `{ projectPath?: string \| Uri }` | `graphforge.agent-context/v1` context (environment, settings, project marker, artifacts with absolute paths, last-result paths, schemas, compact command descriptors) | None | No — an optional path can be inspected without opening it |
+| `graphforge.agent.listArtifacts` | `{ projectPath?: string \| Uri }` | `graphforge.artifact-index/v1`, or structured `PROJECT_REQUIRED` | None | No runtime required; needs an active or explicit project path |
+| `graphforge.runQuery` | `{ cypher?: string; params?: Record<string, unknown>; resultName?: string }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) | Editor selection → whole doc → `showInputBox` only when `args.cypher` omitted/blank | Yes |
+| `graphforge.runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown>; resultName?: string }` | Same as `runQuery` | Same cypher resolution as `runQuery`; params `showInputBox` (JSON) only when `args.params` omitted | Yes |
+| `graphforge.runProjectQuery` | `string \| Uri \| { path: string \| Uri; resultName?: string }` | Same as `runQuery` | None | Yes; path must stay in project |
+| `graphforge.saveProjectQuery` | `{ name?, cypher, run?, resultName? }` | `{ path }` or query result | None | Yes |
+| `graphforge.saveProjectQueryTemplate` | `{ name?, cypher, run?, resultName? }` | `{ path }` or query result | None | Yes; writes under `queries/templates/` |
+| `graphforge.openProjectResult` | `string \| Uri \| { path }` | `{ path, absolutePath, rowCount, columns }` | None | Yes; restores Results/session state |
+| `graphforge.openProjectVisualization` | `string \| Uri \| { path }` | Visualization-specific structured outcome with `absolutePath` | None | Yes; loads referenced result/filter |
+| `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` | `{ path }` or open outcome | None | Yes |
+| `graphforge.openProjectArtifact` | `string \| Uri \| { path }` | `{ path, absolutePath }` | None | Yes; opens any in-project file in the editor |
+| `graphforge.applyProjectMutation` | `{ path: string \| Uri; confirm: true }` | `{ path, absolutePath, columns, rowCount }` | With no args: mutation QuickPick + modal confirmation. Programmatic calls never prompt and require `confirm: true` | Yes; executable path must stay under `mutations/` |
+| `graphforge.importData` | `{ path: string \| Uri; label: string; mode?: "create" \| "merge"; idColumn?: string; confirm: true }` | `{ path, format, label, mode, idColumn?, imported, result }` | File/label/confirmation prompts only when omitted; programmatic calls require `confirm: true` | Yes; imports CSV/JSON/JSONL/NDJSON as nodes |
 | `graphforge.rank` / `rankAdvanced` | none yet (see [Gaps](#gaps--follow-ups)) | Verb result object (`{ verb, by, label, columns, rows, rowCount, algorithm? }`) | Label QuickPick, algorithm QuickPick (+ via/directed/writeProperty prompts if `Advanced`) | Yes |
 | `graphforge.cluster` / `clusterAdvanced` | none yet | same shape as `rank` | Label + algorithm QuickPick (+ via/directed/writeProperty/vectorProperty if `Advanced`) | Yes |
 | `graphforge.paths` / `pathsAdvanced` | none yet | same shape as `rank` | Algorithm QuickPick + source/target `showInputBox` (+ via/directed if `Advanced`) | Yes |
@@ -124,7 +147,8 @@ Source of truth: `package.json#contributes.commands`. All IDs are invoked as `vs
 | `graphforge.assessConfidence` | `{ assertionUuid?, policy?, value? }` | `QueryResult` | Assertion prompt, policy QuickPick, value InputBox | Yes |
 | `graphforge.recordAssertionStatus` | `{ assertionUuid?, status?, provenanceUuid? }` | `QueryResult` | Assertion prompt, status QuickPick, provenance InputBox | Yes |
 | `graphforge.showOntology` | none | `void` (opens/reveals webview) | None | No — shows an empty/best-effort viewer without a project |
-| `graphforge.showResultGraph` | none | `void` (opens/reveals webview) | None | No — shows a demo graph when no result exists yet |
+| `graphforge.showResultsTable` | none | `void` (reveals the bottom Results panel) | None | No — shows the panel's empty state before a result |
+| `graphforge.showResultGraph` | none | `{ panel, nodes, edges, styleMode, title? }` | None | No — shows a demo graph when no result exists yet |
 | `graphforge.showResultGraphAdvanced` | none | `void` | 1 QuickPick + 1 `showInputBox` (belief-resolution policy) | No |
 | `graphforge.showFigure` | `{ figure }` (Plotly figure JSON: `data`, optional `layout`/`frames`) | `{ figure, panel: "opened"\|"updated" }` or `{ error, code, nextAction? }` | None when `figure` provided; missing figure → structured `FIGURE_REQUIRED` | No |
 | `graphforge.figureFromResult` | `{ chartType, x, y?, color?, title?, columns?, rows? }` or `{ table: { columns, rows }, … }` (`chartType`: `bar`\|`scatter`\|`histogram`\|`line`) | `{ figure, panel, chartType }` or `{ error, code, nextAction? }` / `{ cancelled: true }` | Chart/column QuickPicks when bindings incomplete; skipped when args complete | No — uses last session result or explicit table |
@@ -136,6 +160,8 @@ Source of truth: `package.json#contributes.commands`. All IDs are invoked as `vs
 | `graphforge.getStarted` | none | `void` (reveals the Get Started sidebar) | None | No |
 | `graphforge.chooseExperienceMode` | none | `void` (reveals the Welcome mode picker) | None | No |
 | `graphforge.openSettings` | none | `void` (opens the Settings webview) | None | No |
+| `graphforge.manageModules` | none | `void` (opens the Module Bay webview) | None | No |
+| `graphforge.refreshModules` | none | Module view-model array | None | No project required; refreshes GraphForge-owned catalog when one is open |
 | `graphforge.statusBarClick` | none | `void` (routes to Show Capabilities or Get Started) | None | No |
 
 **Structured output today** comes in two forms, both agent-copyable:
@@ -143,24 +169,35 @@ Source of truth: `package.json#contributes.commands`. All IDs are invoked as `vs
 1. **Return value** — everything in the "Returns" column above is returned from `executeCommand`, so any extension/agent with access to the VS Code command API can read it directly without opening any editor. Commands whose "Returns" column says `void` are view-openers/setup flows whose effect *is* the UI; everything that computes a JSON payload returns it.
 2. **Editor document** — `runQuery`, `runQueryWithParams`, the verb commands, `checkEnvironment` (unless `silent: true`), and the checkpoint / embedding-space / index / power / knowledge commands also open a `language: "json"` document with the same shape, for a human (or a chat-only agent that can only read visible buffers, not call `executeCommand`) to read.
 
+### Project file contract
+
+- Project marker: `FORMAT` must contain exactly `graphforge-project/v1\n`.
+- Queries: `.cypher`/`.cql` text, or JSON `{ "cypher": "...", "params": { ... } }`.
+- Results: JSON `{ "columns": ["..."], "rows": [{ ... }], "rowCount": 0 }`. `results/query-result.json` is canonical latest; timestamped JSON/Markdown pairs are history.
+- Visualizations: `graphforge.visualization/v1` `.gfviz.json`, with `kind: "result-graph"` or `"plotly"` and a project-relative `result`.
+- Mutations: the same query formats under `mutations/`; execute through `applyProjectMutation` so write intent and confirmation are explicit.
+- All artifact commands accept project-relative or absolute paths (and VS Code `Uri` values) but reject traversal outside the active project. Mutation execution is additionally confined to `mutations/`.
+
+The sample project includes `AGENTS.md` with this contract beside the project files, so repository-aware agents can discover it without opening a GraphForge webview.
+
 ## Recommended agent loop
 
 ```mermaid
 flowchart TD
     A["checkEnvironment({ silent: true })"] -->|runtime.active == 'none'| B["setupNativeBinding or setupPythonBinding"]
-    A -->|project.open == false| C["initializeProjectHere or openProject(path)"]
+    A -->|project.open == false| C["openSampleProject / initializeProjectHere / openProject(path)"]
     A -->|runtime + project ready| D["runQuery({ cypher, params }) or rank/cluster/... via QuickPick"]
     B --> A
     C --> A
     D -->|result.error present| B
-    D -->|success| E["Read QueryResult JSON from the return value or the opened document"]
+    D -->|success| E["Read QueryResult from the return value or project-local results/query-result.json"]
     E --> F["Optional: figureFromResult({ chartType, x, y, columns, rows }) or showFigure({ figure })"]
 ```
 
-1. **Check Environment** — `executeCommand("graphforge.checkEnvironment", { silent: true })`. Inspect `runtime.active` (`"node" | "python" | "none"`), `nodeBinding.available`, `python.available`, and `project.open`; the `nextAction` string always names the exact next command.
-2. **Setup / Init if needed** — if no runtime is usable, run `graphforge.setupNativeBinding` and/or `graphforge.setupPythonBinding` (each is one QuickPick with no args-based bypass yet; see [Gaps](#gaps--follow-ups)); if a runtime is ready but no project is open, run `graphforge.initializeProjectHere` (new project) or `graphforge.openProject(path)` (existing project — `path` is a plain string arg, no picker needed). Re-run step 1 to confirm.
-3. **Run Query / Rank** — once both are ready, call `graphforge.runQuery({ cypher, params })` for Cypher, or one of the verb commands for an analyst verb (these still need a QuickPick today).
-4. **Read the result** — either the `executeCommand` return value or the opened JSON document, per the table above. On failure, the returned object's `error`/`code`/`nextAction` fields (or the verb result's `{ error }`) tell you exactly what to do next — never a bare exception.
+1. **Get context** — `executeCommand("graphforge.agent.getContext")`. This includes the full environment report, effective settings, project marker, absolute artifact paths, and last-result paths. Use `checkEnvironment({ silent: true })` only when environment state alone is sufficient.
+2. **Setup / Init if needed** — if no runtime is usable, run `graphforge.setupNativeBinding` and/or `graphforge.setupPythonBinding` (each is one QuickPick with no args-based bypass yet; see [Gaps](#gaps--follow-ups)); if a runtime is ready but no project is open, run `graphforge.openSampleProject({ path })` for the quickstart demo, `graphforge.initializeProjectHere` (new project), or `graphforge.openProject(path)` (existing project — `path` is a plain string arg, no picker needed). Re-run step 1 to confirm.
+3. **Operate by file** — call `runProjectQuery(path)`, `openProjectResult(path)`, or `openProjectVisualization(path)` using an `absolutePath` from context. For a reviewed write, call `applyProjectMutation({ path, confirm: true })`.
+4. **Read the result** — either the `executeCommand` return value or the open project's durable `results/query-result.json`; the Markdown preview is for human scanning. On failure, inspect `error`/`code`/`nextAction`.
 5. **Optional chart** — call `graphforge.figureFromResult` with `chartType` + column bindings (and `columns`/`rows` or rely on the last session result), or `graphforge.showFigure({ figure })` with Plotly figure JSON from Python (`fig.to_dict()`) or JS. This opens the Figure panel; it does not replace Result Graph.
 
 ## Runtime note (Node vs. Python)
@@ -169,6 +206,8 @@ flowchart TD
 
 ## Gaps / follow-ups
 
+- **No contributed VS Code Language Model Tool yet.** This extension targets VS Code `^1.96` and compiles against `@types/vscode` 1.96, whose stable API does not expose `LanguageModelTool` / `lm.registerTool`; adding a proposed-API dependency would make Marketplace/VSIX behavior brittle. The command + JSON + file contract is the compatibility surface for Copilot, Cursor, MCP bridges, and other IDE agents on this engine range. Re-evaluate after raising the minimum VS Code engine to a release with stable tool registration.
+
 - **Verb commands (`rank`, `cluster`, `paths`, `analyze`, `similar`, `find`) do not yet accept args.** They always walk their QuickPick chain (label, then algorithm, then advanced prompts). An agent can still read the eventual result (now returned from `executeCommand` instead of `void`), but cannot skip straight to a known `{ label, by, ... }` combination the way it can with `runQuery` — or with the checkpoint / embedding-space / index / power / knowledge commands, which all accept args since [#36](https://github.com/CurateLabs/graphforge-vscode/issues/36). Adding an optional args object mirroring `session.invokeVerb`'s parameter shape would close this gap; deliberately left out because issue [#4](https://github.com/CurateLabs/graphforge-vscode/issues/4) already owns the verb-invocation UX.
 - **`setupNativeBinding`, `initializeProjectHere`, `loadOntology`, `showResultGraphAdvanced` are QuickPick/dialog-only.** These are inherently about human choices (which folder, which binding source) and are reasonable to leave interactive; an agent's role here is to detect the need (via Check Environment) and either prompt the human or make the choice on the human's behalf by pre-setting `graphforge.nativeModulePath` via the VS Code configuration API before calling `setupNativeBinding`, or by using `openProject(path)`/args-based commands where they exist instead.
-- **No live-project integration test.** This branch's automated test (`src/test/extension.test.ts`) proves the fail-closed, no-binding, no-project path in CI. Proving the success path (`runQuery` actually executing Cypher and returning rows) needs a fixture `FORMAT` project and a built `@curatelabs/graphforge`, which is out of scope for this activation-time smoke suite.
+- **The live-project integration gate is optional and runtime-dependent.** `src/test/quickstart.e2e.test.ts` exercises sample → query → Result Graph → Figure when a binding is available and skips otherwise; `src/test/extension.test.ts` always proves registration, context shape, and fail-closed behavior. A small deterministic engine fixture would make the success path reliable in every CI environment.
