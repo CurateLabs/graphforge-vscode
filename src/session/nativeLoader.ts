@@ -69,17 +69,25 @@ export function detectSiblingBindingPath(): string | undefined {
 
 function siblingCandidatePaths(): string[] {
   const out: string[] = [];
+  const rel = path.join("graphforge", "crates", "graphforge-bindings-node");
 
-  // Sibling monorepo: .../graphforge-vscode next to .../graphforge
-  const extensionRoot = path.resolve(__dirname, "..");
-  out.push(
-    path.resolve(extensionRoot, "..", "graphforge", "crates", "graphforge-bindings-node"),
-  );
+  // Prefer the installed extension root (correct for the Vite host bundle and
+  // for test chunks under dist/test/, where `__dirname` is not the package root).
+  const ext = vscode.extensions.getExtension("CurateLabsAI.graphforge");
+  if (ext) {
+    out.push(path.resolve(ext.extensionUri.fsPath, "..", rel));
+  }
 
-  // Also try parent of workspace if opened inside monorepo tools
+  // Heuristics for plain mocha / early load before the extension activates:
+  // dist/extension.js → .. ; dist/test/chunks/*.js → ../..
+  for (const up of ["..", "../..", "../../.."]) {
+    out.push(path.resolve(__dirname, up, rel));
+  }
+
+  // Workspace parent (opened inside monorepo tools)
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (ws) {
-    out.push(path.resolve(ws, "..", "graphforge", "crates", "graphforge-bindings-node"));
+    out.push(path.resolve(ws, "..", rel));
   }
 
   return [...new Set(out)];

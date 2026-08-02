@@ -1,7 +1,11 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
+import {
+  persistQueryResultDocuments,
+} from "../session/resultDocument";
 import type { QueryResult } from "../session/types";
-import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import type { ResultTableViewProvider } from "../views/resultTableView";
 import {
   ensureProjectOrRecover,
   errorMessage,
@@ -22,6 +26,8 @@ import {
 export interface RunQueryArgs {
   cypher?: string;
   params?: Record<string, unknown>;
+  /** Optional durable result name; defaults to results-YYYYMMDD-HHMMSS-mmm. */
+  resultName?: string;
 }
 
 type RunQueryOutcome = SetupRecovery | QueryResult | { error: string; code?: string };
@@ -29,6 +35,7 @@ type RunQueryOutcome = SetupRecovery | QueryResult | { error: string; code?: str
 export function registerRunQuery(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
+  results: ResultTableViewProvider,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -45,7 +52,13 @@ export function registerRunQuery(
           return { error: "No Cypher query provided." };
         }
 
-        return executeAndShowResult(context, session, cypher, args?.params);
+        return executeAndShowResult(
+          session,
+          results,
+          cypher,
+          args?.params,
+          args?.resultName,
+        );
       },
     ),
 
@@ -94,7 +107,13 @@ export function registerRunQuery(
           }
         }
 
-        return executeAndShowResult(context, session, cypher, params);
+        return executeAndShowResult(
+          session,
+          results,
+          cypher,
+          params,
+          args?.resultName,
+        );
       },
     ),
   );
@@ -118,10 +137,11 @@ async function resolveCypherInput(title: string): Promise<string | undefined> {
 }
 
 async function executeAndShowResult(
-  context: vscode.ExtensionContext,
   session: GraphForgeSession,
+  results: ResultTableViewProvider,
   cypher: string,
   params?: Record<string, unknown>,
+  resultName?: string,
 ): Promise<QueryResult | { error: string; code?: string }> {
   try {
     // #31: lightweight in-flight indicator (status-bar spinner) so slow
@@ -132,37 +152,34 @@ async function executeAndShowResult(
     const result = await withEngineProgress("running query…", () =>
       session.execute(cypher, params),
     );
-    const doc = await vscode.workspace.openTextDocument({
-      content: formatResultDocument(result),
-      language: "json",
-    });
-    await vscode.window.showTextDocument(doc, {
-      viewColumn: vscode.ViewColumn.Beside,
-      preview: true,
-    });
+    const projectRoot = session.project?.rootPath;
+    if (!projectRoot) {
+      throw new Error("Query completed without an open GraphForge project.");
+    }
+    const documents = await persistQueryResultDocuments(projectRoot, result, resultName);
+    // Refresh project-backed query/result lists after files are durable.
+    session.notifyChanged();
+    await results.show(result, "Cypher result", documents);
 
     const openGraph = vscode.workspace
       .getConfiguration("graphforge")
       .get<boolean>("openResultGraphOnQuery", true);
     if (openGraph) {
-      const payload = await session.toGraphPayload(result, "Cypher result");
-      ResultGraphPanel.show(context.extensionUri, payload);
+      const commands = await vscode.commands.getCommands(true);
+      if (commands.includes("graphforge.showResultGraph")) {
+        await vscode.commands.executeCommand("graphforge.showResultGraph", {
+          title: "Cypher result",
+        });
+      }
     }
 
-    void vscode.window.showInformationMessage(`GraphForge: ${result.rowCount} row(s)`);
+    void vscode.window.showInformationMessage(
+      `GraphForge: ${result.rowCount} row(s) · saved to ${path.relative(projectRoot, documents.historyJsonPath ?? documents.jsonPath)}`,
+    );
     return result;
   } catch (err) {
     // Curated toast (#28); the query echo and full raw engine message go to
     // the error output channel and the structured result, not the toast.
     return reportEngineError("query failed", err, `query: ${querySnippet(cypher)}`);
   }
-}
-
-/** Agent-copyable structured result: `{ columns, rows, rowCount }`. */
-function formatResultDocument(result: QueryResult): string {
-  return JSON.stringify(
-    { columns: result.columns, rows: result.rows, rowCount: result.rowCount },
-    null,
-    2,
-  );
 }

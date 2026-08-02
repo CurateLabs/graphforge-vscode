@@ -5,6 +5,11 @@ import type {
   FigureWebviewToHost,
   PlotlyFigure,
 } from "./figureSchema";
+import {
+  graphForgeVizShowOptions,
+  revealVizPanel,
+  trackVizPanel,
+} from "./panelColumn";
 
 /**
  * GraphForge Figure panel (#62): Vite-built plotly.js surface.
@@ -18,6 +23,7 @@ export class FigurePanel {
 
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this.panel = panel;
+    trackVizPanel(panel);
     this.panel.onDidDispose(() => {
       FigurePanel.current = undefined;
     });
@@ -36,16 +42,17 @@ export class FigurePanel {
     figure?: PlotlyFigure,
   ): { panel: FigurePanel; status: "opened" | "updated" } {
     if (FigurePanel.current) {
-      FigurePanel.current.panel.reveal(vscode.ViewColumn.Beside);
+      revealVizPanel(FigurePanel.current.panel);
       if (figure) {
         FigurePanel.current.update(figure);
       }
       return { panel: FigurePanel.current, status: "updated" };
     }
+    const showOptions = graphForgeVizShowOptions();
     const panel = vscode.window.createWebviewPanel(
       "graphforge.figure",
       "GraphForge Figure",
-      vscode.ViewColumn.Beside,
+      showOptions,
       {
         enableScripts: true,
         retainContextWhenHidden: true,

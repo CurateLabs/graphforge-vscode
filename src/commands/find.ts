@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { QueryResult } from "../session/types";
-import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import type { ResultTableViewProvider } from "../views/resultTableView";
 import {
   CommandOutcome,
   ensureProjectOrRecover,
@@ -25,17 +25,18 @@ type FindOutcome = CommandOutcome<
 export function registerFind(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
+  results: ResultTableViewProvider,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("graphforge.find", () =>
-      runFind(context, session),
+      runFind(session, results),
     ),
   );
 }
 
 async function runFind(
-  context: vscode.ExtensionContext,
   session: GraphForgeSession,
+  results: ResultTableViewProvider,
 ): Promise<FindOutcome> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
@@ -68,33 +69,19 @@ async function runFind(
     return handleFindError(err, label);
   }
 
-  const doc = await vscode.workspace.openTextDocument({
-    content: JSON.stringify(
-      {
-        verb: "find",
-        query,
-        label,
-        columns: result.columns,
-        rowCount: result.rowCount,
-        rows: result.rows,
-      },
-      null,
-      2,
-    ),
-    language: "json",
-  });
-  await vscode.window.showTextDocument(doc, {
-    viewColumn: vscode.ViewColumn.Beside,
-    preview: true,
-  });
+  await results.show(result, `Find · ${query || "(all)"}`);
 
   const hasUuids = result.columns.some((c) => /uuid/i.test(c));
   const openGraph = vscode.workspace
     .getConfiguration("graphforge")
     .get<boolean>("openResultGraphOnQuery", true);
   if (hasUuids && openGraph && result.rowCount > 0) {
-    const payload = await session.toGraphPayload(result, `find: ${query ?? "(all)"}`);
-    ResultGraphPanel.show(context.extensionUri, payload);
+    const commands = await vscode.commands.getCommands(true);
+    if (commands.includes("graphforge.showResultGraph")) {
+      await vscode.commands.executeCommand("graphforge.showResultGraph", {
+        title: `find: ${query ?? "(all)"}`,
+      });
+    }
   }
 
   void vscode.window.showInformationMessage(

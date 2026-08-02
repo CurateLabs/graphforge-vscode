@@ -267,6 +267,8 @@ export interface GraphForgeNative {
   path: string | null;
   ontologyMode: string;
   execute(cypher: string, params?: Record<string, unknown>): Buffer;
+  /** Module manifests registered by GraphForge itself (optional on older bindings). */
+  moduleCatalog?(): unknown[];
   /** Live M18 descriptor catalog, deterministic order (sync; requires open project). */
   algorithmDescriptorContracts?(): AlgorithmDescriptorContract[];
   rank(
@@ -526,6 +528,7 @@ export interface EngineBackend {
   readonly path: string | null;
   ontologyMode(): Promise<string>;
   execute(cypher: string, params?: Record<string, unknown>): Promise<Buffer>;
+  moduleCatalog?(): Promise<unknown[]>;
   rank(
     label: string,
     by: string,

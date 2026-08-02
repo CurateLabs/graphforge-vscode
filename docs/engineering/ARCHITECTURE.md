@@ -5,6 +5,13 @@ GraphForge for VS Code is a TypeScript extension host that wraps a runtime-agnos
 subprocess (#12) — decodes Arrow IPC results, and presents workbench UI: tree views, Cypher
 language support, analyst-verb commands, and webviews for ontology and epistemic-aware graphs.
 
+Query, visualization, and import are first-party modules activated through the same module
+lifecycle used by GraphForge-catalog and side-loaded modules. The future catalog is the happy
+path for externally developed modules. See
+[`MODULES.md`](MODULES.md) for the manifest and provider contracts and
+[ADR-0002](./adrs/0002-unified-module-lifecycle.md) for the catalog-first
+lifecycle decision.
+
 ## Context diagram
 
 ```mermaid
@@ -24,6 +31,10 @@ flowchart LR
   PyPkg --> ProjectDir
   Session --> Trees["Projects / Ontology / Knowledge"]
   Session --> Webviews["Result Graph / Ontology Viewer"]
+  Vscode --> Modules["ModuleManager"]
+  Modules --> Builtins["Query / Visualize / Import"]
+  Modules --> Catalog["GraphForge moduleCatalog()"]
+  Modules --> Sideload["Advanced side-load"]
   Vscode --> Cypher["cypher language + Run Query"]
 ```
 
@@ -32,16 +43,18 @@ flowchart LR
 | Component | Responsibility | Depends on |
 |---|---|---|
 | `extension.ts` | Activation, register commands/views | Session, views, commands |
+| `ModuleManager` | Install/enable lifecycle for defaults, GraphForge catalog entries, and side-loads | global state, Session, native catalog |
 | `ProjectDetector` | Exact `FORMAT` detection, CURRENT/ontology file reads | Node fs |
 | `nativeLoader` | Resolve optional `@curatelabs/graphforge` | config / node_modules / sibling repo |
 | `pythonLoader` / `pythonProbe` | Detect a Python interpreter and probe `import graphforge` | vscode config/extensions API, `execFile` |
 | `nodeEngineBackend` / `pythonBridge` | `EngineBackend` implementations over Node / Python | `types.EngineBackend` |
 | `runtime` / `runtimeSelection` | Choose Node vs. Python per `graphforge.runtime`; open the backend | nativeLoader, pythonLoader, both backends |
 | `GraphForgeSession` | Open project, execute/verbs, IPC→rows, graph payload | `EngineBackend` + arrow |
+| `projectArtifacts` | Validate, scan, read, filter, and write project-owned queries/results/visualization specs | Node fs + project root |
 | Tree providers | Projects, Ontology, Knowledge sidebars | Session |
 | Commands | Run Query, verbs, open panels, load ontology, Setup (Native/Python) | Session, webviews |
-| Webviews | Result Graph + Ontology Viewer + Settings + Figure + message protocol | Session payloads (Result Graph/Ontology); configuration API + `settingsSchema.ts` (Settings); Plotly figure JSON (`figureSchema.ts` / Figure) |
-| `webview-ui/` | Vite-built browser bundles for webview panels (Settings, Figure) | `settingsSchema.ts`, `figureSchema.ts` |
+| Webviews | Results Panel + Result Graph + Ontology Viewer + Settings + Modules + Figure + message protocol | QueryResult rows (Results); Session payloads (Result Graph/Ontology); configuration/module state; Plotly figure JSON |
+| `webview-ui/` | Vite-built browser bundles for webview panels/views (Results, Settings, Modules, Figure, Result Graph) | shared schemas/view models, `GraphPayload`, Cytoscape/Sigma |
 
 ### Build tooling (Vite, #24)
 
@@ -55,11 +68,12 @@ complete). Two configs with opposite semantics:
   `dist/test/` and copies `src/test/fixtures/` alongside them.
 - **Webview UI (`webview-ui/vite.config.mts`):** browser-side webview apps (config inside this
   package — no monorepo/workspace split). Emits fixed-name bundles to `dist/webview-ui/`
-  (e.g. `settings.js` / `settings.css`, `figure.js` / `figure.css`), which panel hosts load
-  via `webview.asWebviewUri` under a nonce-based CSP. Settings and Figure are Vite-built;
-  new webviews should start here rather than as inline HTML template strings. Figure bundles
-  full `plotly.js` locally and consumes Plotly figure JSON — see ADR-0001; Dash is not an
-  in-IDE host.
+  (e.g. `results.*`, `settings.*`, `figure.*`, `resultGraph.*`), which panel hosts load via
+  `webview.asWebviewUri` under a nonce-based, Settings-strict CSP. Results, Settings, Figure, and
+  Result Graph are Vite-built; new webviews should start here rather than as inline HTML
+  template strings. Figure bundles full `plotly.js` locally and consumes Plotly figure JSON —
+  see ADR-0001; Dash is not an in-IDE host. Result Graph bundles Cytoscape, Sigma, Graphology,
+  and synchronous ForceAtlas2 locally; no renderer code or data comes from a CDN.
 - `npm run compile` runs both (`compile:host` then `compile:webview`); `npm run check`
   type-checks both TS projects (`tsconfig.json` and `webview-ui/tsconfig.json`). The
   `webview-ui` app shares vscode-free modules from `src/` (e.g. `settingsSchema.ts`) by direct
@@ -146,6 +160,19 @@ any breaking wire change, and document it here.
 - **QueryResult** — columns/rows from Arrow tables
 - **GraphPayload** — nodes/edges with `epistemicStatus`, `ontologyType`, legend
 - **OntologyDoc** — entity_types, relation_types, properties (from workspace participant)
+- **ProjectVisualizationSpec** — `graphforge.visualization/v1` JSON referencing
+  one `results/*.json`, with either Result Graph renderer/force settings or
+  Plotly chart mappings and an optional equality/contains row filter
+
+Workbench artifact layout:
+
+```text
+queries/*.cypher
+results/query-result.json + query-result.md + timestamped history
+visualizations/*.gfviz.json
+mutations/*.cypher
+data/… (sample source data and attribution)
+```
 
 Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | superseded | statusless`.
 
@@ -167,7 +194,31 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 2. Session ensures project open — GraphForgeSession
 3. `forge.execute` → IPC buffer — `@curatelabs/graphforge`
 4. Decode to rows — apache-arrow
-5. Show JSON doc; build GraphPayload; open Result Graph — webview
+5. Persist canonical JSON + Markdown and timestamped history under `results/`;
+   reveal the Results `WebviewView` in the bottom Panel.
+6. When enabled, build `GraphPayload` and open Result Graph in the shared visualization editor group.
+
+### Link table and graph selections
+
+1. A Results row/cell click posts its row index and optional column.
+2. The host resolves exact node/edge IDs and identity-like values first; metric cells fall back
+   to the row's identities and `source`/`target` endpoints.
+3. If Result Graph is open, the host posts validated node/edge IDs for renderer highlighting.
+4. A Result Graph selection is resolved back to matching result rows and scrolls the bottom
+   table to the first match.
+
+Figure traces do not currently retain source-row provenance, so Figure selection linking is
+intentionally out of v0 rather than inferred from point order.
+
+### Render and inspect a result graph
+
+1. Host posts the current `GraphPayload` and configured renderer to the Vite webview.
+2. Cytoscape runs COSE or Sigma runs Graphology ForceAtlas2, then enables pan/zoom/fit.
+3. A node/edge click posts the reserved `selectNode` / `selectEdge` protocol message.
+4. The host validates the id against the current payload. Assertion-shaped nodes dispatch
+   `graphforge.showAssertion`; other nodes and edges open a read-only JSON summary.
+5. `graphforge.resultGraph.renderer` configuration changes are observed by the live panel,
+   which re-renders the retained payload without an extension-host reload.
 
 ### Open ontology
 
@@ -180,7 +231,8 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 - **Error handling:** Fail closed on missing binding or invalid FORMAT; `showErrorMessage`. When
   no runtime is usable, the message and recovery actions cover **both** Setup commands (#12).
 - **Configuration:** `graphforge.nativeModulePath`, `graphforge.openResultGraphOnQuery`,
-  `graphforge.runtime`, `graphforge.pythonInterpreterPath`, `graphforge.experienceMode`
+  `graphforge.resultGraph.renderer` (`cytoscape` default or `sigma`), `graphforge.runtime`,
+  `graphforge.pythonInterpreterPath`, `graphforge.experienceMode`
   (`guided` | `autonomous`, default `guided` — set from the Get Started Welcome screen; see
   `docs/DESIGN.md` "Welcome + experience modes").
 - **Package manager policy:** Python package installs use **`uv` only, never `pip`** —
@@ -191,6 +243,9 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 - **Security:** Webview CSP restrictive; scripts only for panel UI; no remote project trust
   beyond workspace folders. The Python bridge only ever spawns the extension-bundled
   `graphforge_host.py` (never a workspace-local script) with a user-selected interpreter.
+  Side-loaded modules are declarative by default. A contained CommonJS entrypoint
+  can execute only behind a machine-scoped dangerous user setting, Workspace
+  Trust, and a per-install confirmation; disabling the setting deactivates it.
 - **Observability:** Status bar shows project name, ontology mode, and active runtime (Node /
   Python), or a "no runtime" warning with both setup paths in the tooltip.
 - **Performance:** Python interpreter/`graphforge`-import probes are cached for 15s
@@ -201,7 +256,8 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 ## Decisions
 
 - Optional peer on `@curatelabs/graphforge` so scaffold installs without a prebuilt napi binary.
-- SVG circular layout for Result Graph v0; swap renderer later without changing `protocol.ts`.
+- Cytoscape is the Result Graph default; Sigma is an opt-in WebGL renderer. Both consume the
+  same `GraphPayload`, use extension-owned colors, and keep selection messages additive.
 - Demo graph when result rows are not graph-shaped, so the epistemic/class legend is reviewable without data.
 - Python is reached via a **long-lived subprocess bridge**, not per-call spawns: engine startup
   cost and the project's single-writer lock make a fresh interpreter per request impractical (#12).

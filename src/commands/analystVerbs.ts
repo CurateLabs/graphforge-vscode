@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { AnalystVerb, QueryResult } from "../session/types";
-import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import type { ResultTableViewProvider } from "../views/resultTableView";
 import {
   ensureProjectOrRecover,
   isMissingIndexError,
@@ -41,6 +41,7 @@ interface LastUsed {
 export function registerAnalystVerbs(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
+  results: ResultTableViewProvider,
 ): void {
   const verbs: AnalystVerb[] = [
     "rank",
@@ -53,7 +54,7 @@ export function registerAnalystVerbs(
   for (const verb of verbs) {
     context.subscriptions.push(
       vscode.commands.registerCommand(`graphforge.${verb}`, async () => {
-        return runVerb(context, session, verb, false);
+        return runVerb(context, session, results, verb, false);
       }),
     );
   }
@@ -63,7 +64,7 @@ export function registerAnalystVerbs(
   for (const verb of CATALOG_VERBS) {
     context.subscriptions.push(
       vscode.commands.registerCommand(`graphforge.${verb}Advanced`, async () => {
-        return runVerb(context, session, verb, true);
+        return runVerb(context, session, results, verb, true);
       }),
     );
   }
@@ -86,6 +87,7 @@ type VerbOutcome =
 async function runVerb(
   context: vscode.ExtensionContext,
   session: GraphForgeSession,
+  results: ResultTableViewProvider,
   verb: AnalystVerb,
   advanced: boolean,
 ): Promise<VerbOutcome> {
@@ -233,33 +235,18 @@ async function runVerb(
       await context.workspaceState.update(lastKey, { label, by });
     }
 
-    const doc = await vscode.workspace.openTextDocument({
-      content: JSON.stringify(
-        {
-          verb,
-          by,
-          label,
-          algorithm: result.algorithm,
-          columns: result.columns,
-          rowCount: result.rowCount,
-          rows: result.rows,
-        },
-        null,
-        2,
-      ),
-      language: "json",
-    });
-    await vscode.window.showTextDocument(doc, {
-      viewColumn: vscode.ViewColumn.Beside,
-      preview: true,
-    });
+    await results.show(result, `${verb}${by ? ` · ${by}` : ""}`);
 
     const openGraph = vscode.workspace
       .getConfiguration("graphforge")
       .get<boolean>("openResultGraphOnQuery", true);
     if (openGraph) {
-      const payload = await session.toGraphPayload(result, `${verb}${by ? `:${by}` : ""}`);
-      ResultGraphPanel.show(context.extensionUri, payload);
+      const commands = await vscode.commands.getCommands(true);
+      if (commands.includes("graphforge.showResultGraph")) {
+        await vscode.commands.executeCommand("graphforge.showResultGraph", {
+          title: `${verb}${by ? `:${by}` : ""}`,
+        });
+      }
     }
 
     void vscode.window.showInformationMessage(

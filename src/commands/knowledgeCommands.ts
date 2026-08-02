@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { ResultGraphPanel } from "../webview/resultGraphPanel";
 import {
   CONFIDENCE_POLICY_OPTIONS,
   EVIDENCE_ROLE_OPTIONS,
@@ -156,7 +155,7 @@ export function registerKnowledgeCommands(
     ),
     vscode.commands.registerCommand(
       "graphforge.showAssertionOnGraph",
-      (arg?: unknown) => runShowAssertionOnGraph(context, session, arg),
+      (arg?: unknown) => runShowAssertionOnGraph(session, arg),
     ),
     vscode.commands.registerCommand(
       "graphforge.attachEvidence",
@@ -319,7 +318,6 @@ async function runShowAssertion(
 }
 
 async function runShowAssertionOnGraph(
-  context: vscode.ExtensionContext,
   session: GraphForgeSession,
   arg?: unknown,
 ): Promise<CommandOutcome<{ assertionUuid: string; graph: GraphPayload }>> {
@@ -335,7 +333,15 @@ async function runShowAssertionOnGraph(
     const assertion = await session.getAssertion(assertionUuid);
     const refs = await session.assertionGraphRefs(assertionUuid);
     const graph = assertionToGraphPayload(assertionUuid, assertion?.claim ?? "", refs);
-    ResultGraphPanel.show(context.extensionUri, graph);
+    const commands = await vscode.commands.getCommands(true);
+    if (!commands.includes("graphforge.showResultGraph")) {
+      return {
+        error: "The Visualize module is disabled.",
+        code: "MODULE_DISABLED",
+        nextAction: "Enable Visualize in GraphForge: Manage Modules.",
+      };
+    }
+    await vscode.commands.executeCommand("graphforge.showResultGraph", { payload: graph });
     return { assertionUuid, graph };
   } catch (err) {
     return reportEngineError("Show on Graph failed", err);

@@ -15,6 +15,8 @@ Publisher: **CurateLabsAI** (`CurateLabsAI.graphforge`).
 | **Ontology** | Mode badge + entity/relation tree; Ontology Viewer webview with a helpful exploratory empty state, **Load Ontology…**, and an Advanced section (open `ontology.json`, explain mode) |
 | **Knowledge** | Inspect and create assertions: list/empty states, **Create Assertion…** (minimal fields), **Show Assertion** / **Show on Graph**, plus Advanced attach-evidence / assess-confidence / record-status commands |
 | **Result Graph** | Webview shell: nodes/edges styled by class + epistemic status |
+| **Results** | Interactive table in the bottom Panel; expandable nested JSON and row/cell selection linked to matching Result Graph nodes/edges |
+| **Modules** | One Module Bay for default, non-removable Query/Visualize/Import modules, future GraphForge-catalog modules, and advanced side-loads |
 
 ## Requirements
 
@@ -147,8 +149,10 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 
 ## Commands
 
+- **Modules** — `Manage Modules`, `Install Module from File…`, `Refresh Modules`; default Query, Visualize, and Import use the same install/enable lifecycle as catalog entries and side-loads
+- **Import** — `Import Data…` (`graphforge.importData`) for CSV, JSON, JSON Lines, and NDJSON node records; agents pass `{ path, label, mode?, idColumn?, confirm: true }`
 - **Setup** — `GraphForge: Check Environment` (`graphforge.checkEnvironment`, accepts optional `{ silent: true }`, always returns the `EnvironmentReport` JSON from `executeCommand`), `Setup Native Binding`, `Setup Python Binding`, `Initialize Project Here`, `Open Project` (`graphforge.openProject`, accepts an optional folder-path string arg to skip the picker), `Refresh Explorer`
-- **Cypher** — `Run Query` (`graphforge.runQuery`: selection → whole file → single input box, or pass `{ cypher, params? }` to skip both; opens a structured `{ columns, rows, rowCount }` results document and returns that same object from `executeCommand`), `Run Query with Parameters…`
+- **Cypher** — `Run Query` (`graphforge.runQuery`: selection → whole file → single input box, or pass `{ cypher, params? }` to skip both; writes canonical JSON/Markdown plus timestamped history under `results/`, reveals the interactive table in the bottom Panel, and returns `{ columns, rows, rowCount }`), `Run Project Query` (`{ path }`), `Run Query with Parameters…`
 - **Analyst verbs** — `Rank` / `Cluster` / `Paths` / `Analyze` / `Similar` / `Find` (each has an `…Advanced…` command for optional parameters) — QuickPick-driven today; each returns its result JSON (or `{ error }` / `{ cancelled: true }`) from `executeCommand`
 - **Indexing** *(Node-only)* — `Index Text…`, `Index Vector…`, `Inspect Text Index…`, `Index Adjacency`, `Inspect Adjacency Index`, `Rebuild Adjacency Index`
 - **Checkpoints** *(Node-only, ADR 0014)* — `Create Checkpoint…`, `List Checkpoints`, `Open Checkpoint…`, `Diff Checkpoints…`, `Delete Checkpoint…`, `Revert to Checkpoint…`
@@ -158,7 +162,22 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 - **Knowledge ledger** — `List Assertions`, `Create Assertion…`, `Show Assertion…`, `Show Assertion on Graph…`, `Attach Evidence…` / `Assess Confidence…` / `Record Assertion Status…` (Advanced)
 - **Result views** — `Show Result Graph` (+ `Show Result Graph (Advanced)…`), `Show Project Capabilities`
 
+Get Started's **Hub / Query / Visualize** pages are an editor over durable
+project files: `queries/*.cypher`, `results/*`, `visualizations/*.gfviz.json`,
+and `mutations/*.cypher`. The air-routes sample copies its query and
+visualization specs into this layout and generates its seed mutation there
+before execution; no quickstart query or chart binding is hardcoded in the
+extension.
+
+Selecting a Results cell that contains a node/edge identity (including airport-style codes)
+highlights that element in an open Result Graph. Selecting a metric cell or whole row falls back
+to graph identities and `source`/`target` endpoints in that row. Graph clicks also reveal matching
+table rows. Figure linking is not included in this v0 because arbitrary Plotly traces do not retain
+reliable source-row provenance.
+
 See [`docs/published/commands.md`](docs/published/commands.md) for the full command-ID table.
+The module manifest, catalog-first distribution path, and side-load security
+boundary are documented in [`docs/engineering/MODULES.md`](docs/engineering/MODULES.md).
 
 ## Knowledge ledger notes
 
@@ -169,6 +188,13 @@ See [`docs/published/commands.md`](docs/published/commands.md) for the full comm
 ### Coding agent interop
 
 Every command above is a stable ID callable via `vscode.commands.executeCommand("graphforge.<id>", ...)` — no Command Palette click required. See [`docs/experience/agent-interop.md`](./docs/experience/agent-interop.md) for the full command table (args accepted, return shapes, which commands still require a QuickPick), the recommended Check Environment → Setup/Init → Run Query/Rank agent loop, and known gaps. `src/test/extension.test.ts` asserts this contract in CI.
+
+For a single machine-readable entry point, call
+`graphforge.agent.getContext`. It returns versioned JSON with runtime/settings,
+the project marker, absolute query/result/visualization/mutation paths, and
+canonical/latest result paths. Agents can then call `runProjectQuery(path)`,
+`openProjectResult(path)`, `openProjectVisualization(path)`, or—after review—
+`applyProjectMutation({ path, confirm: true })` without scraping a webview.
 
 ## License
 

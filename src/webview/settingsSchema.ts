@@ -122,12 +122,34 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         type: "boolean",
         default: true,
       },
+      {
+        key: "resultGraph.renderer",
+        label: "Result Graph renderer",
+        description:
+          "Choose the interactive engine used for graph results. Changes update an open Result Graph immediately.",
+        type: "enum",
+        default: "cytoscape",
+        options: [
+          {
+            value: "cytoscape",
+            label: "Cytoscape (recommended)",
+            description:
+              "Canvas rendering with force layout, pan, zoom, fit, and node or edge inspection.",
+          },
+          {
+            value: "sigma",
+            label: "Sigma",
+            description:
+              "WebGL rendering with ForceAtlas2 layout, suited to larger and denser result graphs.",
+          },
+        ],
+      },
     ],
   },
   {
     id: "advanced",
     label: "Advanced",
-    blurb: "Manual paths — leave these empty unless auto-detection can't find your runtime.",
+    blurb: "Manual runtime paths, limits, and explicitly dangerous module permissions.",
     settings: [
       {
         key: "nativeModulePath",
@@ -176,6 +198,14 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         description: "Maximum serialized figure JSON size when Figure size limits are enabled.",
         type: "number",
         default: 10000000,
+      },
+      {
+        key: "modules.dangerouslyAllowWorkspaceJavaScript",
+        label: "Dangerously allow workspace JavaScript modules",
+        description:
+          "Allows an explicitly confirmed side-loaded module to run JavaScript with GraphForge extension permissions. User-level only, off by default, and still requires Workspace Trust. Enable only after reviewing the module code.",
+        type: "boolean",
+        default: false,
       },
     ],
   },

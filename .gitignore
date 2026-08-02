@@ -37,6 +37,9 @@ bower_components
 # Compiled binary addons (https://nodejs.org/api/addons.html)
 build/Release
 
+# Local quickstart sample materialized into a workspace (#63)
+graphforge-quickstart/
+
 # Dependency directories
 node_modules/
 jspm_packages/

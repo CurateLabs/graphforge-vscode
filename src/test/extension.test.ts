@@ -1,6 +1,10 @@
 import * as assert from "node:assert/strict";
 import * as os from "node:os";
 import * as vscode from "vscode";
+import {
+  graphForgeVizShowOptions,
+  trackVizPanel,
+} from "../webview/panelColumn";
 
 /**
  * Full public command surface for this branch (mirrors
@@ -17,14 +21,34 @@ import * as vscode from "vscode";
  */
 const ALL_COMMAND_IDS = [
   "graphforge.openProject",
+  "graphforge.openSampleProject",
+  "graphforge.closeProject",
   "graphforge.refreshExplorer",
   "graphforge.runQuery",
   "graphforge.runQueryWithParams",
+  "graphforge.runProjectQuery",
+  "graphforge.saveProjectQuery",
+  "graphforge.saveProjectQueryTemplate",
+  "graphforge.openProjectResult",
+  "graphforge.openProjectVisualization",
+  "graphforge.saveProjectVisualization",
+  "graphforge.openProjectArtifact",
+  "graphforge.applyProjectMutation",
+  "graphforge.agent.getContext",
+  "graphforge.agent.listArtifacts",
+  "graphforge.showResultsTable",
   "graphforge.checkEnvironment",
   "graphforge.copyEnvironmentReport",
   "graphforge.getStarted",
+  "graphforge.getStarted.showHub",
+  "graphforge.getStarted.showQuery",
+  "graphforge.getStarted.showVisualize",
   "graphforge.chooseExperienceMode",
   "graphforge.openSettings",
+  "graphforge.manageModules",
+  "graphforge.installModuleFromFile",
+  "graphforge.refreshModules",
+  "graphforge.importData",
   "graphforge.setupNativeBinding",
   "graphforge.setupPythonBinding",
   "graphforge.initializeProjectHere",
@@ -93,11 +117,61 @@ suite("GraphForge extension", () => {
     for (const id of ALL_COMMAND_IDS) {
       assert.ok(commands.includes(id), `missing command ${id}`);
     }
+    const modules = await vscode.commands.executeCommand<
+      Array<{ id: string; source: string; installed: boolean; removable: boolean }>
+    >("graphforge.refreshModules");
+    const defaults = modules?.filter((module) => module.source === "first-party");
+    assert.deepEqual(defaults.map((module) => module.id), [
+      "graphforge.import",
+      "graphforge.query",
+      "graphforge.visualize",
+    ]);
+    for (const module of defaults ?? []) {
+      assert.equal(module.installed, true, `${module.id} must ship installed`);
+      assert.equal(module.removable, false, `${module.id} must not be removable`);
+    }
   });
 
   test("cypher language is registered", async () => {
     const languages = await vscode.languages.getLanguages();
     assert.ok(languages.includes("cypher"), "cypher language missing");
+  });
+
+  test("rapid visualization opens use the live panel column, not stale Active", () => {
+    let disposePanel: (() => void) | undefined;
+    let revealCalls = 0;
+    const disposable: vscode.Disposable = { dispose() {} };
+    const panel = {
+      viewColumn: vscode.ViewColumn.Two,
+      viewType: "graphforge.resultGraph",
+      active: false,
+      visible: true,
+      reveal() {
+        revealCalls += 1;
+      },
+      onDidChangeViewState() {
+        return disposable;
+      },
+      onDidDispose(listener: () => void) {
+        disposePanel = listener;
+        return disposable;
+      },
+    } as unknown as vscode.WebviewPanel;
+
+    trackVizPanel(panel);
+    const options = graphForgeVizShowOptions();
+    disposePanel?.();
+
+    assert.equal(
+      options.viewColumn,
+      vscode.ViewColumn.Two,
+      "a back-to-back open must target the anchor's group before Active settles",
+    );
+    assert.equal(
+      revealCalls,
+      0,
+      "column selection must not depend on asynchronous focus from reveal()",
+    );
   });
 });
 
@@ -115,6 +189,39 @@ suite("GraphForge extension", () => {
  * registration above.
  */
 suite("GraphForge agent interop — safe commands (no binding, no project)", () => {
+  test("agent.getContext returns a versioned, UI-free discovery contract", async () => {
+    const context = await vscode.commands.executeCommand<{
+      format: string;
+      environment: { project: { open: boolean } };
+      discoveredProjects: Array<{ name: string; path: string }>;
+      project?: unknown;
+      settings: Record<string, unknown>;
+      commands: Array<{ id: string; args: string; returns: string }>;
+      contracts: Record<string, string>;
+    }>("graphforge.agent.getContext");
+
+    assert.ok(context);
+    assert.equal(context.format, "graphforge.agent-context/v1");
+    assert.equal(context.environment.project.open, false);
+    assert.ok(Array.isArray(context.discoveredProjects));
+    assert.equal(typeof context.settings.runtime, "string");
+    assert.ok(
+      context.commands.some((command) => command.id === "graphforge.runProjectQuery"),
+    );
+    assert.match(context.contracts.result, /columns/);
+  });
+
+  test("agent.listArtifacts fails closed when no project is open or specified", async () => {
+    const result = await vscode.commands.executeCommand<{
+      error?: string;
+      code?: string;
+      nextAction?: string;
+    }>("graphforge.agent.listArtifacts");
+
+    assert.equal(result?.code, "PROJECT_REQUIRED");
+    assert.match(result?.nextAction ?? "", /openProject/);
+  });
+
   test("checkEnvironment does not throw and returns a structured EnvironmentReport", async () => {
     const report = await vscode.commands.executeCommand<{
       runtime: { preference: string; active: string };
@@ -129,18 +236,25 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     assert.equal(typeof report.nodeBinding.available, "boolean");
     assert.equal(typeof report.python.available, "boolean");
     assert.equal(typeof report.project.open, "boolean");
-    // No @curatelabs/graphforge in devDependencies/peerDependencies is installed
-    // for this test run, so the Node binding must fail closed rather than
-    // throw, and no project is open yet.
-    assert.equal(report.nodeBinding.available, false);
+    // CI has no peer install; local monorepos may resolve a sibling binding.
+    // Either way the report must be structured and fail closed (no throw).
     assert.equal(report.project.open, false);
-    assert.equal(report.runtime.active, "none");
     assert.ok(report.nextAction.length > 0, "nextAction must be actionable");
-    assert.match(
-      report.nextAction,
-      /Setup Native Binding/,
-      "nextAction should point an agent at Setup Native Binding when neither runtime is usable",
-    );
+    if (!report.nodeBinding.available && !report.python.available) {
+      assert.equal(report.runtime.active, "none");
+      assert.match(
+        report.nextAction,
+        /Setup Native Binding/,
+        "nextAction should point at Setup Native Binding when neither runtime is usable",
+      );
+    } else {
+      // Sibling peer / local Python may be available in monorepo hosts.
+      assert.match(
+        report.nextAction,
+        /Open Project|Initialize|Open Sample|ready|Run Query|sample/i,
+        `nextAction should name a project/query next step when a runtime is usable — got ${report.nextAction}`,
+      );
+    }
     assert.ok(!Number.isNaN(Date.parse(report.timestamp)), "timestamp must be ISO-parsable");
   });
 
@@ -187,10 +301,45 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     );
   });
 
+  test("showResultsTable reopens the bottom panel without a result", async () => {
+    await assert.doesNotReject(
+      Promise.resolve(vscode.commands.executeCommand("graphforge.showResultsTable")),
+    );
+  });
+
   test("showResultGraph does not throw (opens demo graph webview when no result exists yet)", async () => {
     await assert.doesNotReject(
       Promise.resolve(vscode.commands.executeCommand("graphforge.showResultGraph")),
     );
+  });
+
+  test("open Result Graph follows renderer setting changes without host reload (#65)", async () => {
+    const config = vscode.workspace.getConfiguration("graphforge");
+    const previous = config.inspect<string>("resultGraph.renderer")?.globalValue;
+    try {
+      await config.update(
+        "resultGraph.renderer",
+        "cytoscape",
+        vscode.ConfigurationTarget.Global,
+      );
+      await assert.doesNotReject(
+        Promise.resolve(vscode.commands.executeCommand("graphforge.showResultGraph")),
+      );
+      await config.update(
+        "resultGraph.renderer",
+        "sigma",
+        vscode.ConfigurationTarget.Global,
+      );
+      await assert.doesNotReject(
+        Promise.resolve(vscode.commands.executeCommand("graphforge.showResultGraph")),
+      );
+    } finally {
+      await config.update(
+        "resultGraph.renderer",
+        previous,
+        vscode.ConfigurationTarget.Global,
+      );
+    }
   });
 
   test("showFigure with { figure } returns structured panel status without prompting (#62)", async () => {
@@ -251,6 +400,76 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     );
   });
 
+  test("visualization webviews stack as tabs in one editor group (#63)", async () => {
+    const expectedViewTypes = new Set([
+      "graphforge.resultGraph",
+      "graphforge.figure",
+      "graphforge.ontologyViewer",
+    ]);
+    const normalizeViewType = (viewType: string) =>
+      viewType.replace(/^mainThreadWebview-/, "");
+
+    // Earlier smoke tests open these panels. Dispose them so this test covers
+    // the installed-VSIX failure mode: two fresh CTA commands arriving before
+    // the first webview's active editor group has settled.
+    const staleTabs = vscode.window.tabGroups.all.flatMap((group) =>
+      group.tabs.filter(
+        (tab) =>
+          tab.input instanceof vscode.TabInputWebview &&
+          expectedViewTypes.has(normalizeViewType(tab.input.viewType)),
+      ),
+    );
+    if (staleTabs.length > 0) {
+      await vscode.window.tabGroups.close(staleTabs, true);
+    }
+
+    const resultGraphOpen = vscode.commands.executeCommand(
+      "graphforge.showResultGraph",
+    );
+    const figureOpen = vscode.commands.executeCommand("graphforge.showFigure", {
+      figure: {
+        data: [{ type: "bar", x: ["a", "b"], y: [1, 2] }],
+        layout: { title: "Column reuse contract" },
+      },
+    });
+    const ontologyOpen = vscode.commands.executeCommand("graphforge.showOntology");
+    await Promise.all([resultGraphOpen, figureOpen, ontologyOpen]);
+
+    const groupByViewType = new Map<string, vscode.TabGroup>();
+    let actualViewTypes: string[] = [];
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      groupByViewType.clear();
+      actualViewTypes = [];
+      for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+          if (tab.input instanceof vscode.TabInputWebview) {
+            actualViewTypes.push(tab.input.viewType);
+            const viewType = normalizeViewType(tab.input.viewType);
+            if (expectedViewTypes.has(viewType)) {
+              groupByViewType.set(viewType, group);
+            }
+          }
+        }
+      }
+      if (groupByViewType.size === expectedViewTypes.size) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    for (const viewType of expectedViewTypes) {
+      assert.ok(
+        groupByViewType.has(viewType),
+        `missing ${viewType} tab; found ${actualViewTypes.join(", ")}`,
+      );
+    }
+    assert.equal(
+      new Set(groupByViewType.values()).size,
+      1,
+      "Result Graph, Figure, and Ontology must share one editor group",
+    );
+  });
+
   test("showCapabilities does not throw when no project is open", async () => {
     // ensureProject() rejects (no project); the handler reports via a
     // fire-and-forget showErrorMessage with action buttons and resolves
@@ -269,6 +488,12 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
   test("openSettings opens the Settings webview panel without prompting", async () => {
     await assert.doesNotReject(
       Promise.resolve(vscode.commands.executeCommand("graphforge.openSettings")),
+    );
+  });
+
+  test("manageModules opens the module manager webview without prompting", async () => {
+    await assert.doesNotReject(
+      Promise.resolve(vscode.commands.executeCommand("graphforge.manageModules")),
     );
   });
 
@@ -298,6 +523,8 @@ const NO_PROJECT_STRUCTURED_RESULTS: ReadonlyArray<readonly [string, unknown]> =
   // Cypher (already documented; proves the doc's "missing binding" scenario)
   ["graphforge.runQuery", { cypher: "MATCH (n) RETURN n LIMIT 1" }],
   ["graphforge.runQueryWithParams", { cypher: "MATCH (n) RETURN n LIMIT $k", params: { k: 1 } }],
+  ["graphforge.applyProjectMutation", { path: "mutations/ci.cypher", confirm: true }],
+  ["graphforge.importData", { path: "/tmp/ci.csv", label: "Ci", confirm: true }],
   // Find (no args-based bypass yet, but its project gate resolves first)
   ["graphforge.find", undefined],
   // Checkpoints (#9)
@@ -404,12 +631,20 @@ suite("GraphForge agent interop — structured fail-closed results (no binding, 
         error?: string;
         code?: string;
         nextAction?: string;
+        exitCode?: number;
+        args?: string[];
       }>(commandId, args);
 
       assert.ok(
         result !== undefined && result !== null && typeof result === "object",
         `${commandId} resolved ${String(result)} — expected a structured object`,
       );
+      // Local monorepos may load a sibling CLI/binding; runCli then returns a
+      // structured RunCliResult instead of CLI_UNAVAILABLE.
+      if (commandId === "graphforge.runCli" && typeof result.exitCode === "number") {
+        assert.ok(Array.isArray(result.args));
+        return;
+      }
       assert.equal(
         typeof result.error,
         "string",

@@ -1,5 +1,10 @@
 import * as vscode from "vscode";
 import type { OntologyDoc, OntologyMode } from "../session/types";
+import {
+  graphForgeVizShowOptions,
+  revealVizPanel,
+  trackVizPanel,
+} from "./panelColumn";
 import type { HostToWebview, WebviewToHost } from "./protocol";
 
 export class OntologyPanel {
@@ -11,6 +16,7 @@ export class OntologyPanel {
 
   private constructor(panel: vscode.WebviewPanel) {
     this.panel = panel;
+    trackVizPanel(panel);
     this.panel.onDidDispose(() => {
       OntologyPanel.current = undefined;
     });
@@ -33,15 +39,16 @@ export class OntologyPanel {
     opts: { mode: OntologyMode; ontology?: OntologyDoc; projectName?: string },
   ): OntologyPanel {
     if (OntologyPanel.current) {
-      OntologyPanel.current.panel.reveal(vscode.ViewColumn.Beside);
+      revealVizPanel(OntologyPanel.current.panel);
       OntologyPanel.current.update(opts);
       return OntologyPanel.current;
     }
 
+    const showOptions = graphForgeVizShowOptions();
     const panel = vscode.window.createWebviewPanel(
       "graphforge.ontologyViewer",
       "GraphForge Ontology",
-      vscode.ViewColumn.Beside,
+      showOptions,
       { enableScripts: true, retainContextWhenHidden: true },
     );
     OntologyPanel.current = new OntologyPanel(panel);

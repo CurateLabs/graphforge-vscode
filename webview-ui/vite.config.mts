@@ -25,6 +25,10 @@ export default defineConfig({
       input: {
         settings: resolve(here, "src/settings/main.ts"),
         figure: resolve(here, "src/figure/main.ts"),
+        resultGraph: resolve(here, "src/resultGraph/main.ts"),
+        results: resolve(here, "src/results/main.ts"),
+        entityInspect: resolve(here, "src/entityInspect/main.ts"),
+        modules: resolve(here, "src/modules/main.ts"),
       },
       output: {
         entryFileNames: "[name].js",

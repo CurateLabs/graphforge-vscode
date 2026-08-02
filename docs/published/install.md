@@ -13,9 +13,20 @@
 3. First visit only: the **Welcome** step asks how you want to work — **Guided** (confirms
    before changes) or **Autonomous** (fewer prompts, auto-opens results). Pick one and press
    **Continue**; change it anytime via **Change mode** or `graphforge.experienceMode`.
-4. Work down the checklist: **set up a runtime** (Node or Python — the primary button matches
-   your workspace), **open or initialize a project**, then **run your first query**. Each step
-   surfaces the right command as a button.
+4. Work down the checklist:
+   1. **Set up a runtime** (Node or Python — the primary button matches your workspace).
+   2. **Open or create a project** — or choose **Try sample project** to seed the vendored
+      **US air-routes** graph (586 airports / 7,430 routes, Apache-2.0) via
+      `graphforge.openSampleProject`.
+   3. **Run your first query** — with the sample open, use **Run sample query**.
+      This executes `queries/templates/routes-overview.cypher` from the project.
+   4. **See your results** — open **Result Graph** (airport route network) and **Chart this
+      result** (Plotly Figure of route distances). Both stay closed until you ask; neither
+      replaces the other.
+5. Use the Hub, Query, and Visualize icons in the Get Started view title. Query
+   saves reusable templates under `queries/templates/` and reopens timestamped
+   `results/` history. Visualize saves Result Graph or Plotly settings under
+   `visualizations/`.
 
 Prefer the Command Palette, or driving the extension from an agent? Run
 **`GraphForge: Check Environment`** — it reports both runtimes' full diagnostics and always

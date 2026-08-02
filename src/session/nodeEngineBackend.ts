@@ -35,6 +35,10 @@ export class NodeEngineBackend implements EngineBackend {
     return params ? this.forge.execute(cypher, params) : this.forge.execute(cypher);
   }
 
+  async moduleCatalog(): Promise<unknown[]> {
+    return this.forge.moduleCatalog?.() ?? [];
+  }
+
   async rank(
     label: string,
     by: string,

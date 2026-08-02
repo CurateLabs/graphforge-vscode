@@ -69,6 +69,15 @@
         "icon": "$(folder-opened)"
       },
       {
+        "command": "graphforge.openSampleProject",
+        "title": "GraphForge: Open Sample Project",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "graphforge.closeProject",
+        "title": "GraphForge: Close Project"
+      },
+      {
         "command": "graphforge.refreshExplorer",
         "title": "GraphForge: Refresh Explorer",
         "icon": "$(refresh)"
@@ -76,16 +85,78 @@
       {
         "command": "graphforge.runQuery",
         "title": "GraphForge: Run Query",
-        "icon": "$(play)"
+        "icon": "$(play)",
+        "enablement": "graphforge.module.query.enabled"
       },
       {
         "command": "graphforge.runQueryWithParams",
-        "title": "GraphForge: Run Query with Parameters…"
+        "title": "GraphForge: Run Query with Parameters…",
+        "enablement": "graphforge.module.query.enabled"
+      },
+      {
+        "command": "graphforge.runProjectQuery",
+        "title": "GraphForge: Run Project Query"
+      },
+      {
+        "command": "graphforge.saveProjectQuery",
+        "title": "GraphForge: Save Project Query"
+      },
+      {
+        "command": "graphforge.saveProjectQueryTemplate",
+        "title": "GraphForge: Save Project Query Template"
+      },
+      {
+        "command": "graphforge.openProjectResult",
+        "title": "GraphForge: Open Saved Result"
+      },
+      {
+        "command": "graphforge.openProjectVisualization",
+        "title": "GraphForge: Open Saved Visualization"
+      },
+      {
+        "command": "graphforge.saveProjectVisualization",
+        "title": "GraphForge: Save Project Visualization"
+      },
+      {
+        "command": "graphforge.openProjectArtifact",
+        "title": "GraphForge: Open Project Artifact"
+      },
+      {
+        "command": "graphforge.applyProjectMutation",
+        "title": "GraphForge: Apply Project Mutation…"
+      },
+      {
+        "command": "graphforge.agent.getContext",
+        "title": "GraphForge: Agent: Get Context"
+      },
+      {
+        "command": "graphforge.agent.listArtifacts",
+        "title": "GraphForge: Agent: List Project Artifacts"
+      },
+      {
+        "command": "graphforge.showResultsTable",
+        "title": "GraphForge: Show Results Table",
+        "icon": "$(table)"
       },
       {
         "command": "graphforge.getStarted",
         "title": "GraphForge: Get Started",
         "icon": "$(rocket)"
+      },
+      {
+        "command": "graphforge.getStarted.showHub",
+        "title": "GraphForge: Show Hub",
+        "icon": "$(home)"
+      },
+      {
+        "command": "graphforge.getStarted.showQuery",
+        "title": "GraphForge: Show Query",
+        "icon": "$(search)"
+      },
+      {
+        "command": "graphforge.getStarted.showVisualize",
+        "title": "GraphForge: Show Visualize",
+        "icon": "$(graph)"
       },
       {
         "command": "graphforge.chooseExperienceMode",
@@ -95,6 +166,25 @@
         "command": "graphforge.openSettings",
         "title": "GraphForge: Settings",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "graphforge.manageModules",
+        "title": "GraphForge: Manage Modules",
+        "icon": "$(extensions)"
+      },
+      {
+        "command": "graphforge.installModuleFromFile",
+        "title": "GraphForge: Install Module from File…"
+      },
+      {
+        "command": "graphforge.refreshModules",
+        "title": "GraphForge: Refresh Modules"
+      },
+      {
+        "command": "graphforge.importData",
+        "title": "GraphForge: Import Data…",
+        "icon": "$(cloud-upload)",
+        "enablement": "graphforge.module.import.enabled"
       },
       {
         "command": "graphforge.checkEnvironment",
@@ -262,19 +352,23 @@
       },
       {
         "command": "graphforge.showResultGraph",
-        "title": "GraphForge: Show Result Graph"
+        "title": "GraphForge: Show Result Graph",
+        "enablement": "graphforge.module.visualize.enabled"
       },
       {
         "command": "graphforge.showResultGraphAdvanced",
-        "title": "GraphForge: Result Graph (Advanced)…"
+        "title": "GraphForge: Result Graph (Advanced)…",
+        "enablement": "graphforge.module.visualize.enabled"
       },
       {
         "command": "graphforge.showFigure",
-        "title": "GraphForge: Show Figure"
+        "title": "GraphForge: Show Figure",
+        "enablement": "graphforge.module.visualize.enabled"
       },
       {
         "command": "graphforge.figureFromResult",
-        "title": "GraphForge: Figure from Result…"
+        "title": "GraphForge: Figure from Result…",
+        "enablement": "graphforge.module.visualize.enabled"
       },
       {
         "command": "graphforge.statusBarClick",
@@ -312,7 +406,8 @@
       },
       {
         "command": "graphforge.showAssertionOnGraph",
-        "title": "GraphForge: Show Assertion on Graph…"
+        "title": "GraphForge: Show Assertion on Graph…",
+        "enablement": "graphforge.module.visualize.enabled"
       },
       {
         "command": "graphforge.attachEvidence",
@@ -331,15 +426,25 @@
       "editor/title": [
         {
           "command": "graphforge.runQuery",
-          "when": "resourceLangId == cypher",
+          "when": "resourceLangId == cypher && graphforge.module.query.enabled",
           "group": "navigation"
         }
       ],
       "view/title": [
         {
-          "command": "graphforge.getStarted",
+          "command": "graphforge.getStarted.showHub",
           "when": "view == graphforge.getStarted",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "graphforge.getStarted.showQuery",
+          "when": "view == graphforge.getStarted",
+          "group": "navigation@2"
+        },
+        {
+          "command": "graphforge.getStarted.showVisualize",
+          "when": "view == graphforge.getStarted",
+          "group": "navigation@3"
         },
         {
           "command": "graphforge.refreshExplorer",
@@ -375,6 +480,13 @@
           "title": "GraphForge",
           "icon": "media/graphforge.svg"
         }
+      ],
+      "panel": [
+        {
+          "id": "graphforgeResults",
+          "title": "GraphForge Results",
+          "icon": "media/graphforge.svg"
+        }
       ]
     },
     "views": {
@@ -397,6 +509,14 @@
           "id": "graphforge.knowledge",
           "name": "Knowledge"
         }
+      ],
+      "graphforgeResults": [
+        {
+          "type": "webview",
+          "id": "graphforge.results",
+          "name": "Results",
+          "icon": "$(table)"
+        }
       ]
     },
     "configuration": {
@@ -411,6 +531,19 @@
           "type": "boolean",
           "default": true,
           "description": "Open the Result Graph webview after a successful Cypher query or analyst verb."
+        },
+        "graphforge.resultGraph.renderer": {
+          "type": "string",
+          "enum": [
+            "cytoscape",
+            "sigma"
+          ],
+          "enumDescriptions": [
+            "Canvas-based default with force layout, pan, zoom, fit, and selection.",
+            "WebGL renderer optimized for larger result graphs, with ForceAtlas2 layout and selection."
+          ],
+          "default": "cytoscape",
+          "description": "Renderer used by the Result Graph. Changes apply immediately to an open panel."
         },
         "graphforge.runtime": {
           "type": "string",
@@ -472,6 +605,12 @@
           "default": 10000000,
           "minimum": 1,
           "description": "Maximum serialized figure JSON size in bytes when figureLimitsEnabled is true."
+        },
+        "graphforge.modules.dangerouslyAllowWorkspaceJavaScript": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "**DANGEROUS:** Allow explicitly confirmed side-loaded modules to execute a relative `.js` or `.cjs` file from their module folder. Code runs with the permissions of the GraphForge extension. This is a user-level machine setting so a workspace cannot enable it for itself. VS Code Workspace Trust and a per-module warning are still required."
         }
       }
     }
@@ -485,13 +624,17 @@
     "watch:webview": "vite build --watch --config webview-ui/vite.config.mts",
     "check": "tsc --noEmit && tsc --noEmit -p webview-ui",
     "lint": "npm run check",
-    "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js dist/test/figureFromResult.test.js dist/test/figureSchema.test.js",
+    "test": "npm run compile:host && vscode-test",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/quickstartSample.test.js dist/test/projectArtifacts.test.js dist/test/agentContext.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js dist/test/figureFromResult.test.js dist/test/figureSchema.test.js dist/test/resultGraphModel.test.js dist/test/resultTableModel.test.js dist/test/entityMutation.test.js dist/test/resultDocument.test.js dist/test/moduleManifest.test.js dist/test/workspaceScript.test.js dist/test/importData.test.js",
     "package": "vsce package"
   },
   "dependencies": {
     "apache-arrow": "^21.2.0",
-    "plotly.js": "^3.7.0"
+    "cytoscape": "^3.34.0",
+    "graphology": "^0.26.0",
+    "graphology-layout-forceatlas2": "^0.10.1",
+    "plotly.js": "^3.7.0",
+    "sigma": "^3.0.3"
   },
   "peerDependencies": {
     "@curatelabs/graphforge": "^0.5.1",

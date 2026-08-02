@@ -1,34 +1,49 @@
 import * as vscode from "vscode";
+import { registerAgentCommands } from "./commands/agent";
 import { registerAnalystVerbs } from "./commands/analystVerbs";
 import { registerCheckpoints } from "./commands/checkpoints";
 import { registerEmbeddingSpaces } from "./commands/embeddingSpaces";
-import { registerFigures } from "./commands/figures";
 import { registerFind } from "./commands/find";
 import { registerIndexManagement } from "./commands/indexManagement";
 import { registerKnowledgeCommands } from "./commands/knowledgeCommands";
+import { registerOpenSampleProject } from "./commands/openSampleProject";
 import { registerOpenViews } from "./commands/openViews";
 import { registerPower } from "./commands/power";
+import { registerProjectArtifacts } from "./commands/projectArtifacts";
 import { registerRunCli } from "./commands/runCli";
-import { registerRunQuery } from "./commands/runQuery";
 import { registerSetup } from "./commands/setup";
 import { registerSetupPython } from "./commands/setupPython";
 import { defaultsForExperienceMode, resolveExperienceMode } from "./session/experienceMode";
 import { GraphForgeSession } from "./session/graphForgeSession";
 import { resetNativeCache } from "./session/nativeLoader";
 import { resetPythonCache } from "./session/pythonLoader";
+import { firstPartyModules } from "./modules/firstParty";
+import { ModuleManager } from "./modules/moduleManager";
 import { KnowledgeTreeProvider } from "./views/knowledgeTree";
 import { GetStartedViewProvider } from "./views/getStartedView";
 import { OntologyTreeProvider } from "./views/ontologyTree";
 import { ProjectExplorerProvider } from "./views/projectExplorer";
+import { EntityInspectPanel } from "./webview/entityInspectPanel";
+import { ModuleManagerPanel } from "./webview/moduleManagerPanel";
+import {
+  RESULTS_VIEW_ID,
+  ResultTableViewProvider,
+} from "./views/resultTableView";
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(
+  context: vscode.ExtensionContext,
+): Promise<void> {
   const session = new GraphForgeSession();
   context.subscriptions.push(session);
 
   const projects = new ProjectExplorerProvider(session);
   const ontology = new OntologyTreeProvider(session);
   const knowledge = new KnowledgeTreeProvider(session);
-  context.subscriptions.push(projects, ontology, knowledge);
+  EntityInspectPanel.configure(session);
+  const results = new ResultTableViewProvider(context.extensionUri, session);
+  context.subscriptions.push(projects, ontology, knowledge, results);
+  const modules = new ModuleManager(context, session, results);
+  context.subscriptions.push(modules);
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider("graphforge.projects", projects),
@@ -38,6 +53,12 @@ export function activate(context: vscode.ExtensionContext): void {
       "graphforge.getStarted",
       new GetStartedViewProvider(context.extensionUri, session),
     ),
+    vscode.window.registerWebviewViewProvider(RESULTS_VIEW_ID, results, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+    vscode.commands.registerCommand("graphforge.showResultsTable", () =>
+      results.reveal(),
+    ),
   );
 
   const refreshTrees = () => {
@@ -46,19 +67,57 @@ export function activate(context: vscode.ExtensionContext): void {
     knowledge.refresh();
   };
 
-  registerRunQuery(context, session);
-  registerAnalystVerbs(context, session);
-  registerFigures(context, session);
-  registerFind(context, session);
+  registerProjectArtifacts(context, session, results);
+  registerAgentCommands(context, session);
+  registerAnalystVerbs(context, session, results);
+  registerFind(context, session, results);
   registerIndexManagement(context, session);
   registerCheckpoints(context, session);
   registerEmbeddingSpaces(context, session);
   registerPower(context, session);
   registerRunCli(context, session);
   registerOpenViews(context, session, refreshTrees);
+  registerOpenSampleProject(context, session, refreshTrees);
   registerSetup(context, session, refreshTrees);
   registerKnowledgeCommands(context, session, refreshTrees);
   registerSetupPython(context, session);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("graphforge.manageModules", () =>
+      ModuleManagerPanel.show(context.extensionUri, modules),
+    ),
+    vscode.commands.registerCommand("graphforge.installModuleFromFile", async () => {
+      const selected = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: true,
+        canSelectMany: false,
+        filters: { "GraphForge modules": ["json"] },
+        openLabel: "Install module",
+        title: "Select a .gfmodule.json file or module folder",
+      });
+      if (!selected?.[0]) return { cancelled: true };
+      const installed = await modules.installFromUri(selected[0]);
+      if (!installed) return { cancelled: true };
+      ModuleManagerPanel.show(context.extensionUri, modules);
+      return modules.list();
+    }),
+    vscode.commands.registerCommand("graphforge.refreshModules", async () => {
+      await modules.refreshGraphForgeCatalog();
+      return modules.list();
+    }),
+  );
+  await modules.initialize(firstPartyModules);
+
+  let catalogProject = session.project?.rootPath;
+  context.subscriptions.push(
+    session.onDidChange(() => {
+      const nextProject = session.project?.rootPath;
+      if (nextProject !== catalogProject) {
+        catalogProject = nextProject;
+        void modules.refreshGraphForgeCatalog();
+      }
+    }),
+  );
 
   void projects.refresh();
 
@@ -137,6 +196,8 @@ export function activate(context: vscode.ExtensionContext): void {
   })();
 
   void autoOpenFirstProject();
+  void modules.refreshGraphForgeCatalog();
+  setTimeout(() => void modules.activatePending(), 0);
 }
 
 export function deactivate(): void {
