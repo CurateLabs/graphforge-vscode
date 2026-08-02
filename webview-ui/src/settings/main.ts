@@ -146,9 +146,9 @@ function renderNumberSetting(setting: SettingDescriptor): HTMLElement {
     step: "1",
   });
   input.addEventListener("change", () => {
-    const parsed = Number(input.value);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      updateSetting(setting.key, Math.trunc(parsed));
+    const truncated = Math.trunc(Number(input.value));
+    if (Number.isFinite(truncated) && truncated >= 1) {
+      updateSetting(setting.key, truncated);
     }
   });
   return el(

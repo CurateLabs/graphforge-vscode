@@ -67,8 +67,10 @@ export function registerFigures(
       "graphforge.showFigure",
       async (args?: ShowFigureArgs): Promise<CommandOutcome<FigureCommandSuccess>> => {
         if (args?.figure === undefined) {
+          const error = "showFigure requires { figure } (Plotly figure JSON).";
+          presentError(`GraphForge Figure: ${error}`);
           return {
-            error: "showFigure requires { figure } (Plotly figure JSON).",
+            error,
             code: "FIGURE_REQUIRED",
             nextAction: "graphforge.figureFromResult",
           };
@@ -87,6 +89,7 @@ export function registerFigures(
       async (args?: FigureFromResultArgs): Promise<CommandOutcome<FigureCommandSuccess>> => {
         const table = resolveTable(session, args);
         if ("error" in table) {
+          presentError(`GraphForge Figure: ${table.error}`);
           return table;
         }
 

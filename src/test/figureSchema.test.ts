@@ -50,4 +50,17 @@ suite("figureSchema validate + limits (#62)", () => {
     );
     assert.equal(tooManyPoints.ok, false);
   });
+
+  test("limits path returns structured error when figure cannot serialize", () => {
+    const circular: Record<string, unknown> = { type: "bar", x: [1], y: [1] };
+    circular.self = circular;
+    const result = enforceFigureLimits(
+      { data: [circular] },
+      { enabled: true, maxTraces: 10, maxPoints: 100, maxBytes: 1_000_000 },
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.code, "FIGURE_INVALID");
+    }
+  });
 });

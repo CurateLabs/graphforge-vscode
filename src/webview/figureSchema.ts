@@ -117,7 +117,17 @@ export function enforceFigureLimits(
       code: "FIGURE_LIMITS",
     };
   }
-  const bytes = new TextEncoder().encode(JSON.stringify(figure)).length;
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(figure);
+  } catch {
+    return {
+      ok: false,
+      error: "Figure JSON could not be serialized (circular or unsupported values).",
+      code: "FIGURE_INVALID",
+    };
+  }
+  const bytes = new TextEncoder().encode(serialized).length;
   if (bytes > limits.maxBytes) {
     return {
       ok: false,

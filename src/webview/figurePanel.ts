@@ -114,7 +114,7 @@ export class FigurePanel {
 </head>
 <body>
   <div id="app">
-    <p id="banner" hidden></p>
+    <p id="banner" hidden role="alert" aria-live="assertive"></p>
     <div id="plot"></div>
   </div>
   <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
@@ -123,18 +123,32 @@ export class FigurePanel {
   }
 }
 
+const MAX_TITLE_LENGTH = 60;
+
+function normalizeTitle(text: string): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return "GraphForge Figure";
+  }
+  const clipped =
+    compact.length > MAX_TITLE_LENGTH
+      ? `${compact.slice(0, MAX_TITLE_LENGTH - 1)}…`
+      : compact;
+  return `GraphForge: ${clipped}`;
+}
+
 function figureTitle(figure: PlotlyFigure): string {
   const layout = figure.layout;
   const title = layout?.title;
-  if (typeof title === "string" && title.trim()) {
-    return `GraphForge: ${title}`;
+  if (typeof title === "string") {
+    return normalizeTitle(title);
   }
   if (
     title &&
     typeof title === "object" &&
     typeof (title as { text?: unknown }).text === "string"
   ) {
-    return `GraphForge: ${(title as { text: string }).text}`;
+    return normalizeTitle((title as { text: string }).text);
   }
   return "GraphForge Figure";
 }
