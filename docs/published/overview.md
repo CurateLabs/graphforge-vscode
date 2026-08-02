@@ -27,6 +27,7 @@ graph.
 | **Ontology** | A mode badge (exploratory/advisory/strict) plus an entity/relation tree and an Ontology Viewer webview, including a **Load Ontology…** action. |
 | **Knowledge** | List, inspect, and create knowledge-ledger assertions, with Advanced commands for attaching evidence, assessing confidence, and recording status. |
 | **Result Graph** | A webview rendering query/verb results as a graph, styled by class and epistemic status. |
+| **Figure** | A Plotly chart panel for analytical figures (`showFigure` / `figureFromResult`) — separate from Result Graph. |
 
 ## Two runtimes, one extension
 

@@ -26,7 +26,7 @@ function post(message: SettingsWebviewToHost): void {
   vscode.postMessage(message);
 }
 
-function updateSetting(key: string, value: string | boolean): void {
+function updateSetting(key: string, value: string | boolean | number): void {
   post({ type: "graphforge/updateSetting", key, value });
 }
 
@@ -134,6 +134,32 @@ function renderStringSetting(setting: SettingDescriptor): HTMLElement {
   );
 }
 
+function renderNumberSetting(setting: SettingDescriptor): HTMLElement {
+  const inputId = `setting-${setting.key}`;
+  const descId = `${inputId}-desc`;
+  const input = el("input", {
+    type: "number",
+    id: inputId,
+    "data-setting": setting.key,
+    "aria-describedby": descId,
+    min: "1",
+    step: "1",
+  });
+  input.addEventListener("change", () => {
+    const parsed = Number(input.value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      updateSetting(setting.key, Math.trunc(parsed));
+    }
+  });
+  return el(
+    "div",
+    { class: "setting setting-number" },
+    el("label", { class: "setting-label", for: inputId }, setting.label),
+    el("p", { class: "setting-description", id: descId }, setting.description),
+    input,
+  );
+}
+
 function renderSetting(setting: SettingDescriptor): HTMLElement {
   switch (setting.type) {
     case "boolean":
@@ -142,6 +168,8 @@ function renderSetting(setting: SettingDescriptor): HTMLElement {
       return renderEnumSetting(setting);
     case "string":
       return renderStringSetting(setting);
+    case "number":
+      return renderNumberSetting(setting);
   }
 }
 

@@ -40,8 +40,8 @@ flowchart LR
 | `GraphForgeSession` | Open project, execute/verbs, IPC→rows, graph payload | `EngineBackend` + arrow |
 | Tree providers | Projects, Ontology, Knowledge sidebars | Session |
 | Commands | Run Query, verbs, open panels, load ontology, Setup (Native/Python) | Session, webviews |
-| Webviews | Result Graph + Ontology Viewer + Settings + message protocol | Session payloads (Result Graph/Ontology); configuration API + `settingsSchema.ts` (Settings) |
-| `webview-ui/` | Vite-built browser bundles for webview panels (currently: Settings) | `src/webview/settingsSchema.ts` |
+| Webviews | Result Graph + Ontology Viewer + Settings + Figure + message protocol | Session payloads (Result Graph/Ontology); configuration API + `settingsSchema.ts` (Settings); Plotly figure JSON (`figureSchema.ts` / Figure) |
+| `webview-ui/` | Vite-built browser bundles for webview panels (Settings, Figure) | `settingsSchema.ts`, `figureSchema.ts` |
 
 ### Build tooling (Vite, #24)
 
@@ -55,9 +55,11 @@ complete). Two configs with opposite semantics:
   `dist/test/` and copies `src/test/fixtures/` alongside them.
 - **Webview UI (`webview-ui/vite.config.mts`):** browser-side webview apps (config inside this
   package — no monorepo/workspace split). Emits fixed-name bundles to `dist/webview-ui/`
-  (e.g. `settings.js` / `settings.css`), which panel hosts load via `webview.asWebviewUri`
-  under a nonce-based CSP. The Settings panel is the first Vite-built surface; new webviews
-  should start here rather than as inline HTML template strings.
+  (e.g. `settings.js` / `settings.css`, `figure.js` / `figure.css`), which panel hosts load
+  via `webview.asWebviewUri` under a nonce-based CSP. Settings and Figure are Vite-built;
+  new webviews should start here rather than as inline HTML template strings. Figure bundles
+  full `plotly.js` locally and consumes Plotly figure JSON — see ADR-0001; Dash is not an
+  in-IDE host.
 - `npm run compile` runs both (`compile:host` then `compile:webview`); `npm run check`
   type-checks both TS projects (`tsconfig.json` and `webview-ui/tsconfig.json`). The
   `webview-ui` app shares vscode-free modules from `src/` (e.g. `settingsSchema.ts`) by direct

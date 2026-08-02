@@ -55,7 +55,12 @@ suite("settingsSchema ↔ package.json contributes.configuration", () => {
       const key = `${SETTINGS_SECTION}.${descriptor.key}`;
       const property = contributed[key];
 
-      const expectedType = descriptor.type === "boolean" ? "boolean" : "string";
+      const expectedType =
+        descriptor.type === "boolean"
+          ? "boolean"
+          : descriptor.type === "number"
+            ? "number"
+            : "string";
       assert.equal(property.type, expectedType, `${key}: contributed type mismatch`);
 
       if (descriptor.type === "enum") {

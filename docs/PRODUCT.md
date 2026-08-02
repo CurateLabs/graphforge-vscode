@@ -26,10 +26,14 @@ ontology visibility, and result graphs that honor class and belief status.
 
 ## Vision
 
-VS Code becomes a first-class place to think with GraphForge: Cypher and analyst
-verbs side by side, ontology progressive from exploratory → advisory → strict,
-and result graphs that surface knowledge status instead of flattening everything
-to anonymous nodes.
+VS Code becomes a first-class place to **explore and uncover hunches** with
+GraphForge: Cypher and analyst verbs side by side, ontology progressive from
+exploratory → advisory → strict, and result graphs that surface knowledge status
+instead of flattening everything to anonymous nodes. The extension should feel
+curious and supporting in discovery—never complex or brittle—and leave the
+analyst empowered for the next question.
+
+Emotional north star and moment beats: [`DESIGN.md`](./DESIGN.md#emotional-north-star).
 
 ## Goals
 

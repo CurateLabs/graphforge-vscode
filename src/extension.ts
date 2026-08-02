@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { registerAnalystVerbs } from "./commands/analystVerbs";
 import { registerCheckpoints } from "./commands/checkpoints";
 import { registerEmbeddingSpaces } from "./commands/embeddingSpaces";
+import { registerFigures } from "./commands/figures";
 import { registerFind } from "./commands/find";
 import { registerIndexManagement } from "./commands/indexManagement";
 import { registerKnowledgeCommands } from "./commands/knowledgeCommands";
@@ -47,6 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerRunQuery(context, session);
   registerAnalystVerbs(context, session);
+  registerFigures(context, session);
   registerFind(context, session);
   registerIndexManagement(context, session);
   registerCheckpoints(context, session);

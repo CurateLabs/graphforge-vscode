@@ -1,13 +1,40 @@
 # Design
 
+## Emotional north star
+
+**Primary feeling:** exploring and uncovering hunches — a guided discovery workbench for GraphForge, not a graph admin console.
+
+**Anti-goals:** never feel **complex** or **brittle**.
+
+**Register:** one voice everywhere. This is a **tool for GraphForge** — concierge guidance serves discovery; it is not a separate brand theater vs product tone.
+
+| Need state | Emotional job |
+|---|---|
+| **Before** | Need a different way of looking at data; open to new perspectives |
+| **During** | Curious and supported in discovery |
+| **After** | Empowered and ready for the next question |
+
+| Moment | Beat |
+|---|---|
+| **First open** | Premium concierge — Kilo-like guided welcome; clear path in |
+| **Success** | Clear next options (never a dead end) |
+| **Failure** | Easy recovery; clear what failed |
+| **Wait** | Honest progress — what is happening, and whether it may be stuck |
+| **Return** | Easy path to new work *or* resume prior work (Cursor-style open) |
+
+**Trust:** clear results and clear failures. **Anxiety spike:** hung analysis with no signal whether the engine is crunching or dead.
+
+Durable journey detail lives in [`experience/discovery-feeling.md`](./experience/discovery-feeling.md). Positioning note: [`strategy/positioning.md`](./strategy/positioning.md).
+
 ## Product experience
 
-GraphForge in VS Code should feel like a **workbench**, not a database admin console.
+GraphForge in VS Code should feel like a **workbench for uncovering hunches**, not a database admin console.
 
 - **Cypher stays visible** — language mode, editor title Run Query, not only a hidden command.
 - **Analyst verbs are peers** — Rank/Cluster/Paths/Analyze/Similar/Find in the command palette at the same level as Run Query.
 - **Ontology is progressive** — exploratory empty state is valid; advisory/strict show types without shaming exploration.
 - **Epistemic status is legible** — result graph legend always names statuses; colors are extension-owned until product branding defines a palette.
+- **Concierge, not complexity** — first-run and recovery feel guided and calm; surfaces stay simple and fail closed rather than brittle.
 
 ## Kilo-inspired workbench onboarding
 
@@ -65,12 +92,22 @@ panel live-syncs with edits made in the VS Code Settings UI.
 - Built as the first Vite `webview-ui/` surface (see
   `docs/engineering/ARCHITECTURE.md`, "Build tooling").
 
+## Figure panel (analytical charts, #62)
+
+Separate from Result Graph: a Vite-built **Figure** webview renders **Plotly figure JSON**
+(`data` / `layout` / optional `frames`) for notebook-style charts (bar, scatter, histogram,
+line). Agents call `graphforge.showFigure({ figure })` or
+`graphforge.figureFromResult({ chartType, x, y, … })`. Optional size limits exist but
+default **off**. Dash is not the IDE host — see ADR-0001 for CSP. Result Graph remains the
+epistemic network surface (Cytoscape/Sigma later).
+
 ## Visual notes
 
 - Activity Bar icon: simple node/edge mark (`media/graphforge.svg`).
 - Result Graph v0: circular SVG layout; swap to Cytoscape/Sigma later without changing the host↔webview protocol.
+- Figure panel: full bundled `plotly.js` in `webview-ui` (`figure.js` / `figure.css`).
 - Prefer VS Code theme tokens in webviews; status colors are the intentional exception for belief state.
 
 ## Voice
 
-Short, analyst-facing copy. Prefer “open project” / “run verb” over infrastructure jargon. When the native binding is missing, say how to link it (README), not only that load failed.
+Short, analyst-facing copy in one register (tool for GraphForge). Prefer “open project” / “run verb” / discovery language over infrastructure jargon. When the native binding is missing, say how to link it (README), not only that load failed. On success and failure, name a clear next option.
