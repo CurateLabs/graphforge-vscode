@@ -5,11 +5,11 @@
  * `graphForgeSession.ts` so existing import sites keep working.
  */
 
-/** Raised when the loaded @graphforge/node binding predates a given method. */
+/** Raised when the loaded @curatelabs/graphforge binding predates a given method. */
 export class UnsupportedByBindingError extends Error {
   constructor(methodName: string) {
     super(
-      `This @graphforge/node binding does not expose \`${methodName}()\` yet. ` +
+      `This @curatelabs/graphforge binding does not expose \`${methodName}()\` yet. ` +
         "The engine API may still be moving — update the binding or check the method name.",
     );
     this.name = "UnsupportedByBindingError";
@@ -26,7 +26,7 @@ export class UnsupportedByBindingError extends Error {
 export class NodeOnlyFeatureError extends Error {
   constructor(methodName: string) {
     super(
-      `\`${methodName}\` requires the Node runtime (@graphforge/node). ` +
+      `\`${methodName}\` requires the Node runtime (@curatelabs/graphforge). ` +
         'Switch `graphforge.runtime` to "node" (or "auto" with a Node binding available) to use this feature.',
     );
     this.name = "NodeOnlyFeatureError";

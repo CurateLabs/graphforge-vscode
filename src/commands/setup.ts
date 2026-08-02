@@ -10,8 +10,12 @@ import type { GraphForgeSession } from "../session/graphForgeSession";
 import { detectSiblingBindingPath, resetNativeCache } from "../session/nativeLoader";
 import { classifyInitTarget } from "../session/projectDetector";
 import { summarizeNodeUnavailable } from "../session/runtimeSelection";
+import { npmEngineSpec } from "../session/engineVersion";
+import { isCliAvailable, runGraphForgeCli } from "../session/graphforgeCli";
+import { pickEngineVersion } from "./engineVersionPick";
 import {
   errorMessage,
+  logErrorDetail,
   RECOVERY_SETUP_NATIVE,
   RECOVERY_SETUP_PYTHON,
   reportEngineError,
@@ -146,18 +150,18 @@ async function runSetupNativeBinding(session: GraphForgeSession): Promise<void> 
   }
   choices.push({
     label: "$(folder-opened) Set nativeModulePath…",
-    detail: "Browse for a built @graphforge/node folder (directory containing index.js)",
+    detail: "Browse for a built @curatelabs/graphforge folder (directory containing index.js)",
     action: "path",
   });
   choices.push({
-    label: "$(cloud-download) Install @graphforge/node from npm",
-    detail: "Runs npm install in a terminal (only when published)",
+    label: "$(cloud-download) Install @curatelabs/graphforge from npm",
+    detail: "Runs npm install in a terminal",
     action: "install",
   });
 
   const picked = await vscode.window.showQuickPick(choices, {
     title: "GraphForge: Setup Native Binding",
-    placeHolder: "Choose how to make @graphforge/node available",
+    placeHolder: "Choose how to make @curatelabs/graphforge available",
   });
   if (!picked) {
     return;
@@ -174,7 +178,7 @@ async function runSetupNativeBinding(session: GraphForgeSession): Promise<void> 
         canSelectFiles: false,
         canSelectFolders: true,
         canSelectMany: false,
-        openLabel: "Select @graphforge/node folder",
+        openLabel: "Select @curatelabs/graphforge folder",
       });
       const selected = uri?.[0]?.fsPath;
       if (selected) {
@@ -183,11 +187,16 @@ async function runSetupNativeBinding(session: GraphForgeSession): Promise<void> 
       break;
     }
     case "install": {
+      const version = await pickEngineVersion("npm");
+      if (version === undefined) {
+        return;
+      }
+      const spec = npmEngineSpec(version);
       const terminal = vscode.window.createTerminal("GraphForge Setup");
       terminal.show();
-      terminal.sendText("npm install @graphforge/node");
+      terminal.sendText(`npm install ${spec}`);
       void vscode.window.showInformationMessage(
-        "GraphForge: running npm install @graphforge/node — rerun Check Environment once it finishes.",
+        `GraphForge: running npm install ${spec} — rerun Check Environment once it finishes.`,
       );
       break;
     }
@@ -295,6 +304,19 @@ async function runInitializeProjectHere(
   }
 
   try {
+    // Prefer engine-owned scaffolding via the CLI (graphforge.yaml + packaged
+    // project skills) when the Node binding is available. Fails soft: a
+    // non-zero exit is logged and we fall through to the binding's own
+    // initialize path rather than dead-ending.
+    if (isCliAvailable()) {
+      const cli = runGraphForgeCli(["init", "--project", rootPath]);
+      if (cli.exitCode !== 0) {
+        logErrorDetail(
+          "gf init (non-zero exit) — falling back to binding initialize",
+          new Error(cli.stderr || `gf init exited ${cli.exitCode}`),
+        );
+      }
+    }
     const project = await session.initializeProject(rootPath);
     refreshTrees();
     void vscode.window.showInformationMessage(

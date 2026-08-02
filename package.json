@@ -253,6 +253,10 @@
         "title": "GraphForge: Power: Publish Composite Transaction…"
       },
       {
+        "command": "graphforge.runCli",
+        "title": "GraphForge: Run CLI…"
+      },
+      {
         "command": "graphforge.showOntology",
         "title": "GraphForge: Show Ontology Viewer"
       },
@@ -393,7 +397,7 @@
         "graphforge.nativeModulePath": {
           "type": "string",
           "default": "",
-          "description": "Optional absolute path to a built @graphforge/node package (directory containing index.js). Leave empty to resolve from node_modules or sibling monorepo."
+          "description": "Optional absolute path to a built @curatelabs/graphforge package (directory containing index.js). Leave empty to resolve from node_modules or sibling monorepo."
         },
         "graphforge.openResultGraphOnQuery": {
           "type": "boolean",
@@ -408,12 +412,17 @@
             "python"
           ],
           "enumDescriptions": [
-            "Prefer @graphforge/node, except in a Python-first workspace (pyproject.toml/uv.lock/etc., no package.json) where Python is preferred when usable; falls back to whichever runtime is available.",
-            "Require @graphforge/node. Never falls back to Python, even if detected.",
+            "Prefer @curatelabs/graphforge, except in a Python-first workspace (pyproject.toml/uv.lock/etc., no package.json) where Python is preferred when usable; falls back to whichever runtime is available.",
+            "Require @curatelabs/graphforge. Never falls back to Python, even if detected.",
             "Require the Python graphforge bridge. Never falls back to Node, even if available."
           ],
           "default": "auto",
-          "description": "Which engine runtime backs Cypher/verb calls. Node is the global default within \"auto\", except a Python-first workspace prefers Python even when @graphforge/node is available."
+          "description": "Which engine runtime backs Cypher/verb calls. Node is the global default within \"auto\", except a Python-first workspace prefers Python even when @curatelabs/graphforge is available."
+        },
+        "graphforge.engineVersion": {
+          "type": "string",
+          "default": "latest",
+          "description": "Which graphforge engine version the Setup wizards install — npm @curatelabs/graphforge for Node, PyPI graphforge for Python. Use \"latest\" or a specific version like \"0.5.1\". The version picker in Setup Native/Python Binding writes here."
         },
         "graphforge.pythonInterpreterPath": {
           "type": "string",
@@ -446,17 +455,21 @@
     "check": "tsc --noEmit && tsc --noEmit -p webview-ui",
     "lint": "npm run check",
     "test": "vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js",
     "package": "vsce package"
   },
   "dependencies": {
     "apache-arrow": "^21.2.0"
   },
   "peerDependencies": {
-    "@graphforge/node": ">=0.5.0-dev.0"
+    "@curatelabs/graphforge": "^0.5.1",
+    "@curatelabs/graphforge-cli": "^0.5.1"
   },
   "peerDependenciesMeta": {
-    "@graphforge/node": {
+    "@curatelabs/graphforge": {
+      "optional": true
+    },
+    "@curatelabs/graphforge-cli": {
       "optional": true
     }
   },

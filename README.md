@@ -20,7 +20,7 @@ Publisher: **CurateLabsAI** (`CurateLabsAI.graphforge`).
 
 - VS Code `^1.96.0`
 - One GraphForge engine runtime, either:
-  - **Node** — a built `@graphforge/node` package (optional peer dependency), or
+  - **Node** — a built `@curatelabs/graphforge` package (optional peer dependency), or
   - **Python** — a `graphforge` (PyPI) install in an interpreter VS Code can see, plus [`uv`](https://docs.astral.sh/uv/) for setup (never `pip`)
 - No runtime yet? Run **`GraphForge: Check Environment`** after installing — it always tells you what to run next.
 
@@ -37,20 +37,20 @@ Press **F5** (`Run Extension`) to open an Extension Development Host.
 
 The extension can run Cypher and analyst verbs through either engine binding:
 
-- **Node (`@graphforge/node`)** — the default. Fast, in-process, no subprocess.
+- **Node (`@curatelabs/graphforge`)** — the default. Fast, in-process, no subprocess.
 - **Python (`graphforge` on PyPI)** — a first-class alternative for analysts already living in
   a Python/notebook workflow, or when a native Node binding isn't available for your platform.
 
 Which one is used is controlled by `graphforge.runtime` (`auto` | `node` | `python`, default
 `auto`). In `auto`, **Node is the global default** — except when the workspace looks like a
 **Python project** (and not primarily a Node project), in which case `auto` prefers Python even
-if `@graphforge/node` is also available:
+if `@curatelabs/graphforge` is also available:
 
 - **Python signals:** `pyproject.toml`, `requirements.txt`, `uv.lock`, `.python-version`,
   `Pipfile`, `environment.yml`, `setup.py`, a notebook-dominant workspace root, or an explicitly
   selected VS Code Python interpreter.
 - **Node signals:** a `package.json` at the workspace root (whether or not it depends on
-  `@graphforge/node`).
+  `@curatelabs/graphforge`).
 - **If both are present:** Python wins only on a *strong* signal — `pyproject.toml`/`uv.lock`
   present, or a Python `graphforge` environment already usable. Otherwise the workspace is
   ambiguous and Node stays the default, per the rule that "Node remains the global default only
@@ -61,21 +61,21 @@ if `@graphforge/node` is also available:
 Run **`GraphForge: Check Environment`** any time to see both runtimes' status, which one is
 active, and the single next step to fix whichever is missing.
 
-#### Node binding (`@graphforge/node`)
+#### Node binding (`@curatelabs/graphforge`)
 
 The package is an **optional peer dependency**. Link a local build from the engine monorepo:
 
 ```bash
 # in graphforge/
-# build the napi package (see crates/gf-bindings-node)
-cd crates/gf-bindings-node && npm run build
+# build the napi package (see crates/graphforge-bindings-node)
+cd crates/graphforge-bindings-node && npm run build
 
 # in graphforge-vscode/
-npm install ../graphforge/crates/gf-bindings-node
+npm install ../graphforge/crates/graphforge-bindings-node
 ```
 
 Or run **`GraphForge: Setup Native Binding`**, or set `graphforge.nativeModulePath` to the
-absolute path of a built `@graphforge/node` package directory.
+absolute path of a built `@curatelabs/graphforge` package directory.
 
 #### Python binding (`graphforge`)
 
@@ -121,7 +121,7 @@ the selected interpreter (installed automatically as a `graphforge` dependency i
 Commands and trees still register; open/query paths fail closed with a status-bar message and an
 error toast that offers both **Setup Native Binding** and **Setup Python Binding**.
 
-Prefer the guided path: run **GraphForge: Setup Native Binding** from the palette. It offers up to three choices in one QuickPick — link a detected sibling engine build, browse to a built `@graphforge/node` folder (sets `graphforge.nativeModulePath`), or run `npm install @graphforge/node` in a terminal once it's published. Setup takes effect immediately; no window reload needed.
+Prefer the guided path: run **GraphForge: Setup Native Binding** from the palette. It offers up to three choices in one QuickPick — link a detected sibling engine build, browse to a built `@curatelabs/graphforge` folder (sets `graphforge.nativeModulePath`), or run `npm install @curatelabs/graphforge` in a terminal once it's published. Setup takes effect immediately; no window reload needed.
 
 ### Project detection
 
@@ -141,7 +141,7 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 
 | Situation | What to run | What happens |
 |---|---|---|
-| No `@graphforge/node` anywhere | `GraphForge: Setup Native Binding` | One QuickPick, ≤3 choices: link sibling build, browse for a folder, or `npm install` |
+| No `@curatelabs/graphforge` anywhere | `GraphForge: Setup Native Binding` | One QuickPick, ≤3 choices: link sibling build, browse for a folder, or `npm install` |
 | Binding ok, no FORMAT project open | `GraphForge: Initialize Project Here` or `GraphForge: Open Project` | Initialize a new folder, or open an existing project |
 | Anything unclear | `GraphForge: Check Environment` | Human summary + agent-copyable JSON |
 
@@ -163,7 +163,7 @@ See [`docs/published/commands.md`](docs/published/commands.md) for the full comm
 ## Knowledge ledger notes
 
 - Identity UUIDs for assertions/evidence/confidence/status events must be UUIDv7 (engine-enforced); the extension mints them client-side (`src/session/uuid.ts`). Operation/idempotency UUIDs accept any version.
-- Every knowledge-ledger native method (`listAssertions`, `createAssertion`, …) is optional on the `@graphforge/node` binding and feature-detected at call time — the sibling engine API is still moving and may change sync/async return shape or method names.
+- Every knowledge-ledger native method (`listAssertions`, `createAssertion`, …) is optional on the `@curatelabs/graphforge` binding and feature-detected at call time — the sibling engine API is still moving and may change sync/async return shape or method names.
 - `Record Assertion Status…` requires an existing `provenanceUuid`; until there's a provenance picker, paste one in directly.
 
 ### Coding agent interop

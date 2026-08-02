@@ -25,7 +25,22 @@ export const RECOVERY_SETUP_PYTHON = "Setup Python";
 export const RECOVERY_OPEN_PROJECT = "Open Project";
 export const RECOVERY_INIT_PROJECT = "Initialize";
 export const RECOVERY_CHECK_ENV = "$(refresh)";
+export const RECOVERY_USE_NODE = "Use Node runtime";
 export const SHOW_ERROR_DETAILS = "Show Details";
+
+/**
+ * Wrap a long/write engine call in a non-modal status-bar progress indicator
+ * (#31 extended): the same idiom Run Query already used, factored out so every
+ * write command (checkpoints, embeddings, indexing, knowledge, power) shows an
+ * in-flight cue instead of a silent pause. Window location keeps agent-invoked
+ * runs unblocked; it clears when the call settles either way.
+ */
+export function withEngineProgress<T>(title: string, task: () => Thenable<T>): Thenable<T> {
+  return vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Window, title: `GraphForge: ${title}` },
+    () => task(),
+  );
+}
 
 let errorChannel: vscode.OutputChannel | undefined;
 
@@ -225,4 +240,51 @@ export async function ensureProjectOrRecover(
 /** Boolean gate for handlers that only need to know whether a project is ready. */
 export async function ensureProjectReady(session: GraphForgeSession): Promise<boolean> {
   return (await ensureProjectOrRecover(session)) === undefined;
+}
+
+/**
+ * Gate for Node-only features (checkpoints, embedding spaces, indexing, power
+ * commands): surface an actionable "this needs the Node runtime" cue *before*
+ * the engine call, instead of letting it fail mid-flight with a
+ * `NodeOnlyFeatureError` the user only discovers after committing to the flow
+ * (audit cliff #3). Call after `ensureProjectOrRecover` so a backend exists.
+ *
+ * Returns `undefined` when the active runtime is Node (proceed); otherwise a
+ * structured `SetupRecovery` (agent-copyable) and shows a warning toast whose
+ * action either switches the runtime to Node or opens Setup Native Binding.
+ */
+export async function ensureNodeRuntime(
+  session: GraphForgeSession,
+  featureName: string,
+): Promise<SetupRecovery | undefined> {
+  if (session.activeRuntime === "node") {
+    return undefined;
+  }
+
+  const snapshot = await session.environmentSnapshot();
+  const activeLabel = session.activeRuntime ?? snapshot.active ?? "not Node";
+  const message =
+    `${featureName} needs the Node runtime (@curatelabs/graphforge) — active runtime is ${activeLabel}.`;
+  const nodeReady = snapshot.node.available;
+  const action = nodeReady ? RECOVERY_USE_NODE : RECOVERY_SETUP_NATIVE;
+
+  void vscode.window.showWarningMessage(`GraphForge: ${message}`, action).then((choice) => {
+    if (choice === RECOVERY_SETUP_NATIVE) {
+      return vscode.commands.executeCommand("graphforge.setupNativeBinding");
+    }
+    if (choice === RECOVERY_USE_NODE) {
+      return vscode.workspace
+        .getConfiguration("graphforge")
+        .update("runtime", "node", vscode.ConfigurationTarget.Workspace);
+    }
+    return undefined;
+  });
+
+  return {
+    error: message,
+    code: "NODE_ONLY_FEATURE",
+    nextAction: nodeReady
+      ? 'Set graphforge.runtime to "node" (or "auto" with the Node binding available), then retry.'
+      : 'Run "GraphForge: Setup Native Binding" (graphforge.setupNativeBinding), then retry.',
+  };
 }

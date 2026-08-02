@@ -1,6 +1,14 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { CommandOutcome, ensureProjectOrRecover, reportEngineError } from "./shared";
+import {
+  CommandOutcome,
+  ensureNodeRuntime,
+  ensureProjectOrRecover,
+  reportEngineError,
+} from "./shared";
+
+/** All index commands are Node-only; shared guard label. */
+const INDEX_FEATURE = "Indexing";
 
 /**
  * Optional args (#36) so a coding agent can drive each index command via
@@ -110,6 +118,10 @@ async function runIndexText(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, INDEX_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   const args: IndexTextArgs =
     typeof argsOrLabel === "string" ? { label: argsOrLabel } : (argsOrLabel ?? {});
   const label = await pickLabel(session, args.label?.trim() || undefined);
@@ -170,6 +182,10 @@ async function runIndexVector(
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
+  }
+  const wrongRuntime = await ensureNodeRuntime(session, INDEX_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
   }
   const args: IndexVectorArgs =
     typeof argsOrLabel === "string" ? { label: argsOrLabel } : (argsOrLabel ?? {});
@@ -239,6 +255,10 @@ async function runInspectTextIndex(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, INDEX_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   const label = await pickLabel(session, args?.label?.trim() || undefined);
   if (!label) {
     return { cancelled: true };
@@ -258,6 +278,10 @@ async function runAdjacencyOp(
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
+  }
+  const wrongRuntime = await ensureNodeRuntime(session, INDEX_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
   }
   try {
     const result =

@@ -257,7 +257,7 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   /**
-   * Escape hatch to the full `@graphforge/node` surface for advanced
+   * Escape hatch to the full `@curatelabs/graphforge` surface for advanced
    * Node-only features. Throws {@link NodeOnlyFeatureError} when the active
    * backend is not Node (e.g. the Python runtime is active, #12).
    */
@@ -871,7 +871,7 @@ export class GraphForgeSession implements vscode.Disposable {
         note:
           this.backend.runtime === "node"
             ? (this.bindingAvailable
-                ? "This @graphforge/node binding does not expose listAssertions() yet."
+                ? "This @curatelabs/graphforge binding does not expose listAssertions() yet."
                 : this.bindingError)
             : "Knowledge ledger APIs not yet wired for the Python runtime.",
       };
@@ -937,7 +937,7 @@ export class GraphForgeSession implements vscode.Disposable {
       return {
         available: false,
         statuses: empty,
-        note: "This @graphforge/node binding does not expose assertionStatus() — status unavailable.",
+        note: "This @curatelabs/graphforge binding does not expose assertionStatus() — status unavailable.",
       };
     }
 

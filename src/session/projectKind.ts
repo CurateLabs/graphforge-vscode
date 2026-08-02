@@ -43,7 +43,7 @@ export const EMPTY_PROJECT_KIND_SIGNALS: ProjectKindSignals = {
  *   notebook-dominant root, or an explicitly selected VS Code Python
  *   interpreter.
  * - Node markers: a `package.json` (whether or not it depends on
- *   `@graphforge/node` — any `package.json` reads as "this is a JS/TS
+ *   `@curatelabs/graphforge` — any `package.json` reads as "this is a JS/TS
  *   project" for this heuristic).
  * - When only one side has markers, that side wins.
  * - When **both** sides have markers, Python wins only if it's the

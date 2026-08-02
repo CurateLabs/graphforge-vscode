@@ -31,6 +31,19 @@ suite("describeUvInstallCommand", () => {
     assert.equal(label, "uv pip install graphforge");
     assertNeverBarePip(label);
   });
+
+  test("a pinned version quotes the requirement so the shell keeps == intact", () => {
+    assert.equal(describeUvInstallCommand(true, "0.5.1"), 'uv add "graphforge==0.5.1"');
+    assert.equal(describeUvInstallCommand(false, "0.5.1"), 'uv pip install "graphforge==0.5.1"');
+    assertNeverBarePip(describeUvInstallCommand(true, "0.5.1"));
+    assertNeverBarePip(describeUvInstallCommand(false, "0.5.1"));
+  });
+
+  test('"latest" / empty version are unpinned (bare graphforge, no ==)', () => {
+    assert.equal(describeUvInstallCommand(true, "latest"), "uv add graphforge");
+    assert.equal(describeUvInstallCommand(true, ""), "uv add graphforge");
+    assert.equal(describeUvInstallCommand(false, undefined), "uv pip install graphforge");
+  });
 });
 
 suite("uvInstallCommand", () => {
@@ -47,6 +60,22 @@ suite("uvInstallCommand", () => {
 
   test("non-uv project with no known interpreter returns undefined (never falls back to bare pip)", () => {
     assert.equal(uvInstallCommand(false, undefined), undefined);
+  });
+
+  test("a pinned version threads through both uv add and uv pip install", () => {
+    assert.equal(uvInstallCommand(true, undefined, "0.5.1"), 'uv add "graphforge==0.5.1"');
+    assert.equal(
+      uvInstallCommand(false, "/opt/venv/bin/python", "0.5.1"),
+      'uv pip install --python "/opt/venv/bin/python" "graphforge==0.5.1"',
+    );
+  });
+
+  test('"latest"/empty version keeps the unpinned form', () => {
+    assert.equal(uvInstallCommand(true, undefined, "latest"), "uv add graphforge");
+    assert.equal(
+      uvInstallCommand(false, "/opt/venv/bin/python", ""),
+      'uv pip install --python "/opt/venv/bin/python" graphforge',
+    );
   });
 
   test("every reachable command starts with uv and never invokes bare pip/pip3", () => {

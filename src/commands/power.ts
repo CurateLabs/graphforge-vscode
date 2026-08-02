@@ -1,16 +1,21 @@
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { ANALYZE_BY, AnalystVerb, CLUSTER_BY, QueryResult, RANK_BY, SIMILAR_BY, WriteMode, WRITE_MODES } from "../session/types";
+import { AnalystVerb, QueryResult, WriteMode, WRITE_MODES } from "../session/types";
 import { WRITE_MODE_OPTIONS } from "./pickerCopy";
 import {
   CommandOutcome,
+  ensureNodeRuntime,
   ensureProjectOrRecover,
   errorMessage,
   reportEngineError,
+  withEngineProgress,
 } from "./shared";
 
 const COMPOSITE_DOCS_URL =
   "https://docs.graphforge.sh/reference/composite-transactions";
+
+/** Every power command is Node-only; shared guard label. */
+const POWER_FEATURE = "Power commands";
 
 const DESCRIPTOR_VERBS: Array<Exclude<AnalystVerb, "find" | "paths">> = [
   "rank",
@@ -18,15 +23,6 @@ const DESCRIPTOR_VERBS: Array<Exclude<AnalystVerb, "find" | "paths">> = [
   "analyze",
   "similar",
 ];
-const DESCRIPTOR_VERB_BY: Record<
-  Exclude<AnalystVerb, "find" | "paths">,
-  readonly string[]
-> = {
-  rank: RANK_BY,
-  cluster: CLUSTER_BY,
-  analyze: ANALYZE_BY,
-  similar: SIMILAR_BY,
-};
 
 /**
  * Optional args (#36) so a coding agent can drive each power command via
@@ -121,6 +117,10 @@ async function runEnableCapability(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, POWER_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   const capabilityId =
     args?.capabilityId?.trim() ||
     (await vscode.window.showInputBox({
@@ -163,7 +163,9 @@ async function runEnableCapability(
     }
   }
   try {
-    const result = await session.enableCapability(capabilityId, version);
+    const result = await withEngineProgress("enabling capability…", () =>
+      session.enableCapability(capabilityId, version),
+    );
     await showJson("Enable Capability", result);
     void vscode.window.showInformationMessage(
       `GraphForge: capability "${capabilityId}" v${version} enabled.`,
@@ -186,6 +188,10 @@ async function runOpenWithWriteMode(
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
+  }
+  const wrongRuntime = await ensureNodeRuntime(session, POWER_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
   }
   const mode =
     args?.mode ??
@@ -218,7 +224,7 @@ async function runOpenWithWriteMode(
     }
   }
   try {
-    await session.reopenWithWriteMode(mode);
+    await withEngineProgress("reopening project…", () => session.reopenWithWriteMode(mode));
     void vscode.window.showInformationMessage(
       `GraphForge: reopened with write mode "${mode}".`,
     );
@@ -250,6 +256,10 @@ async function runExportInvocationDescriptor(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, POWER_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   const verb =
     args?.verb ??
     ((await vscode.window.showQuickPick(DESCRIPTOR_VERBS, {
@@ -273,12 +283,14 @@ async function runExportInvocationDescriptor(
   if (!label) {
     return { cancelled: true };
   }
-  const catalog = DESCRIPTOR_VERB_BY[verb];
+  const catalog = session.algorithmCatalog(verb);
+  const fallbackNote =
+    catalog.source === "fallback" ? " [static fallback — binding unavailable]" : "";
   const by =
     args?.by?.trim() ||
-    (await vscode.window.showQuickPick([...catalog], {
-      title: "GraphForge: Export Invocation Descriptor — Algorithm (by)",
-      placeHolder: catalog[0],
+    (await vscode.window.showQuickPick([...catalog.items], {
+      title: `GraphForge: Export Invocation Descriptor — Algorithm (by)${fallbackNote}`,
+      placeHolder: catalog.items[0],
     }));
   if (!by) {
     return { cancelled: true };
@@ -333,10 +345,13 @@ async function runListAlgorithmRuns(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, POWER_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   try {
-    const result = await session.listAlgorithmRuns(
-      args?.algorithm,
-      args?.limit ?? 100,
+    const result = await withEngineProgress("listing algorithm runs…", () =>
+      session.listAlgorithmRuns(args?.algorithm, args?.limit ?? 100),
     );
     await showJson("List Algorithm Runs", {
       columns: result.columns,
@@ -362,6 +377,10 @@ async function runPublishCompositeTransaction(
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
+  }
+  const wrongRuntime = await ensureNodeRuntime(session, POWER_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
   }
 
   let request: unknown;

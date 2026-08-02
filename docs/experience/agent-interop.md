@@ -12,7 +12,7 @@ An analyst pairing with a coding agent (or an agent working unattended) can chec
 
 - **Primary user:** an in-editor coding agent (Cursor Agent, GitHub Copilot Agent Mode, or similar) acting inside the same VS Code/Cursor window that has the GraphForge extension activated.
 - **Secondary user:** a human developer inspecting the same command IDs and JSON shapes documented here, e.g. from an integration test or a support/debugging session.
-- **Context:** the extension may or may not have a working `@graphforge/node` native binding, and may or may not have a `FORMAT`-marked project open — both are common, expected states, not error states.
+- **Context:** the extension may or may not have a working `@curatelabs/graphforge` native binding, and may or may not have a `FORMAT`-marked project open — both are common, expected states, not error states.
 
 ## Current journey
 
@@ -39,7 +39,7 @@ When the agent calls `executeCommand("graphforge.runQuery", { cypher: "MATCH (n)
 Then no QuickPick/InputBox appears, the call resolves with `{ columns, rows, rowCount }`, and (per the existing `graphforge.openResultGraphOnQuery` setting) a results document and/or graph webview may also open for a human pairing with the agent.
 
 **Scenario: Agent hits a missing binding and self-recovers**
-Given `@graphforge/node` is not resolvable
+Given `@curatelabs/graphforge` is not resolvable
 When the agent calls `executeCommand("graphforge.runQuery", { cypher: "MATCH (n) RETURN n" })`
 Then the call resolves immediately (it does not wait for a human to dismiss the resulting notification) with `{ error, nextAction: 'Run "GraphForge: Setup Native Binding" (graphforge.setupNativeBinding).' }`, so the agent can decide to run that command next or surface the message to the human.
 
@@ -58,7 +58,7 @@ Then the call resolves immediately (it does not wait for a human to dismiss the 
 ## Open questions
 
 - Should `rank`/`cluster`/`paths`/`analyze`/`similar`/`find` also accept args (`{ label, by, via, ... }`) to bypass their QuickPick chains? Not implemented here — see [Gaps](#gaps--follow-ups). Tracked informally under [#4](https://github.com/CurateLabs/graphforge-vscode/issues/4).
-- Should there be a project-scoped integration test fixture (real `FORMAT` project + a built `@graphforge/node`) so the "needs a live project" half of the contract can also run in CI? Out of scope here.
+- Should there be a project-scoped integration test fixture (real `FORMAT` project + a built `@curatelabs/graphforge`) so the "needs a live project" half of the contract can also run in CI? Out of scope here.
 
 ## Related requirements, tests, architecture, and ADRs
 
@@ -115,6 +115,7 @@ Source of truth: `package.json#contributes.commands`. All IDs are invoked as `vs
 | `graphforge.exportInvocationDescriptor` | `{ verb?, label?, by?, invoke? }` | `{ verb, algorithm, fingerprint, projectionFingerprint, canonicalBytesBase64, invocation? }` | Verb/label/algorithm QuickPicks + invoke-now toast | Yes (Node binding) |
 | `graphforge.listAlgorithmRuns` | `{ algorithm?, limit? }` | `QueryResult` | None | Yes (Node binding) |
 | `graphforge.publishCompositeTransaction` | `{ request?, confirm? }` (both required together for the programmatic path) | `QueryResult` | Expert warning, edit-JSON-in-editor flow, publish confirm modal | Yes (Node binding) |
+| `graphforge.runCli` | `{ args?: string[] }` (full CLI argv, e.g. `["status"]`, `["checkpoint","list"]`) | `{ args, exitCode, stdout, stderr }`; no binding ⇒ `{ error, code: "CLI_UNAVAILABLE", nextAction }` | Command QuickPick + custom-args InputBox when `args` omitted | Yes (Node binding — runs the engine CLI in-process via `runCli`) |
 | `graphforge.listAssertions` | `{ graphUuid?, limit? }` | `QueryResult` | None | Yes |
 | `graphforge.createAssertion` | `{ claim?, subjectUuid?, subjectKind? }` (`subjectKind`: `node` \| `edge`) | `{ assertionUuid }` | Claim/subject-UUID InputBoxes + kind QuickPick | Yes |
 | `graphforge.showAssertion` | `{ assertionUuid? }` or a plain UUID string (tree clicks pass one) | Assertion record + `nextActions` array | Assertion QuickPick/InputBox | Yes |
@@ -166,4 +167,4 @@ flowchart TD
 
 - **Verb commands (`rank`, `cluster`, `paths`, `analyze`, `similar`, `find`) do not yet accept args.** They always walk their QuickPick chain (label, then algorithm, then advanced prompts). An agent can still read the eventual result (now returned from `executeCommand` instead of `void`), but cannot skip straight to a known `{ label, by, ... }` combination the way it can with `runQuery` — or with the checkpoint / embedding-space / index / power / knowledge commands, which all accept args since [#36](https://github.com/CurateLabs/graphforge-vscode/issues/36). Adding an optional args object mirroring `session.invokeVerb`'s parameter shape would close this gap; deliberately left out because issue [#4](https://github.com/CurateLabs/graphforge-vscode/issues/4) already owns the verb-invocation UX.
 - **`setupNativeBinding`, `initializeProjectHere`, `loadOntology`, `showResultGraphAdvanced` are QuickPick/dialog-only.** These are inherently about human choices (which folder, which binding source) and are reasonable to leave interactive; an agent's role here is to detect the need (via Check Environment) and either prompt the human or make the choice on the human's behalf by pre-setting `graphforge.nativeModulePath` via the VS Code configuration API before calling `setupNativeBinding`, or by using `openProject(path)`/args-based commands where they exist instead.
-- **No live-project integration test.** This branch's automated test (`src/test/extension.test.ts`) proves the fail-closed, no-binding, no-project path in CI. Proving the success path (`runQuery` actually executing Cypher and returning rows) needs a fixture `FORMAT` project and a built `@graphforge/node`, which is out of scope for this activation-time smoke suite.
+- **No live-project integration test.** This branch's automated test (`src/test/extension.test.ts`) proves the fail-closed, no-binding, no-project path in CI. Proving the success path (`runQuery` actually executing Cypher and returning rows) needs a fixture `FORMAT` project and a built `@curatelabs/graphforge`, which is out of scope for this activation-time smoke suite.

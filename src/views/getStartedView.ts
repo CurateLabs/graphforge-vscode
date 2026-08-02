@@ -415,7 +415,7 @@ export async function buildGetStartedState(
     title: "Set up a runtime",
     detail: runtimeReady
       ? `Active: ${activeRuntime ?? snapshot.active ?? "auto"}. ${nodeLine}; ${pythonLine}.`
-      : `${nodeLine}. ${pythonLine}. Link @graphforge/node or install graphforge with uv.`,
+      : `${nodeLine}. ${pythonLine}. Link @curatelabs/graphforge or install graphforge with uv.`,
     status: runtimeReady ? "done" : "current",
     // Done step → no setup actions (#29); otherwise the primary CTA follows
     // the workspace's project kind, mirroring chooseRuntime (FR-18, #37).

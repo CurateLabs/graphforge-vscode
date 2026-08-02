@@ -1,7 +1,7 @@
 # Architecture
 
 GraphForge for VS Code is a TypeScript extension host that wraps a runtime-agnostic
-`EngineBackend` — either `@graphforge/node` (default) or a Python `graphforge` bridge
+`EngineBackend` — either `@curatelabs/graphforge` (default) or a Python `graphforge` bridge
 subprocess (#12) — decodes Arrow IPC results, and presents workbench UI: tree views, Cypher
 language support, analyst-verb commands, and webviews for ontology and epistemic-aware graphs.
 
@@ -16,7 +16,7 @@ flowchart LR
   Session --> Runtime["runtime.ts (chooseRuntime)"]
   Runtime --> NodeBackend["NodeEngineBackend"]
   Runtime --> PyBackend["PythonEngineBackend"]
-  NodeBackend --> Native["@graphforge/node (in-process)"]
+  NodeBackend --> Native["@curatelabs/graphforge (in-process)"]
   PyBackend --> Bridge["PythonBridge (subprocess, JSON over stdio)"]
   Bridge --> Host["python/graphforge_host.py"]
   Host --> PyPkg["graphforge (PyPI)"]
@@ -33,7 +33,7 @@ flowchart LR
 |---|---|---|
 | `extension.ts` | Activation, register commands/views | Session, views, commands |
 | `ProjectDetector` | Exact `FORMAT` detection, CURRENT/ontology file reads | Node fs |
-| `nativeLoader` | Resolve optional `@graphforge/node` | config / node_modules / sibling repo |
+| `nativeLoader` | Resolve optional `@curatelabs/graphforge` | config / node_modules / sibling repo |
 | `pythonLoader` / `pythonProbe` | Detect a Python interpreter and probe `import graphforge` | vscode config/extensions API, `execFile` |
 | `nodeEngineBackend` / `pythonBridge` | `EngineBackend` implementations over Node / Python | `types.EngineBackend` |
 | `runtime` / `runtimeSelection` | Choose Node vs. Python per `graphforge.runtime`; open the backend | nativeLoader, pythonLoader, both backends |
@@ -50,7 +50,7 @@ complete). Two configs with opposite semantics:
 
 - **Extension host (`vite.config.mts`, repo root):** a Node **library/SSR build** — no dev
   server, no HMR, no app-mode assumptions. `vite build` bundles `src/extension.ts` →
-  `dist/extension.js` (single flat CJS file, `vscode` and `@graphforge/node` external,
+  `dist/extension.js` (single flat CJS file, `vscode` and `@curatelabs/graphforge` external,
   `apache-arrow` bundled); `vite build --mode tests` emits per-test-file CJS bundles →
   `dist/test/` and copies `src/test/fixtures/` alongside them.
 - **Webview UI (`webview-ui/vite.config.mts`):** browser-side webview apps (config inside this
@@ -65,7 +65,7 @@ complete). Two configs with opposite semantics:
 
 ### Runtime abstraction (#12)
 
-`GraphForgeSession` never talks to `@graphforge/node` or Python directly — it only depends on
+`GraphForgeSession` never talks to `@curatelabs/graphforge` or Python directly — it only depends on
 the `EngineBackend` interface (`src/session/types.ts`), which exposes `execute`, the five
 analyst verbs, `labels`/`relationshipTypes`, `ontologyMode`, `loadOntology`, and `dispose`, all
 `Promise`-returning so the same session code works whether the backend is synchronous
@@ -163,7 +163,7 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 
 1. User invokes Run Query — command
 2. Session ensures project open — GraphForgeSession
-3. `forge.execute` → IPC buffer — `@graphforge/node`
+3. `forge.execute` → IPC buffer — `@curatelabs/graphforge`
 4. Decode to rows — apache-arrow
 5. Show JSON doc; build GraphPayload; open Result Graph — webview
 
@@ -198,7 +198,7 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 
 ## Decisions
 
-- Optional peer on `@graphforge/node` so scaffold installs without a prebuilt napi binary.
+- Optional peer on `@curatelabs/graphforge` so scaffold installs without a prebuilt napi binary.
 - SVG circular layout for Result Graph v0; swap renderer later without changing `protocol.ts`.
 - Demo graph when result rows are not graph-shaped, so the epistemic/class legend is reviewable without data.
 - Python is reached via a **long-lived subprocess bridge**, not per-call spawns: engine startup
@@ -223,6 +223,6 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 - Bundling `apache-arrow` increases extension size but simplifies runtime.
 - Python bridge adds subprocess lifecycle risk (hangs, unexpected exits) — mitigated by a 30s
   per-request timeout and `exit`/`error` handlers that reject all pending requests.
-- The Python `graphforge` package's API can move independently of `@graphforge/node`'s; the host
+- The Python `graphforge` package's API can move independently of `@curatelabs/graphforge`'s; the host
   script and `EngineBackend` mapping may need updates when it does (defensive coding, not a
   compatibility guarantee).

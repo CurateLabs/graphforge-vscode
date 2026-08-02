@@ -9,6 +9,7 @@ import {
   uvInstallCommand as uvInstallCommandPure,
 } from "../session/pythonInstallCommand";
 import { summarizePythonUnavailable } from "../session/runtimeSelection";
+import { pickEngineVersion } from "./engineVersionPick";
 
 const UV_INSTALL_DOCS_URL = "https://docs.astral.sh/uv/getting-started/installation/";
 
@@ -119,7 +120,12 @@ async function runUvInstall(interpreterPath: string | undefined): Promise<void> 
     return;
   }
 
-  const command = uvInstallCommand(interpreterPath);
+  const version = await pickEngineVersion("pypi");
+  if (version === undefined) {
+    return;
+  }
+
+  const command = uvInstallCommand(interpreterPath, version);
   if (!command) {
     void vscode.window.showWarningMessage(
       "GraphForge: no Python interpreter detected yet — run Setup Python Binding again and choose Select interpreter first.",
@@ -143,13 +149,18 @@ async function runUvInstall(interpreterPath: string | undefined): Promise<void> 
   );
 }
 
-/** Human-facing label for the install QuickPick choice, before we know if `uv` is even installed. */
-function describeUvInstallCommand(): string {
-  return describeUvInstallCommandPure(workspaceLooksLikeUvProject());
+/** The `graphforge.engineVersion` setting value (drives the QuickPick label default). */
+function configuredEngineVersion(): string {
+  return vscode.workspace.getConfiguration("graphforge").get<string>("engineVersion", "latest");
 }
 
-function uvInstallCommand(interpreterPath: string | undefined): string | undefined {
-  return uvInstallCommandPure(workspaceLooksLikeUvProject(), interpreterPath);
+/** Human-facing label for the install QuickPick choice, before we know if `uv` is even installed. */
+function describeUvInstallCommand(): string {
+  return describeUvInstallCommandPure(workspaceLooksLikeUvProject(), configuredEngineVersion());
+}
+
+function uvInstallCommand(interpreterPath: string | undefined, version?: string): string | undefined {
+  return uvInstallCommandPure(workspaceLooksLikeUvProject(), interpreterPath, version);
 }
 
 /** `pyproject.toml` or `uv.lock` at the workspace root — a real uv-managed project, not just a stray script. */
