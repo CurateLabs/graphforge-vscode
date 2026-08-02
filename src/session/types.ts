@@ -114,7 +114,7 @@ export interface WorkspaceOntology {
 }
 
 export interface KnowledgeSummary {
-  /** True once the underlying `@graphforge/node` binding exposes the knowledge API at all. */
+  /** True once the underlying `@curatelabs/graphforge` binding exposes the knowledge API at all. */
   capabilityAvailable: boolean;
   assertionCount: number;
   statusCounts: Partial<Record<EpistemicStatus, number>>;
@@ -262,7 +262,7 @@ export const DEFAULT_BELIEF_POLICY: BeliefPolicySettings = {
   maxNodes: 40,
 };
 
-/** Minimal surface we expect from @graphforge/node GraphForge. */
+/** Minimal surface we expect from @curatelabs/graphforge GraphForge. */
 export interface GraphForgeNative {
   path: string | null;
   ontologyMode: string;
@@ -450,7 +450,7 @@ export interface GraphForgeNative {
   publishCompositeTransaction?(request: unknown): Buffer;
   /**
    * Knowledge ledger surface. Optional and defensively typed: the sibling
-   * `@graphforge/node` binding is a separate, moving project and these methods
+   * `@curatelabs/graphforge` binding is a separate, moving project and these methods
    * may be absent, renamed, or return a Promise instead of a Buffer (they are
    * currently async `AsyncTask`s on the Node side). Always feature-detect with
    * `typeof forge.xxx === "function"` before calling and resolve the return
@@ -468,12 +468,24 @@ export interface GraphForgeNative {
   assertionStatus?(assertionUuid: string): Buffer | Promise<Buffer>;
 }
 
+/** Captured output from one in-process Rust-owned CLI invocation (`runCli`). */
+export interface CliExecutionOutput {
+  exitCode: number;
+  stdout: Buffer;
+  stderr: Buffer;
+}
+
 export interface GraphForgeModule {
   GraphForge: new (
     path?: string,
     options?: { writeMode?: string },
   ) => GraphForgeNative;
   version?: () => string;
+  /**
+   * Run the Rust-owned CLI in-process (same contract `@curatelabs/graphforge-cli`
+   * uses). Optional: older bindings predate it — feature-detect before calling.
+   */
+  runCli?: (args: string[]) => CliExecutionOutput;
 }
 
 /** Which backend actually services engine calls (#12). */
@@ -504,7 +516,7 @@ export interface PythonRuntimeStatus {
 /**
  * Runtime-agnostic engine facade (#12). `GraphForgeSession` depends only on
  * this surface; `NodeEngineBackend` and `PythonEngineBackend` each implement
- * it over `@graphforge/node` and the Python bridge respectively, so callers
+ * it over `@curatelabs/graphforge` and the Python bridge respectively, so callers
  * never branch on which runtime is active. Deliberately scoped to the verbs
  * and reads the current session actually uses — not the full (and still
  * moving) `GraphForgeNative` surface.

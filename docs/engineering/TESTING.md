@@ -43,7 +43,7 @@ Requires `@vscode/test-electron` ≥ 3.1.0 on macOS (VS Code 1.110+ ships `Code`
 
 ## Gaps (post-scaffold)
 
-- Integration against a real `@graphforge/node` binary and sample project
+- Integration against a real `@curatelabs/graphforge` binary and sample project
 - Webview message-protocol contract tests
 - Verb QuickPick → IPC round-trip with fixtures
 - `GraphForgeSession`/command-layer tests against a fake `EngineBackend` (currently only the

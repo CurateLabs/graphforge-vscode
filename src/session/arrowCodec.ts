@@ -2,7 +2,7 @@ import { tableFromIPC, type Table } from "apache-arrow";
 import type { QueryResult, TableRow } from "./types";
 
 /**
- * Decode an Arrow IPC buffer (as returned by every `@graphforge/node` read call)
+ * Decode an Arrow IPC buffer (as returned by every `@curatelabs/graphforge` read call)
  * into plain rows. Pure / no vscode dependency so it is unit-testable with a
  * synthetic table standing in for engine output (e.g. an assertions page).
  */
@@ -60,7 +60,7 @@ export function stringField(row: TableRow, key: string): string | undefined {
 }
 
 /**
- * Resolve either a synchronous Buffer or a thenable (the real `@graphforge/node`
+ * Resolve either a synchronous Buffer or a thenable (the real `@curatelabs/graphforge`
  * knowledge methods return AsyncTask/Promise) into a Promise<Buffer>. Keeps the
  * session layer working whether the sibling engine binding is sync or async for
  * a given method — it has moved between the two before.

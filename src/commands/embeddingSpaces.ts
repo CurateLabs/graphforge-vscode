@@ -2,10 +2,14 @@ import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import {
   CommandOutcome,
+  ensureNodeRuntime,
   ensureProjectOrRecover,
   errorMessage,
   reportEngineError,
 } from "./shared";
+
+/** Every embedding-space command is Node-only; guard label reused across handlers. */
+const EMBEDDING_FEATURE = "Embedding spaces";
 
 /** Row shape accepted by `publishCallerEmbeddings`. */
 export interface PublishCallerEmbeddingsInput {
@@ -122,6 +126,10 @@ async function runListEmbeddingSpaces(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, EMBEDDING_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   try {
     const spaces = session.embeddingSpaces();
     if (!spaces.length) {
@@ -169,6 +177,10 @@ async function runPublishCallerEmbeddings(
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
+  }
+  const wrongRuntime = await ensureNodeRuntime(session, EMBEDDING_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
   }
   const name =
     args?.name?.trim() ||
@@ -256,6 +268,10 @@ async function runBindEmbeddingSpaceAlias(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, EMBEDDING_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   const alias =
     args?.alias?.trim() ||
     (await vscode.window.showInputBox({
@@ -305,6 +321,10 @@ async function runSetDefaultEmbeddingSpace(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, EMBEDDING_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   let name: string | undefined;
   if (args) {
     name = args.clear ? undefined : args.name?.trim() || undefined;
@@ -340,6 +360,10 @@ async function runDeleteEmbeddingSpace(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, EMBEDDING_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   const name = args?.name?.trim() || (await pickSpaceName(session));
   if (!name) {
     return { cancelled: true };
@@ -374,6 +398,10 @@ async function runInspectFreshness(
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
+  }
+  const wrongRuntime = await ensureNodeRuntime(session, EMBEDDING_FEATURE);
+  if (wrongRuntime) {
+    return wrongRuntime;
   }
   // Args object present (even empty) skips the picker: `{}` means "default space".
   const name = args ? args.name?.trim() || undefined : await pickSpaceName(session);

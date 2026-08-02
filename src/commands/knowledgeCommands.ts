@@ -9,7 +9,12 @@ import {
   GRAPH_KIND_OPTIONS,
   SOURCE_KIND_OPTIONS,
 } from "./pickerCopy";
-import { CommandOutcome, ensureProjectOrRecover, reportEngineError } from "./shared";
+import {
+  CommandOutcome,
+  ensureProjectOrRecover,
+  reportEngineError,
+  withEngineProgress,
+} from "./shared";
 import type {
   AssertionGraphKind,
   ConfidencePolicy,
@@ -242,12 +247,14 @@ async function runCreateAssertion(
   }
 
   try {
-    const { assertionUuid } = await session.createAssertion({
-      claim,
-      graphRefs: [
-        { graphUuid: subjectUuid, graphKind: subjectKind, role: "subject", ordinal: 0 },
-      ],
-    });
+    const { assertionUuid } = await withEngineProgress("creating assertion…", () =>
+      session.createAssertion({
+        claim,
+        graphRefs: [
+          { graphUuid: subjectUuid, graphKind: subjectKind, role: "subject", ordinal: 0 },
+        ],
+      }),
+    );
     refreshTrees();
     // Fire-and-forget follow-up so a programmatic caller is never blocked on
     // a toast nobody will dismiss; the buttons still work for humans.
@@ -411,12 +418,14 @@ async function runAttachEvidence(
     return { cancelled: true };
   }
   try {
-    const result = await session.attachEvidence({
-      assertionUuid,
-      sourceUuid,
-      sourceKind,
-      role,
-    });
+    const result = await withEngineProgress("attaching evidence…", () =>
+      session.attachEvidence({
+        assertionUuid,
+        sourceUuid,
+        sourceKind,
+        role,
+      }),
+    );
     void vscode.window.showInformationMessage("Evidence attached.");
     return result;
   } catch (err) {
@@ -467,7 +476,9 @@ async function runAssessConfidence(
     }
   }
   try {
-    const result = await session.assessConfidence({ assertionUuid, policy, value });
+    const result = await withEngineProgress("assessing confidence…", () =>
+      session.assessConfidence({ assertionUuid, policy, value }),
+    );
     void vscode.window.showInformationMessage("Confidence recorded.");
     return result;
   } catch (err) {
@@ -508,11 +519,13 @@ async function runRecordAssertionStatus(
     return { cancelled: true };
   }
   try {
-    const result = await session.recordAssertionStatus({
-      assertionUuid,
-      status,
-      provenanceUuid,
-    });
+    const result = await withEngineProgress("recording status…", () =>
+      session.recordAssertionStatus({
+        assertionUuid,
+        status,
+        provenanceUuid,
+      }),
+    );
     void vscode.window.showInformationMessage("Assertion status recorded.");
     return result;
   } catch (err) {

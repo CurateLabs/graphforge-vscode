@@ -7,6 +7,7 @@ import { registerIndexManagement } from "./commands/indexManagement";
 import { registerKnowledgeCommands } from "./commands/knowledgeCommands";
 import { registerOpenViews } from "./commands/openViews";
 import { registerPower } from "./commands/power";
+import { registerRunCli } from "./commands/runCli";
 import { registerRunQuery } from "./commands/runQuery";
 import { registerSetup } from "./commands/setup";
 import { registerSetupPython } from "./commands/setupPython";
@@ -51,6 +52,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerCheckpoints(context, session);
   registerEmbeddingSpaces(context, session);
   registerPower(context, session);
+  registerRunCli(context, session);
   registerOpenViews(context, session, refreshTrees);
   registerSetup(context, session, refreshTrees);
   registerKnowledgeCommands(context, session, refreshTrees);

@@ -92,7 +92,7 @@ suite("KnowledgeTreeProvider epistemic status rendering", () => {
         baseSummary({
           assertionCount: 1,
           statusAvailable: false,
-          statusNote: "This @graphforge/node binding does not expose assertionStatus() — status unavailable.",
+          statusNote: "This @curatelabs/graphforge binding does not expose assertionStatus() — status unavailable.",
           assertions: [
             { assertionUuid: "11111111-aaaa-bbbb-cccc-000000000001", claim: "a" },
           ],

@@ -15,7 +15,7 @@ import { NodeOnlyFeatureError, UnsupportedByBindingError } from "../session/erro
  * must never let this text reach a toast or tooltip.
  */
 const RAW_NODE_REQUIRE_ERROR =
-  "GraphForge native binding unavailable. Tried: @graphforge/node: Cannot find module '@graphforge/node'\n" +
+  "GraphForge native binding unavailable. Tried: @curatelabs/graphforge: Cannot find module '@curatelabs/graphforge'\n" +
   "Require stack:\n" +
   "- /home/user/.vscode/extensions/curatelabsai.graphforge-0.1.0/dist/extension.js";
 

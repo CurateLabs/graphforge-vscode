@@ -72,7 +72,7 @@ suite("chooseRuntime", () => {
 const nodeRawRequireFailure = {
   available: false,
   error:
-    "GraphForge native binding unavailable. Tried: @graphforge/node: Cannot find module '@graphforge/node'\n" +
+    "GraphForge native binding unavailable. Tried: @curatelabs/graphforge: Cannot find module '@curatelabs/graphforge'\n" +
     "Require stack:\n" +
     "- /home/user/.vscode/extensions/curatelabsai.graphforge-0.1.0/dist/extension.js",
 };
@@ -122,7 +122,7 @@ suite("describeRuntimeUnavailable (#27 curated tooltip)", () => {
     assert.ok(!message.includes("Require stack:"), "tooltip leaked Require stack");
     assert.ok(!message.includes("Cannot find module"), "tooltip leaked require noise");
     assert.ok(!message.includes("Tried:"), "tooltip leaked the joined candidate list");
-    assert.match(message, /@graphforge\/node is not installed or linked/);
+    assert.match(message, /@curatelabs\/graphforge is not installed or linked/);
   });
 
   test("never leaks the joined multi-interpreter Python probe blob", () => {
@@ -149,7 +149,7 @@ suite("summarizeNodeUnavailable / summarizePythonUnavailable", () => {
   test("summarizes missing-module require errors", () => {
     assert.equal(
       summarizeNodeUnavailable(nodeRawRequireFailure.error),
-      "@graphforge/node is not installed or linked",
+      "@curatelabs/graphforge is not installed or linked",
     );
   });
 

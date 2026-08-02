@@ -22,7 +22,7 @@ ontology visibility, and result graphs that honor class and belief status.
 - **Analysts / researchers (primary)** — open a project, query and run verbs, read
   ontology mode and types, inspect epistemic status on visualized results.
 - **Integrators / maintainers (secondary)** — extend the extension against
-  `@graphforge/node` without reimplementing engine semantics.
+  `@curatelabs/graphforge` without reimplementing engine semantics.
 
 ## Vision
 
@@ -63,5 +63,5 @@ to anonymous nodes.
 ## Stakeholders
 
 - **Curate Labs** — publisher (`CurateLabsAI.graphforge`) and product direction.
-- **GraphForge engine maintainers** — `@graphforge/node` contract owners.
+- **GraphForge engine maintainers** — `@curatelabs/graphforge` contract owners.
 - **Analyst users** — primary outcomes.

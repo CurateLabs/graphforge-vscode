@@ -62,6 +62,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.exportInvocationDescriptor",
   "graphforge.listAlgorithmRuns",
   "graphforge.publishCompositeTransaction",
+  "graphforge.runCli",
   "graphforge.showOntology",
   "graphforge.showResultGraph",
   "graphforge.showResultGraphAdvanced",
@@ -100,7 +101,7 @@ suite("GraphForge extension", () => {
 
 /**
  * Agent interop: commands that are safe to *execute* (not just check for
- * registration) in a headless CI run with no `@graphforge/node` binding
+ * registration) in a headless CI run with no `@curatelabs/graphforge` binding
  * installed and no GraphForge project open. "Safe" here specifically means:
  * no `showQuickPick`/`showInputBox`/awaited `showErrorMessage(..., items)`
  * call anywhere on the code path, since those block on human interaction
@@ -126,7 +127,7 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     assert.equal(typeof report.nodeBinding.available, "boolean");
     assert.equal(typeof report.python.available, "boolean");
     assert.equal(typeof report.project.open, "boolean");
-    // No @graphforge/node in devDependencies/peerDependencies is installed
+    // No @curatelabs/graphforge in devDependencies/peerDependencies is installed
     // for this test run, so the Node binding must fail closed rather than
     // throw, and no project is open yet.
     assert.equal(report.nodeBinding.available, false);
@@ -234,7 +235,7 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
  * Args that let a coding agent drive each command via `executeCommand`
  * without any QuickPick/InputBox — see the command table in
  * `docs/experience/agent-interop.md` (#36). In this suite's environment (no
- * `@graphforge/node` binding, no project open) every one of these commands
+ * `@curatelabs/graphforge` binding, no project open) every one of these commands
  * must fail closed by *returning* a structured `SetupRecovery`
  * (`{ error, code?, nextAction }`) — never `undefined`, never a bare throw,
  * and never a hang on a prompt nobody will dismiss in CI.
@@ -297,6 +298,8 @@ const NO_PROJECT_STRUCTURED_RESULTS: ReadonlyArray<readonly [string, unknown]> =
     "graphforge.publishCompositeTransaction",
     { request: { operationUuid: "", nodes: [], edges: [], knowledge: {} }, confirm: true },
   ],
+  // CLI adoption (Part F) — no binding ⇒ CLI unavailable, fails closed with nextAction.
+  ["graphforge.runCli", { args: ["status"] }],
   // Knowledge ledger (#13)
   ["graphforge.listAssertions", { limit: 5 }],
   [
@@ -370,7 +373,7 @@ suite("GraphForge agent interop — structured fail-closed results (no binding, 
  * NOT executed here — registration is covered above, but invoking these in
  * a headless test would either hang (they await a `showQuickPick` /
  * `showInputBox` / button-bearing message that nothing will ever dismiss in
- * CI) or do nothing meaningful without a live `@graphforge/node` binding +
+ * CI) or do nothing meaningful without a live `@curatelabs/graphforge` binding +
  * an open FORMAT project, neither of which are available in this repo's CI
  * image:
  *
@@ -396,7 +399,7 @@ suite("GraphForge agent interop — structured fail-closed results (no binding, 
  *   explainer); safe but asserts nothing an agent relies on.
  *
  * A project-scoped integration test (with a real FORMAT-marked fixture
- * project and `@graphforge/node` installed) would be needed to exercise the
+ * project and `@curatelabs/graphforge` installed) would be needed to exercise the
  * success half of the contract end-to-end; that is out of scope for this
  * activation-time smoke suite.
  */

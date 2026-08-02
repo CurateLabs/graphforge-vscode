@@ -64,7 +64,7 @@ export function summarizeNodeUnavailable(error: string | undefined): string {
     return "installed module has no GraphForge export";
   }
   if (error.includes("Cannot find module") || error.includes("Require stack:")) {
-    return "@graphforge/node is not installed or linked";
+    return "@curatelabs/graphforge is not installed or linked";
   }
   return "binding failed to load";
 }

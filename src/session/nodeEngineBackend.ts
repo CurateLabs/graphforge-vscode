@@ -1,7 +1,7 @@
 import type { EngineBackend, GraphForgeNative, RuntimeKind } from "./types";
 
 /**
- * Adapts an in-process `@graphforge/node` instance to the runtime-agnostic
+ * Adapts an in-process `@curatelabs/graphforge` instance to the runtime-agnostic
  * {@link EngineBackend} contract. All calls are synchronous under the hood
  * (N-API); wrapping them in resolved promises lets `GraphForgeSession` treat
  * Node and Python (#12) identically without branching on runtime.
@@ -12,7 +12,7 @@ export class NodeEngineBackend implements EngineBackend {
   constructor(private readonly forge: GraphForgeNative) {}
 
   /**
-   * Escape hatch to the full `@graphforge/node` surface for Node-only
+   * Escape hatch to the full `@curatelabs/graphforge` surface for Node-only
    * advanced features (checkpoints, embedding spaces, indexing, invocation
    * descriptors, composite transactions, knowledge-ledger writes) that are
    * deliberately out of scope for the runtime-agnostic {@link EngineBackend}
@@ -110,7 +110,7 @@ export class NodeEngineBackend implements EngineBackend {
 
   async listAssertions(request?: unknown): Promise<Buffer> {
     if (!this.forge.listAssertions) {
-      throw new Error("listAssertions not implemented by this @graphforge/node build");
+      throw new Error("listAssertions not implemented by this @curatelabs/graphforge build");
     }
     return this.forge.listAssertions(request);
   }

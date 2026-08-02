@@ -9,7 +9,7 @@
  *                               plus a copy of src/test/fixtures/
  *
  * Parity contract with the retired esbuild.mjs: CJS output targeting node20,
- * `vscode` and the optional peer `@graphforge/node` external, `apache-arrow`
+ * `vscode` and the optional peer `@curatelabs/graphforge` external, `apache-arrow`
  * bundled, source maps emitted without inlined sources. The webview build is
  * separate and app-shaped: webview-ui/vite.config.mts.
  */
@@ -17,7 +17,7 @@ import { cpSync, existsSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { defineConfig, type Plugin, type UserConfig } from "vite";
 
-const external = ["vscode", "@graphforge/node"];
+const external = ["vscode", "@curatelabs/graphforge"];
 
 function hostConfig(): UserConfig {
   return {
@@ -41,7 +41,7 @@ function hostConfig(): UserConfig {
     },
     ssr: {
       // Bundle all real dependencies (apache-arrow); Rollup's `external`
-      // above still keeps vscode and @graphforge/node out of the bundle.
+      // above still keeps vscode and @curatelabs/graphforge out of the bundle.
       noExternal: true,
     },
   };

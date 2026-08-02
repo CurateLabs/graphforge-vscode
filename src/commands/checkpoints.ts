@@ -5,8 +5,10 @@ import type { QueryResult, TableRow } from "../session/types";
 import { DIFF_DETAIL_OPTIONS, DIFF_SCOPE_OPTIONS } from "./pickerCopy";
 import {
   CommandOutcome,
+  ensureNodeRuntime,
   ensureProjectOrRecover,
   reportEngineError,
+  withEngineProgress,
 } from "./shared";
 
 /**
@@ -147,6 +149,10 @@ async function runCreateCheckpoint(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, "Checkpoints");
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   const name =
     args?.name?.trim() ||
     (await vscode.window.showInputBox({
@@ -163,7 +169,9 @@ async function runCreateCheckpoint(
       title: "GraphForge: Create Checkpoint — Description (optional)",
     }));
   try {
-    const result = await session.createCheckpoint(name, description || undefined);
+    const result = await withEngineProgress("creating checkpoint…", () =>
+      session.createCheckpoint(name, description || undefined),
+    );
     await showResultDoc("Create Checkpoint", result);
     void vscode.window.showInformationMessage(
       `GraphForge: checkpoint "${name}" created.`,
@@ -182,8 +190,14 @@ async function runListCheckpoints(
   if (recovery) {
     return recovery;
   }
+  const wrongRuntime = await ensureNodeRuntime(session, "Checkpoints");
+  if (wrongRuntime) {
+    return wrongRuntime;
+  }
   try {
-    const result = await session.listCheckpoints(args?.limit ?? 200);
+    const result = await withEngineProgress("listing checkpoints…", () =>
+      session.listCheckpoints(args?.limit ?? 200),
+    );
     await showResultDoc("List Checkpoints", result);
     void vscode.window.showInformationMessage(
       `GraphForge: ${result.rowCount} checkpoint(s).`,
@@ -207,6 +221,10 @@ async function runOpenCheckpoint(
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
+  }
+  const wrongRuntime = await ensureNodeRuntime(session, "Checkpoints");
+  if (wrongRuntime) {
+    return wrongRuntime;
   }
   const name =
     args?.name?.trim() ||
@@ -242,8 +260,9 @@ async function runOpenCheckpoint(
     });
     let query: QueryResult | undefined;
     if (cypher?.trim()) {
-      const buf = view.execute(cypher);
-      query = decodeTable(buf);
+      query = await withEngineProgress("querying checkpoint…", async () =>
+        decodeTable(view.execute(cypher)),
+      );
       await showResultDoc(`Open Checkpoint "${name}" — query`, query);
     }
     return {
@@ -263,6 +282,10 @@ async function runDiffCheckpoints(
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
+  }
+  const wrongRuntime = await ensureNodeRuntime(session, "Checkpoints");
+  if (wrongRuntime) {
+    return wrongRuntime;
   }
   const from =
     args?.from?.trim() ||
@@ -303,7 +326,9 @@ async function runDiffCheckpoints(
     return { cancelled: true };
   }
   try {
-    const result = await session.diffCheckpoints(from, to, scope, detail);
+    const result = await withEngineProgress("diffing checkpoints…", () =>
+      session.diffCheckpoints(from, to, scope, detail),
+    );
     await showResultDoc(`Diff ${from} → ${to} (${scope}/${detail})`, result);
     void vscode.window.showInformationMessage(
       `GraphForge: diff produced ${result.rowCount} row(s).`,
@@ -321,6 +346,10 @@ async function runDeleteCheckpoint(
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
+  }
+  const wrongRuntime = await ensureNodeRuntime(session, "Checkpoints");
+  if (wrongRuntime) {
+    return wrongRuntime;
   }
   const name =
     args?.name?.trim() ||
@@ -340,7 +369,9 @@ async function runDeleteCheckpoint(
     }
   }
   try {
-    const result = await session.deleteCheckpoint(name);
+    const result = await withEngineProgress("deleting checkpoint…", () =>
+      session.deleteCheckpoint(name),
+    );
     await showResultDoc("Delete Checkpoint", result);
     void vscode.window.showInformationMessage(
       `GraphForge: checkpoint "${name}" deleted.`,
@@ -364,6 +395,10 @@ async function runRevertToCheckpoint(
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
+  }
+  const wrongRuntime = await ensureNodeRuntime(session, "Checkpoints");
+  if (wrongRuntime) {
+    return wrongRuntime;
   }
   const name =
     args?.name?.trim() ||
@@ -398,7 +433,9 @@ async function runRevertToCheckpoint(
     }
   }
   try {
-    const result = await session.revertToCheckpoint(name, reason);
+    const result = await withEngineProgress("reverting to checkpoint…", () =>
+      session.revertToCheckpoint(name, reason),
+    );
     await showResultDoc("Revert to Checkpoint", result);
     void vscode.window.showInformationMessage(
       `GraphForge: reverted to checkpoint "${name}".`,

@@ -2,7 +2,7 @@
 
 Every command below is a stable ID, invokable from the Command Palette or programmatically via
 `vscode.commands.executeCommand("<id>", ...)`. Commands marked **Node-only** require the
-`@graphforge/node` runtime — they aren't backed by the Python bridge yet (see
+`@curatelabs/graphforge` runtime — they aren't backed by the Python bridge yet (see
 [`install.md`](install.md)).
 
 ## Setup
@@ -10,7 +10,7 @@ Every command below is a stable ID, invokable from the Command Palette or progra
 | Command | ID | What it does |
 |---|---|---|
 | GraphForge: Check Environment | `graphforge.checkEnvironment` | Reports both runtimes' status, which one is active, and the single next step. Accepts optional `{ silent: true }`. |
-| GraphForge: Setup Native Binding | `graphforge.setupNativeBinding` | QuickPick to link/browse/install `@graphforge/node`. |
+| GraphForge: Setup Native Binding | `graphforge.setupNativeBinding` | QuickPick to link/browse/install `@curatelabs/graphforge`. |
 | GraphForge: Setup Python Binding | `graphforge.setupPythonBinding` | QuickPick to select a Python interpreter or install `graphforge` via `uv`. |
 | GraphForge: Initialize Project Here | `graphforge.initializeProjectHere` | Creates a new GraphForge project in an empty/uninitialized folder. |
 | GraphForge: Open Project | `graphforge.openProject` | Opens an existing `FORMAT`-marked project; accepts an optional path string arg. |
@@ -82,6 +82,13 @@ Each verb has a plain command (walks a QuickPick chain: label, then algorithm) a
 | GraphForge: Export Invocation Descriptor… | `graphforge.exportInvocationDescriptor` |
 | GraphForge: List Algorithm Runs | `graphforge.listAlgorithmRuns` |
 | GraphForge: Publish Composite Transaction… (Advanced) | `graphforge.publishCompositeTransaction` |
+| GraphForge: Run CLI… | `graphforge.runCli` |
+
+**Run CLI** runs the engine's repository-lifecycle CLI (`@curatelabs/graphforge-cli`:
+`init`, `sync`, `status`, `checkpoint …`, `export`/`import`, `config validate`, `skills …`)
+in-process through the Node binding — no separate install and no shelling out. Outside VS
+Code the same CLI is available as `npx @curatelabs/graphforge-cli` (or the `gf` / `graphforge`
+bin). **Node-only.**
 
 ## Ontology
 

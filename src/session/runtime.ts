@@ -30,11 +30,11 @@ export async function pythonRuntimeStatus(): Promise<PythonRuntimeStatus> {
  * Resolve and open the active engine backend for `rootPath` according to
  * `graphforge.runtime`. In `auto`, a Python-first workspace (`pyproject.toml`,
  * `uv.lock`, `requirements.txt`, etc. — see `projectKind.ts`) prefers the
- * Python binding even when `@graphforge/node` is available; Node stays the
+ * Python binding even when `@curatelabs/graphforge` is available; Node stays the
  * default for Node-ish or ambiguous repos. Fails closed with a message
  * describing both setup paths when neither runtime is usable, or when the
  * explicit preference's runtime is unavailable. `writeMode` (#11 / ADR 0015)
- * only applies to the Node path — it is a `@graphforge/node` write-coordination
+ * only applies to the Node path — it is a `@curatelabs/graphforge` write-coordination
  * concept with no Python-bridge equivalent yet.
  */
 export async function openEngineBackend(

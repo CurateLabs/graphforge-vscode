@@ -67,7 +67,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
           {
             value: "node",
             label: "Node only",
-            description: "Always use @graphforge/node. Never falls back to Python.",
+            description: "Always use @curatelabs/graphforge. Never falls back to Python.",
           },
           {
             value: "python",
@@ -75,6 +75,15 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
             description: "Always use the Python graphforge bridge. Never falls back to Node.",
           },
         ],
+      },
+      {
+        key: "engineVersion",
+        label: "Engine version",
+        description:
+          "Which graphforge version the Setup wizards install (npm @curatelabs/graphforge, or PyPI graphforge for the Python runtime). Use \"latest\" or pin a version like \"0.5.1\". The version picker in Setup Native/Python Binding writes here.",
+        type: "string",
+        default: "latest",
+        placeholder: "latest",
       },
     ],
   },
@@ -124,7 +133,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         key: "nativeModulePath",
         label: "Node binding path",
         description:
-          "Absolute path to a built @graphforge/node package (the directory containing index.js). Leave empty to resolve from node_modules or a sibling checkout.",
+          "Absolute path to a built @curatelabs/graphforge package (the directory containing index.js). Leave empty to resolve from node_modules or a sibling checkout.",
         type: "string",
         default: "",
         placeholder: "Auto-detect (node_modules or sibling checkout)",

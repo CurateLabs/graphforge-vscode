@@ -16,7 +16,7 @@ export function resetNativeCache(): void {
 }
 
 /**
- * Resolve @graphforge/node from config path, node_modules, or sibling monorepo.
+ * Resolve @curatelabs/graphforge from config path, node_modules, or sibling monorepo.
  * Returns null when unavailable (fail closed for engine calls).
  */
 export function loadGraphForgeModule(): GraphForgeModule | null {
@@ -48,12 +48,12 @@ export function loadGraphForgeModule(): GraphForgeModule | null {
   lastError =
     errors.length > 0
       ? `GraphForge native binding unavailable. Tried: ${errors.join(" | ")}`
-      : "GraphForge native binding unavailable. Install or link @graphforge/node (see README).";
+      : "GraphForge native binding unavailable. Install or link @curatelabs/graphforge (see README).";
   return null;
 }
 
 /**
- * Detect a locally built `gf-bindings-node` in a sibling `graphforge` engine
+ * Detect a locally built `graphforge-bindings-node` in a sibling `graphforge` engine
  * checkout, either next to the extension install or next to the open
  * workspace. Used by Setup UX to offer a one-click "link sibling build"
  * choice; returns undefined when no sibling build is found.
@@ -73,13 +73,13 @@ function siblingCandidatePaths(): string[] {
   // Sibling monorepo: .../graphforge-vscode next to .../graphforge
   const extensionRoot = path.resolve(__dirname, "..");
   out.push(
-    path.resolve(extensionRoot, "..", "graphforge", "crates", "gf-bindings-node"),
+    path.resolve(extensionRoot, "..", "graphforge", "crates", "graphforge-bindings-node"),
   );
 
   // Also try parent of workspace if opened inside monorepo tools
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (ws) {
-    out.push(path.resolve(ws, "..", "graphforge", "crates", "gf-bindings-node"));
+    out.push(path.resolve(ws, "..", "graphforge", "crates", "graphforge-bindings-node"));
   }
 
   return [...new Set(out)];
@@ -96,7 +96,7 @@ function collectCandidates(): string[] {
     out.push(configPath);
   }
 
-  out.push("@graphforge/node");
+  out.push("@curatelabs/graphforge");
 
   const sibling = detectSiblingBindingPath();
   if (sibling) {
