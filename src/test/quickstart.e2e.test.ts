@@ -4,7 +4,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { loadQuickstartDataset } from "../session/quickstartSample";
-import { scanProjectArtifacts } from "../session/projectArtifacts";
+import {
+  readProjectVisualization,
+  scanProjectArtifacts,
+} from "../session/projectArtifacts";
 
 /**
  * Live engine path for #63 against the vendored US air-routes dataset
@@ -60,11 +63,21 @@ suite("Quickstart e2e (#63)", () => {
       const query = artifacts.queryTemplates.find(
         (item) => item.name === "routes-overview.cypher",
       );
-      const graphSpec = artifacts.visualizations.find((item) => item.kind === "result-graph");
+      const graphSpec = artifacts.visualizations.find((item) => {
+        if (item.kind !== "result-graph") return false;
+        return readProjectVisualization(opened.path!, item.path).format === "graphforge.visualization/v2";
+      });
       const figureSpec = artifacts.visualizations.find((item) => item.kind === "plotly");
+      const v2CompanionSpecs = artifacts.visualizations.filter((item) =>
+        item.kind === "chart" || item.kind === "geospatial" || item.kind === "temporal",
+      );
       assert.ok(query, "sample query must be a project file");
       assert.ok(graphSpec, "sample graph visualization must be a project file");
       assert.ok(figureSpec, "sample Plotly visualization must be a project file");
+      assert.deepEqual(
+        v2CompanionSpecs.map((item) => item.kind).sort(),
+        ["chart", "geospatial", "temporal"],
+      );
       assert.ok(
         artifacts.mutations.some((item) => item.name === "seed-air-routes.cypher"),
         "sample seed mutation must be a project file",
@@ -84,6 +97,8 @@ suite("Quickstart e2e (#63)", () => {
       assert.ok(queryResult.columns?.includes("source"));
       assert.ok(queryResult.columns?.includes("dist"));
       assert.ok(queryResult.columns?.includes("region"));
+      assert.ok(queryResult.columns?.includes("longitude"));
+      assert.ok(queryResult.columns?.includes("latitude"));
       const persistedJson = path.join(opened.path!, "results", "query-result.json");
       const persistedMarkdown = path.join(opened.path!, "results", "query-result.md");
       assert.ok(fs.existsSync(persistedJson), "query JSON must persist inside the temp project");
@@ -102,12 +117,84 @@ suite("Quickstart e2e (#63)", () => {
         "unnamed query result must use the timestamp naming convention",
       );
 
+      const visualizationCountBeforeRejectedCreates =
+        scanProjectArtifacts(opened.path!).visualizations.length;
+      const rejectedCreates = await Promise.all([
+        vscode.commands.executeCommand<{ error?: string }>(
+          "graphforge.createProjectVisualization",
+          {
+            result: "results/query-result.json",
+            kind: "result-graph",
+            renderer: "plotly",
+            open: false,
+          },
+        ),
+        vscode.commands.executeCommand<{ error?: string }>(
+          "graphforge.createProjectVisualization",
+          {
+            result: "results/query-result.json",
+            kind: "result-graph",
+            filter: { column: "region", operator: "equals", value: "   " },
+            open: false,
+          },
+        ),
+        vscode.commands.executeCommand<{ error?: string }>(
+          "graphforge.createProjectVisualization",
+          {
+            result: "results/query-result.json",
+            kind: "chart",
+            mark: "bar",
+            x: "missing-field",
+            y: "dist",
+            open: false,
+          },
+        ),
+        vscode.commands.executeCommand<{ error?: string }>(
+          "graphforge.createProjectVisualization",
+          {
+            result: "results/query-result.json",
+            kind: "temporal",
+            mark: "scatter",
+            timestamp: "observed_at",
+            y: "route_count",
+            open: false,
+          },
+        ),
+      ]);
+      for (const rejected of rejectedCreates) {
+        assert.ok(rejected?.error, "invalid creation input must fail closed");
+      }
+      assert.equal(
+        scanProjectArtifacts(opened.path!).visualizations.length,
+        visualizationCountBeforeRejectedCreates,
+        "invalid creation input must not persist an artifact",
+      );
+
+      const invalidTimeout = await vscode.commands.executeCommand<{ error?: string }>(
+        "graphforge.openProjectVisualization",
+        { path: graphSpec.path, waitForReady: true, timeoutMs: 999 },
+      );
+      assert.match(invalidTimeout?.error ?? "", /timeoutMs must be an integer from 1000 through 60000/);
+
       const graph = await vscode.commands.executeCommand<{
         panel?: string;
         nodes?: number;
         edges?: number;
         styleMode?: string;
-      }>("graphforge.openProjectVisualization", { path: graphSpec.path });
+        lifecycle?: {
+          type: string;
+          renderer: string;
+          backend?: string;
+          nodeCount?: number;
+          edgeCount?: number;
+          code?: string;
+          message?: string;
+        };
+      }>("graphforge.openProjectVisualization", {
+        path: graphSpec.path,
+        waitForReady: true,
+        timeoutMs: 30_000,
+      });
 
       assert.ok(graph?.panel === "opened" || graph?.panel === "updated");
       assert.ok(
@@ -119,6 +206,14 @@ suite("Quickstart e2e (#63)", () => {
         `Result Graph edges: expected >= ${minRoutes}, got ${graph?.edges}`,
       );
       assert.notEqual(graph?.styleMode, "demo");
+      const rendered = graph?.lifecycle;
+      assert.ok(rendered, "G6 terminal lifecycle was not returned.");
+      assert.notEqual(rendered.type, "graphforge/renderFailed", `${rendered.code}: ${rendered.message}`);
+      assert.equal(rendered.type, "graphforge/renderReady");
+      assert.equal(rendered.renderer, "g6");
+      assert.equal(rendered.backend, "canvas");
+      assert.ok((rendered.nodeCount ?? 0) >= minGraphNodes);
+      assert.ok((rendered.edgeCount ?? 0) >= minRoutes);
 
       const figure = await vscode.commands.executeCommand<{
         figure?: { data?: unknown[] };
@@ -133,6 +228,24 @@ suite("Quickstart e2e (#63)", () => {
       assert.ok(
         Array.isArray(figureOutcome.figure?.data) && figureOutcome.figure!.data!.length > 0,
       );
+
+      for (const artifact of v2CompanionSpecs) {
+        const openedVisualization = await vscode.commands.executeCommand<{
+          path?: string;
+          kind?: string;
+          panel?: string;
+          error?: string;
+        }>("graphforge.openProjectVisualization", { path: artifact.path });
+        assert.equal(openedVisualization?.error, undefined, JSON.stringify(openedVisualization));
+        assert.equal(openedVisualization?.path, artifact.path);
+        assert.equal(openedVisualization?.kind, artifact.kind);
+        assert.ok(
+          openedVisualization?.panel === "opened" || openedVisualization?.panel === "updated",
+        );
+        // Let the retained webview finish each adapter before replacing it with
+        // the next artifact; render failures are surfaced in the host log.
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
     } finally {
       // Always detach so later “no project” suites in this host stay fail-closed.
       await vscode.commands.executeCommand("graphforge.closeProject");

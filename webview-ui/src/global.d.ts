@@ -8,6 +8,14 @@ declare function acquireVsCodeApi(): {
 /** Side-effect CSS imports handled by Vite; declared so tsc resolves them. */
 declare module "*.css";
 
+/** Vite inlines workers as blob URLs so they share the VS Code webview origin. */
+declare module "*?worker&inline" {
+  const WorkerConstructor: {
+    new (options?: WorkerOptions): Worker;
+  };
+  export default WorkerConstructor;
+}
+
 /** Bundled Plotly UMD build used by the Figure webview (#62). */
 declare module "plotly.js/dist/plotly.min.js" {
   type PlotlyModule = {

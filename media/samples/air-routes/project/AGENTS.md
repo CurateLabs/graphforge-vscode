@@ -10,8 +10,11 @@ marker and keep generated work inside the project.
 - `results/*.json` — `{ "columns": ["..."], "rows": [{ ... }], "rowCount": 0 }`.
   `results/query-result.json` is the canonical latest result; timestamped files
   are history.
-- `visualizations/*.gfviz.json` — `graphforge.visualization/v1` specs. A spec
-  has `kind: "result-graph"` or `"plotly"` and references a result path.
+- `visualizations/*.gfviz.json` — new work uses strict
+  `graphforge.visualization/v2` with kind `result-graph`, `chart`, `geospatial`,
+  or `temporal`. V2 records renderer/backend, filters, explicit field bindings,
+  layout or coordinate/time settings, and presentation. Existing v1
+  Cytoscape/Sigma/Plotly specs remain readable and are not rewritten on open.
 - `mutations/**/*.cypher`, `.cql`, or `.json` — writes that require explicit
   confirmation before execution.
 
@@ -27,10 +30,15 @@ Call VS Code commands through `vscode.commands.executeCommand`:
    command contract.
 2. `graphforge.runProjectQuery({ path, resultName? })`.
 3. `graphforge.openProjectResult({ path })`.
-4. `graphforge.openProjectVisualization({ path })`.
-5. `graphforge.applyProjectMutation({ path, confirm: true })` only after
+4. `graphforge.openProjectVisualization({ path, waitForReady?: true, timeoutMs?: 30000 })`;
+   an explicit readiness wait returns the terminal renderer lifecycle.
+5. `graphforge.createProjectVisualization({ result, kind, ...explicitBindings })`
+   saves a v2 artifact before opening and returns `{ path, spec, panel? }`.
+6. `graphforge.applyProjectMutation({ path, confirm: true })` only after
    reviewing the mutation file.
 
 For this sample, start with
-`queries/templates/routes-overview.cypher`, then open either saved visualization
-under `visualizations/`.
+`queries/templates/routes-overview.cypher`, then open the saved AntV graph,
+chart, map, or timeline under `visualizations/`. The v1 files beside them prove
+the retained compatibility path. Do not infer missing fields or silently switch
+renderer, layout, projection, timezone, or data source; fix the artifact instead.

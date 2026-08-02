@@ -3,10 +3,18 @@
 Real-world airline route graph used by GraphForge **Try sample project** / e2e.
 
 `project/` contains the reusable `queries/templates/routes-overview.cypher`
-query and Result Graph/Plotly visualization specs copied into a new sample.
+query, a small documented route-activity result, and six visualization specs:
+v2 G6 graph, G2 chart, L7 map, and G2 timeline examples plus v1 Cytoscape and
+Plotly compatibility examples. Every renderer, binding, layout, coordinate, and
+time choice is visible in those files.
 During creation, the extension also copies this dataset to
 `data/air-routes/` and generates `mutations/seed-air-routes.cypher` before
 executing that project-backed mutation.
+
+`project/results/route-activity.json` is a small illustrative timeline fixture,
+not a claim about the historical air-routes source. It is committed separately
+so its synthetic monthly values and UTC timestamps are visible rather than
+generated invisibly by extension code.
 
 | File | Rows | Role |
 | --- | --- | --- |

@@ -15,8 +15,10 @@ import {
 } from "../session/quickstartSample";
 import {
   readProjectQuery,
+  readProjectResult,
   readProjectVisualization,
   scanProjectArtifacts,
+  VISUALIZATION_SPEC_FORMAT_V2,
 } from "../session/projectArtifacts";
 
 /** Repo root from dist/test/quickstartSample.test.js → ../.. */
@@ -77,7 +79,7 @@ suite("quickstartSample (#63)", () => {
     assert.equal((seed.match(/:Airport \{/g) ?? []).length, dataset.airports.length);
   });
 
-  test("materializes project-backed query, visualizations, data, and mutation", () => {
+  test("materializes the six-version visualization matrix and supporting data", () => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-files-"));
     const dataset = loadQuickstartDataset(REPO_ROOT);
     const { seedMutationPath } = materializeQuickstartProjectFiles(projectRoot, dataset);
@@ -85,7 +87,7 @@ suite("quickstartSample (#63)", () => {
 
     assert.equal(artifacts.queries.length, 0);
     assert.equal(artifacts.queryTemplates.length, 1);
-    assert.equal(artifacts.visualizations.length, 2);
+    assert.equal(artifacts.visualizations.length, 6);
     assert.ok(artifacts.mutations.some((item) => item.path === seedMutationPath));
     assert.ok(fs.existsSync(path.join(projectRoot, "data", "air-routes", "airports.csv")));
     assert.match(
@@ -97,11 +99,55 @@ suite("quickstartSample (#63)", () => {
     assert.ok(query.cypher.includes("AS source"));
     assert.ok(query.cypher.includes("AS dist"));
     assert.ok(query.cypher.includes("AS region"));
+    assert.ok(query.cypher.includes("AS longitude"));
+    assert.ok(query.cypher.includes("AS latitude"));
 
-    const plotly = artifacts.visualizations.find((item) => item.kind === "plotly");
+    const legacyFiles = ["route-distances.gfviz.json", "routes-network.gfviz.json"];
+    for (const fileName of legacyFiles) {
+      const templatePath = path.join(dataset.datasetDir, "project", "visualizations", fileName);
+      const materializedPath = path.join(projectRoot, "visualizations", fileName);
+      const templateText = fs.readFileSync(templatePath, "utf8");
+      assert.equal(
+        fs.readFileSync(materializedPath, "utf8"),
+        templateText,
+        `${fileName} must be copied byte-for-byte`,
+      );
+      const loaded = readProjectVisualization(
+        projectRoot,
+        path.posix.join("visualizations", fileName),
+      );
+      assert.deepEqual(loaded, JSON.parse(templateText));
+      assert.equal(loaded.format, "graphforge.visualization/v1");
+    }
+
+    const specs = artifacts.visualizations.map((item) =>
+      readProjectVisualization(projectRoot, item.path),
+    );
+    const v2 = specs.filter((spec) => spec.format === VISUALIZATION_SPEC_FORMAT_V2);
+    assert.equal(v2.length, 4);
+    const rendererByKind = new Map(
+      v2.map((spec) => [spec.kind, spec.renderer.id]),
+    );
+    assert.deepEqual(Object.fromEntries(rendererByKind), {
+      geospatial: "l7",
+      temporal: "g2",
+      chart: "g2",
+      "result-graph": "g6",
+    });
+
+    const plotly = specs.find((spec) => spec.kind === "plotly");
     assert.ok(plotly);
-    const spec = readProjectVisualization(projectRoot, plotly.path);
-    assert.equal(spec.result, "results/query-result.json");
-    assert.equal(spec.kind, "plotly");
+    assert.equal(plotly.result, "results/query-result.json");
+
+    const activity = readProjectResult(projectRoot, "results/route-activity.json");
+    assert.deepEqual(activity.columns, ["timestamp", "routes", "region"]);
+    assert.equal(activity.rowCount, 12);
+    assert.ok(activity.rows.every((row) => !Number.isNaN(Date.parse(String(row.timestamp)))));
+
+    const temporal = v2.find((spec) => spec.kind === "temporal");
+    assert.ok(temporal);
+    assert.equal(temporal.result, "results/route-activity.json");
+    assert.equal(temporal.temporal.timestampField, "timestamp");
+    assert.equal(temporal.temporal.timezone, "UTC");
   });
 });

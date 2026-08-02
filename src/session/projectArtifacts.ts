@@ -1,8 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 import type { FigureChartType } from "./figureFromResult";
 import type { QueryResult, TableRow } from "./types";
 import type { ResultGraphRenderer } from "../webview/resultGraphModel";
+import {
+  isVisualizationSpecV2,
+  VISUALIZATION_SPEC_FORMAT_V2,
+  type ProjectVisualizationSpecV2,
+} from "./visualizationRegistry";
 
 export const PROJECT_QUERIES_DIR = "queries";
 export const PROJECT_QUERY_TEMPLATES_DIR = "queries/templates";
@@ -10,7 +16,11 @@ export const PROJECT_RESULTS_DIR = "results";
 export const PROJECT_VISUALIZATIONS_DIR = "visualizations";
 export const PROJECT_MUTATIONS_DIR = "mutations";
 
-export const VISUALIZATION_SPEC_FORMAT = "graphforge.visualization/v1";
+export const VISUALIZATION_SPEC_FORMAT_V1 = "graphforge.visualization/v1" as const;
+/** Compatibility name retained for callers that create v1 artifacts. */
+export const VISUALIZATION_SPEC_FORMAT = VISUALIZATION_SPEC_FORMAT_V1;
+export { VISUALIZATION_SPEC_FORMAT_V2 };
+export type { ProjectVisualizationSpecV2 } from "./visualizationRegistry";
 
 export interface ProjectArtifactEntry {
   name: string;
@@ -47,7 +57,7 @@ export interface ResultFilter {
 }
 
 export interface ResultGraphVisualizationSpec {
-  format: typeof VISUALIZATION_SPEC_FORMAT;
+  format: typeof VISUALIZATION_SPEC_FORMAT_V1;
   name: string;
   kind: "result-graph";
   result: string;
@@ -64,7 +74,7 @@ export interface ResultGraphVisualizationSpec {
 }
 
 export interface PlotlyVisualizationSpec {
-  format: typeof VISUALIZATION_SPEC_FORMAT;
+  format: typeof VISUALIZATION_SPEC_FORMAT_V1;
   name: string;
   kind: "plotly";
   result: string;
@@ -78,9 +88,13 @@ export interface PlotlyVisualizationSpec {
   };
 }
 
-export type ProjectVisualizationSpec =
+export type ProjectVisualizationSpecV1 =
   | ResultGraphVisualizationSpec
   | PlotlyVisualizationSpec;
+
+export type ProjectVisualizationSpec =
+  | ProjectVisualizationSpecV1
+  | ProjectVisualizationSpecV2;
 
 function isInsideProject(projectRoot: string, candidate: string): boolean {
   const relative = path.relative(path.resolve(projectRoot), path.resolve(candidate));
@@ -176,11 +190,11 @@ export function readProjectQuery(projectRoot: string, queryPath: string): Projec
   return { cypher };
 }
 
-function isVisualizationSpec(value: unknown): value is ProjectVisualizationSpec {
+function isVisualizationSpecV1(value: unknown): value is ProjectVisualizationSpecV1 {
   if (!value || typeof value !== "object") return false;
   const spec = value as Record<string, unknown>;
   if (
-    spec.format !== VISUALIZATION_SPEC_FORMAT ||
+    spec.format !== VISUALIZATION_SPEC_FORMAT_V1 ||
     typeof spec.name !== "string" ||
     typeof spec.result !== "string"
   ) {
@@ -199,6 +213,10 @@ function isVisualizationSpec(value: unknown): value is ProjectVisualizationSpec 
     );
   }
   return false;
+}
+
+export function isVisualizationSpec(value: unknown): value is ProjectVisualizationSpec {
+  return isVisualizationSpecV1(value) || isVisualizationSpecV2(value);
 }
 
 export function readProjectVisualization(
@@ -224,6 +242,13 @@ export function filterQueryResult(result: QueryResult, filter?: ResultFilter): Q
     return String(value ?? "").toLocaleLowerCase().includes(needle);
   });
   return { ...result, rows, rowCount: rows.length };
+}
+
+export function filterQueryResultMany(
+  result: QueryResult,
+  filters: readonly ResultFilter[],
+): QueryResult {
+  return filters.reduce((current, filter) => filterQueryResult(current, filter), result);
 }
 
 export function scanProjectArtifacts(projectRoot: string): ProjectArtifactIndex {
@@ -401,5 +426,44 @@ export function writeProjectVisualization(
   );
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(resolvedSpec, null, 2)}\n`, "utf8");
+  return relativeProjectPath(projectRoot, filePath);
+}
+
+/** Replace one existing visualization artifact after validating its complete spec. */
+export function replaceProjectVisualization(
+  projectRoot: string,
+  visualizationPath: string,
+  spec: ProjectVisualizationSpec,
+): string {
+  if (!isVisualizationSpec(spec)) {
+    throw new Error("Visualization settings are incomplete or unsafe.");
+  }
+  resolveProjectArtifactPath(projectRoot, spec.result);
+  const filePath = resolveProjectArtifactPath(projectRoot, visualizationPath);
+  const visualizationRoot = path.join(projectRoot, PROJECT_VISUALIZATIONS_DIR);
+  if (!isInsideProject(visualizationRoot, filePath) || !filePath.endsWith(".gfviz.json")) {
+    throw new Error(`Visualization must stay inside ${PROJECT_VISUALIZATIONS_DIR}/ and end in .gfviz.json.`);
+  }
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Visualization does not exist: ${relativeProjectPath(projectRoot, filePath)}.`);
+  }
+  const canonicalProjectRoot = fs.realpathSync(projectRoot);
+  const canonicalVisualizationRoot = fs.realpathSync(visualizationRoot);
+  if (!isInsideProject(canonicalProjectRoot, canonicalVisualizationRoot)) {
+    throw new Error(`Visualization directory must stay inside the open project.`);
+  }
+  const canonicalParent = fs.realpathSync(path.dirname(filePath));
+  if (!isInsideProject(canonicalVisualizationRoot, canonicalParent)) {
+    throw new Error(`Visualization must stay inside ${PROJECT_VISUALIZATIONS_DIR}/.`);
+  }
+  const canonicalFilePath = path.join(canonicalParent, path.basename(filePath));
+  const temporaryPath = `${canonicalFilePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, `${JSON.stringify(spec, null, 2)}\n`, "utf8");
+    fs.renameSync(temporaryPath, canonicalFilePath);
+  } catch (error) {
+    fs.rmSync(temporaryPath, { force: true });
+    throw error;
+  }
   return relativeProjectPath(projectRoot, filePath);
 }

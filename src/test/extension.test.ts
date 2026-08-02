@@ -32,6 +32,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.openProjectResult",
   "graphforge.openProjectVisualization",
   "graphforge.saveProjectVisualization",
+  "graphforge.createProjectVisualization",
   "graphforge.openProjectArtifact",
   "graphforge.applyProjectMutation",
   "graphforge.agent.getContext",

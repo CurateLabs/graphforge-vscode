@@ -26,6 +26,7 @@ export default defineConfig({
         settings: resolve(here, "src/settings/main.ts"),
         figure: resolve(here, "src/figure/main.ts"),
         resultGraph: resolve(here, "src/resultGraph/main.ts"),
+        artifactVisualization: resolve(here, "src/artifactVisualization/main.ts"),
         results: resolve(here, "src/results/main.ts"),
         entityInspect: resolve(here, "src/entityInspect/main.ts"),
         modules: resolve(here, "src/modules/main.ts"),

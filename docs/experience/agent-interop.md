@@ -80,7 +80,7 @@ Then the call resolves immediately (it does not wait for a human to dismiss the 
 
 ## Command ID table (agent-facing contract)
 
-Source of truth: `package.json#contributes.commands` (80 contributed commands on this branch). All IDs are invoked as `vscode.commands.executeCommand("<id>", ...)`. The table groups the operational/agent-relevant surface; view-navigation variants such as `graphforge.getStarted.showQuery` remain discoverable in the manifest.
+Source of truth: `package.json#contributes.commands` (85 contributed commands on this branch). All IDs are invoked as `vscode.commands.executeCommand("<id>", ...)`. The table groups the operational/agent-relevant surface; view-navigation variants such as `graphforge.getStarted.showQuery` remain discoverable in the manifest.
 
 **Shared outcome union.** Every command that does engine work returns `CommandOutcome<T>` (`src/commands/shared.ts`): the success payload `T` listed below, or `SetupRecovery` (`{ error, code?, nextAction }`) when no runtime/project is usable, or `{ cancelled: true }` when a human dismisses an interactive prompt, or `{ error, code? }` when the engine call fails. No handler resolves `undefined` on those paths.
 
@@ -104,8 +104,9 @@ Source of truth: `package.json#contributes.commands` (80 contributed commands on
 | `graphforge.saveProjectQuery` | `{ name?, cypher, run?, resultName? }` | `{ path }` or query result | None | Yes |
 | `graphforge.saveProjectQueryTemplate` | `{ name?, cypher, run?, resultName? }` | `{ path }` or query result | None | Yes; writes under `queries/templates/` |
 | `graphforge.openProjectResult` | `string \| Uri \| { path }` | `{ path, absolutePath, rowCount, columns }` | None | Yes; restores Results/session state |
-| `graphforge.openProjectVisualization` | `string \| Uri \| { path }` | Visualization-specific structured outcome with `absolutePath` | None | Yes; loads referenced result/filter |
-| `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` | `{ path }` or open outcome | None | Yes |
+| `graphforge.openProjectVisualization` | `string \| Uri \| { path, waitForReady?, timeoutMs? }` | `{ path, absolutePath, kind, spec, panel?, lifecycle? }` (legacy adapters may nest their panel result in `outcome`) | None | Yes; loads the saved spec and referenced result/filter. Explicit readiness waits return `renderReady` or a structured terminal failure. |
+| `graphforge.createProjectVisualization` | `{ name?, result, kind, renderer?, explicit bindings, filter?, open? }` | `{ path, spec, panel? }` | None when required bindings are supplied | Yes; writes strict v2 before opening |
+| `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` | `{ path, spec, panel? }` | None | Yes; accepts readable v1 or strict v2 and does not infer missing fields |
 | `graphforge.openProjectArtifact` | `string \| Uri \| { path }` | `{ path, absolutePath }` | None | Yes; opens any in-project file in the editor |
 | `graphforge.applyProjectMutation` | `{ path: string \| Uri; confirm: true }` | `{ path, absolutePath, columns, rowCount }` | With no args: mutation QuickPick + modal confirmation. Programmatic calls never prompt and require `confirm: true` | Yes; executable path must stay under `mutations/` |
 | `graphforge.importData` | `{ path: string \| Uri; label: string; mode?: "create" \| "merge"; idColumn?: string; confirm: true }` | `{ path, format, label, mode, idColumn?, imported, result }` | File/label/confirmation prompts only when omitted; programmatic calls require `confirm: true` | Yes; imports CSV/JSON/JSONL/NDJSON as nodes |
@@ -174,11 +175,35 @@ Source of truth: `package.json#contributes.commands` (80 contributed commands on
 - Project marker: `FORMAT` must contain exactly `graphforge-project/v1\n`.
 - Queries: `.cypher`/`.cql` text, or JSON `{ "cypher": "...", "params": { ... } }`.
 - Results: JSON `{ "columns": ["..."], "rows": [{ ... }], "rowCount": 0 }`. `results/query-result.json` is canonical latest; timestamped JSON/Markdown pairs are history.
-- Visualizations: `graphforge.visualization/v1` `.gfviz.json`, with `kind: "result-graph"` or `"plotly"` and a project-relative `result`.
+- Visualizations: new files use strict `graphforge.visualization/v2` with kind
+  `result-graph`, `chart`, `geospatial`, or `temporal`; existing v1
+  Cytoscape/Sigma/Plotly files remain readable and are not rewritten on open.
+  A v2 spec records renderer/backend, filters, bindings, layout or coordinates,
+  and presentation/time configuration. Missing choices are rejected rather than
+  inferred or replaced at render time.
 - Mutations: the same query formats under `mutations/`; execute through `applyProjectMutation` so write intent and confirmation are explicit.
 - All artifact commands accept project-relative or absolute paths (and VS Code `Uri` values) but reject traversal outside the active project. Mutation execution is additionally confined to `mutations/`.
 
 The sample project includes `AGENTS.md` with this contract beside the project files, so repository-aware agents can discover it without opening a GraphForge webview.
+
+### Exact visualization creation arguments
+
+`graphforge.createProjectVisualization` always takes a project-relative `result`
+path plus `kind`. Optional common fields are `name`, `open`, and
+`filter: { column, operator: "equals" | "contains", value }`. Kind-specific
+fields are flattened into that same object:
+
+- `result-graph`: optional `renderer: "g6" | "cytoscape" | "sigma"`.
+- `chart`: `mark: "bar" | "scatter" | "line" | "histogram"`, `x`, `y`
+  (omit `y` only for a histogram), optional `color`, and optional
+  `renderer: "g2" | "plotly"`.
+- `geospatial`: `longitude` and `latitude`; the persisted adapter is L7.
+- `temporal`: `timestamp` and `y`, with optional `color`,
+  `mark: "line" | "bar" | "point"`, IANA `timezone`, and `granularity` from
+  millisecond through year; the persisted adapter is G2.
+
+The command materializes every remaining choice into the saved v2 artifact; it
+does not accept or infer a nested `bindings` object.
 
 ## Recommended agent loop
 
@@ -191,14 +216,20 @@ flowchart TD
     C --> A
     D -->|result.error present| B
     D -->|success| E["Read QueryResult from the return value or project-local results/query-result.json"]
-    E --> F["Optional: figureFromResult({ chartType, x, y, columns, rows }) or showFigure({ figure })"]
+    E --> F["createProjectVisualization({ result, kind, explicit bindings })"]
 ```
 
 1. **Get context** — `executeCommand("graphforge.agent.getContext")`. This includes the full environment report, effective settings, project marker, absolute artifact paths, and last-result paths. Use `checkEnvironment({ silent: true })` only when environment state alone is sufficient.
 2. **Setup / Init if needed** — if no runtime is usable, run `graphforge.setupNativeBinding` and/or `graphforge.setupPythonBinding` (each is one QuickPick with no args-based bypass yet; see [Gaps](#gaps--follow-ups)); if a runtime is ready but no project is open, run `graphforge.openSampleProject({ path })` for the quickstart demo, `graphforge.initializeProjectHere` (new project), or `graphforge.openProject(path)` (existing project — `path` is a plain string arg, no picker needed). Re-run step 1 to confirm.
 3. **Operate by file** — call `runProjectQuery(path)`, `openProjectResult(path)`, or `openProjectVisualization(path)` using an `absolutePath` from context. For a reviewed write, call `applyProjectMutation({ path, confirm: true })`.
 4. **Read the result** — either the `executeCommand` return value or the open project's durable `results/query-result.json`; the Markdown preview is for human scanning. On failure, inspect `error`/`code`/`nextAction`.
-5. **Optional chart** — call `graphforge.figureFromResult` with `chartType` + column bindings (and `columns`/`rows` or rely on the last session result), or `graphforge.showFigure({ figure })` with Plotly figure JSON from Python (`fig.to_dict()`) or JS. This opens the Figure panel; it does not replace Result Graph.
+5. **Create durable visualization work** — call
+   `graphforge.createProjectVisualization` with the result path, semantic kind,
+   and explicit bindings. It saves first and returns the complete `{ path, spec,
+   panel? }`. G6 and G2 are current creation defaults; L7 owns geospatial views;
+   Cytoscape, Sigma, and Plotly remain explicit alternatives. For unsaved raw
+   Plotly interchange, `figureFromResult` and `showFigure({ figure })` remain
+   available, but they are not a substitute for a project artifact.
 
 ## Runtime note (Node vs. Python)
 

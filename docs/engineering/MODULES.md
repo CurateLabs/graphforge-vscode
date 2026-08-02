@@ -15,6 +15,16 @@ by default, and can be disabled without reloading the extension host. They canno
 through the module lifecycle; modifying or deleting their packaged code is outside the supported
 module contract and breaks the extension installation.
 
+The first-party Visualize module owns Studio's visualization command and adapter
+surface. New artifacts default to G6/G2/L7 through one extension-owned registry;
+Cytoscape, Sigma, and Plotly remain adapters. This module reads v1 compatibility
+files and creates strict v2 project artifacts. It does not move layout, chart,
+map, or temporal presentation into GraphForge Core: Core continues to return
+graph/query results, while Studio validates and renders their explicit saved
+presentation. External modules may add commands through the normal lifecycle,
+but they do not gain implicit renderer registration, network access, or authority
+to reinterpret an existing visualization artifact.
+
 ## Manifest
 
 Every module uses `graphforge.module/v1`:

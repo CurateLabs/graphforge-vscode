@@ -4,7 +4,7 @@
   "name": "Visualize",
   "version": "1.0.0",
   "publisher": "GraphForge",
-  "description": "Turn query results into linked graph and Plotly views inside the workbench.",
+  "description": "Turn project results into explicit graph, chart, geospatial, and temporal visualizations.",
   "capabilities": ["visualize"],
   "entrypoint": { "kind": "builtin" }
 }

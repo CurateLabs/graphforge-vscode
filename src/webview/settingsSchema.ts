@@ -126,13 +126,19 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         key: "resultGraph.renderer",
         label: "Result Graph renderer",
         description:
-          "Choose the interactive engine used for graph results. Changes update an open Result Graph immediately.",
+          "Choose the template used for new Result Graph artifacts. Saved artifacts keep their recorded renderer.",
         type: "enum",
-        default: "cytoscape",
+        default: "g6",
         options: [
           {
+            value: "g6",
+            label: "AntV G6 (recommended)",
+            description:
+              "Canvas rendering with an explicit worker ForceAtlas2 layout, pan, zoom, fit, and inspection.",
+          },
+          {
             value: "cytoscape",
-            label: "Cytoscape (recommended)",
+            label: "Cytoscape",
             description:
               "Canvas rendering with force layout, pan, zoom, fit, and node or edge inspection.",
           },
@@ -141,6 +147,28 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
             label: "Sigma",
             description:
               "WebGL rendering with ForceAtlas2 layout, suited to larger and denser result graphs.",
+          },
+        ],
+      },
+      {
+        key: "chart.renderer",
+        label: "Chart renderer",
+        description:
+          "Choose the template used for new chart artifacts. Saved artifacts keep their recorded renderer.",
+        type: "enum",
+        default: "g2",
+        options: [
+          {
+            value: "g2",
+            label: "AntV G2 (recommended)",
+            description:
+              "Declarative charts generated from explicit project-artifact field bindings.",
+          },
+          {
+            value: "plotly",
+            label: "Plotly",
+            description:
+              "Retains the existing Plotly figure renderer and Python/JavaScript JSON interchange.",
           },
         ],
       },

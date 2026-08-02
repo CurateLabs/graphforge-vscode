@@ -9,8 +9,21 @@ import type {
   QueryResult,
 } from "../session/types";
 import type { GetStartedState } from "../views/getStartedView";
-import type { ResultGraphRenderer } from "./resultGraphModel";
-import type { ResultGraphLayoutOptions } from "./resultGraphModel";
+import type {
+  ResultGraphBackend,
+  ResultGraphLabelOptions,
+  ResultGraphLayoutOptions,
+  ResultGraphOptionSource,
+  ResultGraphRenderer,
+  ResultGraphTimebarOptions,
+  ResultGraphVisualDensityOptions,
+} from "./resultGraphModel";
+
+export type ResultGraphRenderPhase =
+  | "initialize"
+  | "layout"
+  | "render"
+  | "interaction";
 
 export type EntityInspectSelection =
   | { kind: "node"; item: GraphNode }
@@ -25,7 +38,16 @@ export interface ResultEntityLink {
 export type HostToWebview =
   | { type: "graphforge/graph"; payload: GraphPayload }
   | { type: "graphforge/graphRenderer"; renderer: ResultGraphRenderer }
-  | { type: "graphforge/graphOptions"; layout?: ResultGraphLayoutOptions }
+  | {
+      type: "graphforge/graphOptions";
+      backend?: ResultGraphBackend;
+      source?: ResultGraphOptionSource;
+      layout?: ResultGraphLayoutOptions;
+      visualDensity?: ResultGraphVisualDensityOptions;
+      labels?: ResultGraphLabelOptions;
+      timebar?: ResultGraphTimebarOptions;
+    }
+  | { type: "graphforge/graphArtifactState"; saved: boolean; dirty: boolean }
   | { type: "graphforge/entityInspect"; selection: EntityInspectSelection }
   | {
       type: "graphforge/highlightGraphElements";
@@ -81,10 +103,46 @@ export type WebviewToHost =
     }
   | { type: "graphforge/openResultDocument"; kind: "json" | "markdown" }
   | {
+      type: "graphforge/renderStarted";
+      renderer: ResultGraphRenderer;
+      backend?: ResultGraphBackend;
+      layout?: ResultGraphLayoutOptions["type"];
+      nodeCount: number;
+      edgeCount: number;
+    }
+  | {
+      type: "graphforge/layoutStarted";
+      renderer: ResultGraphRenderer;
+      layout: ResultGraphLayoutOptions["type"];
+      execution: "worker" | "main";
+    }
+  | {
+      type: "graphforge/layoutReady";
+      renderer: ResultGraphRenderer;
+      layout: ResultGraphLayoutOptions["type"];
+      execution: "worker" | "main";
+      durationMs: number;
+    }
+  | {
+      type: "graphforge/renderReady";
+      renderer: ResultGraphRenderer;
+      backend?: ResultGraphBackend;
+      nodeCount: number;
+      edgeCount: number;
+      durationMs: number;
+    }
+  | {
       type: "graphforge/renderFailed";
       renderer: ResultGraphRenderer;
+      phase: ResultGraphRenderPhase;
+      code: string;
+      backend?: ResultGraphBackend;
+      layout?: ResultGraphLayoutOptions["type"];
       message: string;
     }
+  | { type: "graphforge/timebarChanged"; values: [number, number] }
+  | { type: "graphforge/saveGraphArtifactState" }
+  | { type: "graphforge/revertGraphArtifactState" }
   | { type: "graphforge/requestReload" }
   | { type: "graphforge/explainMode" }
   | { type: "graphforge/openOntologyFile" }

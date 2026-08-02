@@ -2,16 +2,11 @@ import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { GraphPayload } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
-import type {
-  ResultGraphLayoutOptions,
-  ResultGraphRenderer,
-} from "../webview/resultGraphModel";
+import type { ResultGraphViewOptions } from "../webview/resultGraphModel";
 
-export interface ShowResultGraphArgs {
+export interface ShowResultGraphArgs extends ResultGraphViewOptions {
   title?: string;
   payload?: GraphPayload;
-  renderer?: ResultGraphRenderer;
-  layout?: ResultGraphLayoutOptions;
 }
 
 export function registerVisualizationCommands(
@@ -22,19 +17,23 @@ export function registerVisualizationCommands(
     vscode.commands.registerCommand(
       "graphforge.showResultGraph",
       async (args?: ShowResultGraphArgs) => {
-        const hadPanel = Boolean(ResultGraphPanel.current);
         const result = session.getLastResult();
         const payload = args?.payload ??
           (args?.title && result
             ? await session.toGraphPayload(result, args.title)
             : await session.lastGraphPayload());
-        ResultGraphPanel.show(context.extensionUri, payload, {
+        const shown = await ResultGraphPanel.show(context.extensionUri, payload, {
           renderer: args?.renderer,
+          backend: args?.backend,
+          source: args?.source,
           layout: args?.layout,
+          visualDensity: args?.visualDensity,
+          labels: args?.labels,
+          timebar: args?.timebar,
         });
-        session.markSeenResultGraph();
+        if (shown.status !== "cancelled") session.markSeenResultGraph();
         return {
-          panel: hadPanel ? ("updated" as const) : ("opened" as const),
+          panel: shown.status,
           nodes: payload.nodes.length,
           edges: payload.edges.length,
           styleMode: payload.styleMode,

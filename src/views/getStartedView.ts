@@ -374,20 +374,15 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
       <label>Result file<select id="viz-result" required></select></label>
       <label>View type<select id="viz-kind">
         <option value="result-graph">Result Graph</option>
-        <option value="plotly">Plotly Figure</option>
+        <option value="chart">Analytical chart</option>
+        <option value="geospatial">Geospatial map</option>
+        <option value="temporal">Temporal chart</option>
       </select></label>
       <div id="graph-settings">
-        <div class="form-row">
-          <label>Renderer<select id="viz-renderer"><option>cytoscape</option><option>sigma</option></select></label>
-          <label>Gravity<input id="viz-gravity" type="number" step="0.1" value="0.7" /></label>
-        </div>
-        <div class="form-row">
-          <label>Node repulsion<input id="viz-repulsion" type="number" value="90000" /></label>
-          <label>Edge length<input id="viz-edge-length" type="number" value="70" /></label>
-        </div>
-        <label>Sigma slow down<input id="viz-slow-down" type="number" step="0.1" value="3" /></label>
+        <label>Renderer<select id="viz-renderer"><option value="">Use configured default</option><option value="g6">AntV G6</option><option value="cytoscape">Cytoscape</option><option value="sigma">Sigma</option></select></label>
       </div>
-      <div id="plotly-settings" hidden>
+      <div id="chart-settings" hidden>
+        <label>Renderer<select id="viz-chart-renderer"><option value="">Use configured default</option><option value="g2">AntV G2</option><option value="plotly">Plotly</option></select></label>
         <label>Chart type<select id="viz-chart-type">
           <option>scatter</option><option>bar</option><option>line</option><option>histogram</option>
         </select></label>
@@ -396,6 +391,25 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
           <label>Y<select id="viz-y"></select></label>
         </div>
         <label>Color / series<select id="viz-color"></select></label>
+      </div>
+      <div id="geospatial-settings" hidden>
+        <div class="form-row">
+          <label>Longitude field<select id="viz-longitude"></select></label>
+          <label>Latitude field<select id="viz-latitude"></select></label>
+        </div>
+        <p class="muted">Saved explicitly as EPSG:4326 coordinates rendered on an offline blank L7 map.</p>
+      </div>
+      <div id="temporal-settings" hidden>
+        <label>Renderer<select id="viz-temporal-renderer"><option value="g2">AntV G2</option></select></label>
+        <div class="form-row">
+          <label>Timestamp field<select id="viz-timestamp"></select></label>
+          <label>Value field<select id="viz-temporal-value"></select></label>
+        </div>
+        <div class="form-row">
+          <label>Timezone<input id="viz-timezone" value="UTC" /></label>
+          <label>Granularity<select id="viz-granularity"><option>day</option><option>hour</option><option>week</option><option>month</option><option>quarter</option><option>year</option></select></label>
+        </div>
+        <label>Series field<select id="viz-temporal-series"></select></label>
       </div>
       <div class="form-row">
         <label>Filter column<select id="viz-filter-column"></select></label>
@@ -485,10 +499,10 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
 
     function updateColumnOptions() {
       const columns = selectedResult()?.columns || [];
-      ['viz-x', 'viz-y', 'viz-color', 'viz-filter-column'].forEach((id) => {
+      ['viz-x', 'viz-y', 'viz-color', 'viz-longitude', 'viz-latitude', 'viz-timestamp', 'viz-temporal-value', 'viz-temporal-series', 'viz-filter-column'].forEach((id) => {
         const select = byId(id);
         const old = select.value;
-        const empty = id === 'viz-color' || id === 'viz-filter-column'
+        const empty = id === 'viz-color' || id === 'viz-temporal-series' || id === 'viz-filter-column'
           ? '<option value="">(none)</option>' : '';
         select.innerHTML = empty + columns.map((column) =>
           '<option value="' + escapeHtml(column) + '">' + escapeHtml(column) + '</option>'
@@ -499,9 +513,11 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
 
     byId('viz-result').addEventListener('change', updateColumnOptions);
     byId('viz-kind').addEventListener('change', () => {
-      const graph = byId('viz-kind').value === 'result-graph';
-      byId('graph-settings').hidden = !graph;
-      byId('plotly-settings').hidden = graph;
+      const kind = byId('viz-kind').value;
+      byId('graph-settings').hidden = kind !== 'result-graph';
+      byId('chart-settings').hidden = kind !== 'chart';
+      byId('geospatial-settings').hidden = kind !== 'geospatial';
+      byId('temporal-settings').hidden = kind !== 'temporal';
     });
 
     function currentQueryArgs() {
@@ -534,7 +550,6 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
       const filterValue = byId('viz-filter-value').value.trim();
       const filterColumn = byId('viz-filter-column').value;
       const common = {
-        format: 'graphforge.visualization/v1',
         name: byId('viz-name').value,
         kind,
         result: byId('viz-result').value,
@@ -544,34 +559,33 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
           value: filterValue,
         } : undefined,
       };
-      const numberValue = (id) => {
-        const value = Number(byId(id).value);
-        return Number.isFinite(value) ? value : undefined;
-      };
-      const spec = kind === 'result-graph' ? {
+      const args = kind === 'result-graph' ? {
         ...common,
-        graph: {
-          renderer: byId('viz-renderer').value,
-          layout: {
-            nodeRepulsion: numberValue('viz-repulsion'),
-            idealEdgeLength: numberValue('viz-edge-length'),
-            gravity: numberValue('viz-gravity'),
-            slowDown: numberValue('viz-slow-down'),
-          },
-        },
+        renderer: byId('viz-renderer').value || undefined,
+      } : kind === 'chart' ? {
+        ...common,
+        renderer: byId('viz-chart-renderer').value || undefined,
+        mark: byId('viz-chart-type').value,
+        x: byId('viz-x').value,
+        y: byId('viz-chart-type').value === 'histogram' ? undefined : byId('viz-y').value,
+        color: byId('viz-color').value || undefined,
+      } : kind === 'geospatial' ? {
+        ...common,
+        renderer: 'l7',
+        longitude: byId('viz-longitude').value,
+        latitude: byId('viz-latitude').value,
       } : {
         ...common,
-        plotly: {
-          chartType: byId('viz-chart-type').value,
-          x: byId('viz-x').value,
-          y: byId('viz-chart-type').value === 'histogram' ? undefined : byId('viz-y').value,
-          color: byId('viz-color').value || undefined,
-          title: byId('viz-name').value || undefined,
-        },
+        renderer: byId('viz-temporal-renderer').value,
+        mark: 'line',
+        timestamp: byId('viz-timestamp').value,
+        y: byId('viz-temporal-value').value,
+        color: byId('viz-temporal-series').value || undefined,
+        timezone: byId('viz-timezone').value,
+        granularity: byId('viz-granularity').value,
       };
-      runCommand('graphforge.saveProjectVisualization', {
-        name: byId('viz-name').value,
-        spec,
+      runCommand('graphforge.createProjectVisualization', {
+        ...args,
         open: true,
       });
     });
