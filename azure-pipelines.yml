@@ -1,29 +1,52 @@
 trigger: none
 pr: none
 
+parameters:
+- name: publish
+  displayName: Publish to Visual Studio Marketplace
+  type: boolean
+  default: false
+
 pool:
-  vmImage: ubuntu-latest
+  vmImage: ubuntu-24.04
 
 steps:
-- task: NodeTool@0
+- task: UseNode@1
   displayName: Use Node.js 20
   inputs:
-    versionSpec: 20.x
+    version: 20.x
 
 - script: npm ci
   displayName: Install dependencies
 
-- script: npm run lint
+- script: npm run check
   displayName: Type-check extension
+
+- script: npm run test:unit
+  displayName: Run unit tests
 
 - script: npm run compile
   displayName: Build extension
 
+- script: npx --no-install vsce package --no-dependencies --out graphforge-marketplace.vsix
+  displayName: Package Marketplace VSIX
+
 - task: AzureCLI@2
-  displayName: Publish GraphForge to Marketplace
+  displayName: Get Marketplace identity resource ID
+  condition: and(succeeded(), eq(${{ parameters.publish }}, false))
   inputs:
     azureSubscription: graphforge-marketplace-publishing
     scriptType: pscore
     scriptLocation: inlineScript
     inlineScript: |
-      npx --no-install vsce publish --azure-credential
+      az rest --method get --url https://app.vssps.visualstudio.com/_apis/profile/profiles/me --resource 499b84ac-1321-427f-aa17-267ca6975798 --query id --output tsv
+
+- task: AzureCLI@2
+  displayName: Publish GraphForge to Marketplace
+  condition: and(succeeded(), eq(${{ parameters.publish }}, true))
+  inputs:
+    azureSubscription: graphforge-marketplace-publishing
+    scriptType: pscore
+    scriptLocation: inlineScript
+    inlineScript: |
+      npx --no-install vsce publish --packagePath graphforge-marketplace.vsix --azure-credential

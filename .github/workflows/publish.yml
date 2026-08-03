@@ -1,10 +1,10 @@
-name: Publish Extension
+name: Publish Open VSX
 
-# Marketplace/Open VSX release pipeline. Runs on Blacksmith runners (repo must be
+# Open VSX release pipeline. Runs on Blacksmith runners (repo must be
 # linked at app.blacksmith.sh — Blacksmith has no separate "publishing" product;
 # linking only swaps runner infra, see docs/engineering/PUBLISHING.md).
 #
-# Publish credentials (VSCE_PAT, OVSX_PAT) are never stored as raw GitHub secrets.
+# The Open VSX credential (OVSX_PAT) is never stored as a raw GitHub secret.
 # They live in the Pulumi ESC environment curatelabs/graphforge-vscode/production.
 # The publish job authenticates to Pulumi Cloud with GitHub OIDC
 # (pulumi/auth-actions exchanges the job's id-token for a short-lived Pulumi
@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Package only; skip Marketplace/Open VSX publish"
+        description: "Package only; skip Open VSX publish"
         type: boolean
         default: true
 
@@ -75,7 +75,7 @@ jobs:
           retention-days: 30
 
   publish:
-    name: Publish to Marketplace + Open VSX
+    name: Publish to Open VSX
     needs: build
     if: github.event_name == 'push' || github.event.inputs.dry_run == 'false'
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -135,29 +135,17 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish via Pulumi ESC secrets
+      - name: Publish Open VSX via Pulumi ESC
         if: steps.esc.outputs.skip != 'true'
         env:
-          # VSCE_PAT / OVSX_PAT are injected into the job env by esc-action
-          # (from the ESC environment's environmentVariables) and masked in logs.
+          # OVSX_PAT is injected into the job environment by esc-action and masked in logs.
           VSIX_FILE: ${{ needs.build.outputs.vsix_name }}
         run: |
           set -euo pipefail
-          published=false
-          if [ -n "${VSCE_PAT:-}" ]; then
-            npx vsce publish --packagePath "$VSIX_FILE" --pat "$VSCE_PAT"
-            published=true
-          else
-            echo "::warning::VSCE_PAT not found in curatelabs/graphforge-vscode/production; skipping Marketplace publish."
-          fi
           if [ -n "${OVSX_PAT:-}" ]; then
             npx ovsx publish "$VSIX_FILE" --pat "$OVSX_PAT"
-            published=true
           else
             echo "::warning::OVSX_PAT not found in curatelabs/graphforge-vscode/production; skipping Open VSX publish."
-          fi
-          if [ "$published" = false ]; then
-            echo "::warning::No publish PATs found in the ESC environment; this run only produced the .vsix artifact."
           fi
 
       - name: Publish summary
@@ -166,5 +154,5 @@ jobs:
             echo "### Publish run"
             echo ""
             echo "- Artifact: \`${{ needs.build.outputs.vsix_name }}\`"
-            echo "- ESC secrets available: \`${{ steps.esc.outputs.skip == 'true' && 'no (package-only)' || 'yes' }}\`"
+            echo "- Open VSX credential available: \`${{ steps.esc.outputs.skip == 'true' && 'no (package-only)' || 'yes' }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

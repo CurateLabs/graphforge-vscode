@@ -35,14 +35,16 @@ this tree.
 ## One-time setup
 
 1. Ensure the `CurateLabsAI` Marketplace publisher exists
-   ([Publisher management](https://marketplace.visualstudio.com/manage)) and an Azure DevOps
-   Personal Access Token (scope: **Marketplace → Manage**) is available to CI as `VSCE_PAT` —
-   stored in the Pulumi ESC environment, not as a raw GitHub secret (see "CI publishing" below).
+   ([Publisher management](https://marketplace.visualstudio.com/manage)). Marketplace publication
+   is performed only by Azure Pipelines through the
+   `graphforge-marketplace-publishing` workload-identity service connection. Its user-assigned
+   managed identity must be a **Contributor** of the publisher.
 2. Ensure a matching Open VSX namespace (`CurateLabsAI`) and access token exist
    ([open-vsx.org namespace docs](https://github.com/eclipse/openvsx/wiki/Publishing-Extensions))
    as `OVSX_PAT`, likewise stored in the ESC environment.
-3. `npx vsce login CurateLabsAI` locally once (or rely on `VSCE_PAT` in CI — `vsce` reads it from
-   the environment, no interactive login needed in CI).
+3. Restrict the Marketplace service connection to the approved `main` release branch and add an
+   Azure DevOps approval check. These are enforced outside YAML, so a selected branch cannot
+   bypass the publishing gate.
 
 ## Package
 
@@ -59,17 +61,18 @@ publishing — it should **not** contain `dist/test/**`, `src/**`, `.map` files,
 
 `.github/workflows/ci.yml`'s `package` job already runs `npx vsce package --no-dependencies` as
 a packaging gate on every PR/push to `main` (see `TESTING.md`) and uploads the `.vsix` as a
-build artifact — it does **not** publish. A separate release workflow (tag- or
-dispatch-triggered) is expected to handle `vsce publish` / `ovsx publish` using the same
-Blacksmith runner convention; land it alongside or as a follow-up to `ci.yml`.
+build artifact — it does **not** publish. Marketplace and Open VSX publishing are deliberately
+separate: Azure Pipelines publishes the Marketplace from `main` with federated identity, while
+the GitHub release workflow publishes Open VSX from a release tag or manual dispatch.
 
 ## Publish
 
 ```bash
 # Visual Studio Marketplace
-npx vsce publish --pat "$VSCE_PAT"
-# or, from an already-built .vsix:
-npx vsce publish --packagePath graphforge-<version>.vsix --pat "$VSCE_PAT"
+# Run the Azure DevOps "CurateLabs.graphforge-vscode" pipeline from approved main.
+# The pipeline uses the graphforge-marketplace-publishing service connection.
+npx vsce package --no-dependencies --out graphforge-marketplace.vsix
+npx vsce publish --packagePath graphforge-marketplace.vsix --azure-credential
 
 # Open VSX
 npx ovsx publish graphforge-<version>.vsix --pat "$OVSX_PAT"
@@ -89,9 +92,15 @@ republishing an existing version.
   the dev tree.
 - Tag the release in git (`vX.Y.Z`) and note the published version in the tracking issue.
 
-## CI publishing (Blacksmith runners + Pulumi ESC)
+## Release publishing
 
-`.github/workflows/publish.yml` automates the package/publish steps above. It has two jobs:
+`azure-pipelines.yml` owns Visual Studio Marketplace publishing. It has no push or PR triggers;
+run it manually from approved `main` after the PR is merged and the version has been bumped. It
+defaults to a package-only bootstrap run, which prints the managed identity's Marketplace resource
+ID; add that identity as a publisher Contributor once. Select `publish: true` only for an approved
+release. The service connection's branch-control and approval checks are the authorization boundary.
+
+`.github/workflows/publish.yml` owns Open VSX publishing. It has two jobs:
 
 1. **`build`** — always runs on `push` of a `v*` tag or manual `workflow_dispatch`. Runs
    `npm ci`, `npm run check`, `npm run compile`, `npm run test:unit`, then `vsce package` and
@@ -99,7 +108,7 @@ republishing an existing version.
    any time (package-only dry run).
 2. **`publish`** — runs after `build` when triggered by a `v*` tag push, or by
    `workflow_dispatch` with `dry_run: false`. Uses the GitHub `production` environment for
-   optional required-reviewer protection.
+   optional required-reviewer protection and publishes only to Open VSX.
 
 Both jobs run on Blacksmith's `blacksmith-4vcpu-ubuntu-2404` runner label, matching the other
 CurateLabs repos (`startops-nextjs`, etc.). **Blacksmith has no separate "linked publishing"
@@ -110,23 +119,22 @@ can use Blacksmith labels; there is no additional per-repo "enable publishing" t
 If the org is not yet linked, `publish.yml` will simply queue and fail to find a runner —
 link the org first (one-time, David/admin only).
 
-### Secrets are sourced from Pulumi ESC, not raw GitHub secrets
+### Open VSX credential is sourced from Pulumi ESC, not a raw GitHub secret
 
 Following the pattern used by `startops-nextjs` (see
 `docs/engineering/pulumi-esc-vercel-clerk-convex.md` in that repo) and the
-`use-pulumi-for-platform-iac` ADR used across CurateLabs repos, the Marketplace/Open VSX PATs
-live in a Pulumi ESC environment, not as long-lived GitHub Actions secrets:
+`use-pulumi-for-platform-iac` ADR used across CurateLabs repos, the Open VSX token lives in a
+Pulumi ESC environment, not as a long-lived GitHub Actions secret:
 
 - **ESC environment:** `curatelabs/graphforge-vscode/production`
-- **Values it must define:** `VSCE_PAT` (Azure DevOps PAT, Marketplace → Manage scope) and
-  `OVSX_PAT` (Open VSX access token), each marked `fn::secret`, exported as
+- **Values it must define:** `OVSX_PAT` (Open VSX access token), marked `fn::secret`, exported as
   `environmentVariables` so opening the environment injects them into the job environment.
 - **No literal GitHub Actions secret is required.** The `publish` job authenticates to Pulumi
   Cloud with **GitHub OIDC**: the job has `permissions: id-token: write`, and
   [`pulumi/auth-actions`](https://github.com/pulumi/auth-actions) exchanges the job's
   short-lived GitHub identity token for a short-lived Pulumi Cloud organization access token.
   [`pulumi/esc-action`](https://github.com/pulumi/esc-action) then opens
-  `curatelabs/graphforge-vscode/production` and injects `VSCE_PAT`/`OVSX_PAT` into the job
+  `curatelabs/graphforge-vscode/production` and injects `OVSX_PAT` into the job
   environment (values are masked in logs). There is nothing long-lived to rotate or leak, and
   the trust can be scoped in Pulumi Cloud to this repo. The earlier iteration of this workflow
   used a long-lived `PULUMI_ACCESS_TOKEN` repo secret with `pulumi env run`; that was replaced
@@ -134,9 +142,9 @@ live in a Pulumi ESC environment, not as long-lived GitHub Actions secrets:
   exists on the repo, it is stale and should be deleted.
 
 If the OIDC trust isn't configured yet, the ESC environment doesn't exist, or it doesn't define
-`VSCE_PAT`/`OVSX_PAT`, the `publish` job logs a warning and skips the actual
-`vsce publish`/`ovsx publish` calls instead of failing — the `build` job's artifact is still
-produced. This lets the workflow merge and run safely before the one-time setup below is done.
+`OVSX_PAT`, the `publish` job logs a warning and skips the Open VSX publish instead of failing —
+the `build` job's artifact is still produced. This lets the workflow merge and run safely before
+the one-time setup below is done.
 
 ### One-time setup for David
 
@@ -157,21 +165,17 @@ produced. This lets the workflow merge and run safely before the one-time setup 
 
    ```yaml
    values:
-     vsce:
-       pat:
-         fn::secret: "<paste the Azure DevOps Marketplace PAT>"
      ovsx:
        pat:
          fn::secret: "<paste the Open VSX access token>"
      environmentVariables:
-       VSCE_PAT: ${vsce.pat}
        OVSX_PAT: ${ovsx.pat}
    ```
 
    Verify the projection locally before trusting CI with it:
 
    ```bash
-   pulumi env run curatelabs/graphforge-vscode/production -- bash -c 'test -n "$VSCE_PAT" && test -n "$OVSX_PAT" && echo ok'
+   pulumi env run curatelabs/graphforge-vscode/production -- bash -c 'test -n "$OVSX_PAT" && echo ok'
    ```
 
 3. **Register GitHub Actions as an OIDC issuer in Pulumi Cloud** (one-time, replaces minting a
@@ -198,17 +202,19 @@ produced. This lets the workflow merge and run safely before the one-time setup 
 4. **Create the `production` GitHub Environment** (Settings → Environments → New environment,
    name it `production`) so the `publish` job's `environment: production` reference resolves.
    Optionally add required reviewers or restrict deployment to the `main` branch/`v*` tags for
-   an extra approval gate before a real Marketplace/Open VSX publish.
-5. **Never** print `VSCE_PAT`/`OVSX_PAT` (or any Pulumi token) values in logs, PRs, or issues —
+   an extra approval gate before a real Open VSX publish.
+5. **Never** print `OVSX_PAT` (or any Pulumi token) values in logs, PRs, or issues —
    only secret *names* and the ESC environment *path* should ever appear in this repo.
 
 ### Triggering a release
 
-- **Automatic:** push a `vX.Y.Z` tag matching the `package.json` version. The `build` job packages,
-  and `publish` runs immediately after (gated only by the `production` environment's protection
-  rules, if any).
-- **Manual dry run:** run the `Publish Extension` workflow via `workflow_dispatch` with
+- **Open VSX automatic:** push a `vX.Y.Z` tag matching the `package.json` version. The `build`
+  job packages, and `publish` runs immediately after (gated only by the `production`
+  environment's protection rules, if any).
+- **Open VSX manual dry run:** run the `Publish Open VSX` workflow via `workflow_dispatch` with
   `dry_run: true` (the default) to exercise `check`/`compile`/`test:unit`/`vsce package` and
-  download the `.vsix` artifact without touching the Marketplace or Open VSX.
-- **Manual publish:** run `workflow_dispatch` with `dry_run: false` to publish outside of a tag
-  push (e.g. re-publishing after a failed run).
+  download the `.vsix` artifact without touching Open VSX.
+- **Marketplace manual publish:** merge the version bump, then run the Azure DevOps pipeline from
+  approved `main`. The first default run prints the managed identity resource ID for the one-time
+  Publisher Contributor assignment. For a release, select `publish: true`; the service connection
+  branch control and approval check must pass before `vsce publish --azure-credential` can run.
