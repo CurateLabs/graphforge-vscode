@@ -56,7 +56,7 @@ Emotional north star and moment beats: [`DESIGN.md`](./DESIGN.md#emotional-north
 - The extension owns module manifests, lifecycle, and presentation; the engine
   owns execution semantics for capabilities it registers.
 - Contract-driven: project format, Arrow IPC results, ontology participant layout.
-- Scaffold ships contribution points and stubs with clear extension points.
+- The extension ships stable contribution points with clear extension paths.
 
 ## Non-goals
 
@@ -66,7 +66,7 @@ Emotional north star and moment beats: [`DESIGN.md`](./DESIGN.md#emotional-north
 - Not executing side-loaded workspace JavaScript by default or from a setting
   controlled by the workspace itself. Advanced users may make an explicit,
   user-level dangerous opt-in for reviewed modules.
-- Not Marketplace publication as part of the initial scaffold.
+- Not owning or reimplementing Marketplace infrastructure inside the extension runtime.
 
 ## Success Metrics
 

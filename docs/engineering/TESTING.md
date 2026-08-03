@@ -172,7 +172,7 @@ Run the Extension Development Host in light, dark, and high-contrast themes:
    the panel and enable reduced motion to confirm the responsive/accessibility
    behavior remains intact.
 
-## Gaps (post-scaffold)
+## Remaining test gaps
 
 - Optional CI job that installs `@curatelabs/graphforge` and fails if quickstart e2e skips
 - Browser-level automation for canvas/WebGL interaction and CSP console violations

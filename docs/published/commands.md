@@ -94,7 +94,7 @@ Each verb has a plain command (walks a QuickPick chain: label, then algorithm) a
 | GraphForge: Inspect Adjacency Index | `graphforge.inspectAdjacency` |
 | GraphForge: Rebuild Adjacency Index | `graphforge.rebuildAdjacency` |
 
-## Checkpoints **(Node-only, ADR 0014)**
+## Checkpoints **(Node-only)**
 
 | Command | ID |
 |---|---|
@@ -116,7 +116,7 @@ Each verb has a plain command (walks a QuickPick chain: label, then algorithm) a
 | GraphForge: Delete Embedding Space… | `graphforge.deleteEmbeddingSpace` |
 | GraphForge: Inspect Embedding Space Freshness… | `graphforge.inspectEmbeddingSpaceFreshness` |
 
-## Write mode & transactions **(Node-only, ADR 0015)**
+## Write mode & transactions **(Node-only)**
 
 | Command | ID |
 |---|---|

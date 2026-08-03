@@ -1,6 +1,6 @@
 # Observability
 
-GraphForge Studio ships no product telemetry. Its current signals are local:
+GraphForge for VS Code ships no product telemetry. Its current signals are local:
 
 - **Status bar** — project name + ontology mode, or “binding missing”.
 - **Error toasts** — open/query/verb/load-ontology failures.

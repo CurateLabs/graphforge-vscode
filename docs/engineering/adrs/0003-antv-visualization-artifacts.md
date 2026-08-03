@@ -6,7 +6,7 @@
 
 ## Context
 
-GraphForge Studio needs higher-performance graph visualization plus first-class
+GraphForge for VS Code needs higher-performance graph visualization plus first-class
 analytical, geospatial, and temporal views. The visualization must remain a
 project-owned presentation of GraphForge results, not a hosted analytics service
 or a second graph engine. A user or coding agent must be able to inspect a saved
@@ -25,7 +25,7 @@ spec behave differently across sessions.
    - L7 for geospatial views.
 2. Cytoscape, Sigma, and Plotly remain supported alternatives. G6 WebGL is
    opt-in until GraphForge has its own Extension Development Host evidence.
-3. Studio owns visualization adapters, interaction, accessibility, and artifact
+3. The extension owns visualization adapters, interaction, accessibility, and artifact
    presentation. GraphForge Core continues to own graph storage, queries,
    algorithms, and result contracts. We will not build or fork a visualization
    engine for this work.
