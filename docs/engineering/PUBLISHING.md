@@ -42,9 +42,9 @@ this tree.
 2. Ensure a matching Open VSX namespace (`CurateLabsAI`) and access token exist
    ([open-vsx.org namespace docs](https://github.com/eclipse/openvsx/wiki/Publishing-Extensions))
    as `OVSX_PAT`, likewise stored in the ESC environment.
-3. Restrict the Marketplace service connection to the approved `main` release branch and add an
-   Azure DevOps approval check. These are enforced outside YAML, so a selected branch cannot
-   bypass the publishing gate.
+3. Restrict the Marketplace service connection to the approved `main` release branch via Azure
+   DevOps branch control. That check is enforced outside YAML, so a selected branch cannot bypass
+   the publishing gate.
 
 ### Azure DevOps workload-identity setup
 
@@ -99,11 +99,9 @@ The one-time setup sequence is:
 7. In [Marketplace publisher management](https://marketplace.visualstudio.com/manage), open
    `CurateLabsAI` → **Members**, add that Marketplace resource ID, and assign **Contributor**.
    The resulting member may render as `<tenant-id>\\<managed-identity-object-id>`.
-8. On the service connection's **Approvals and checks** tab, add:
-
-   - **Branch control** with allowed branch `refs/heads/main`.
-   - **Approvals** with David Spencer as the required approver and the instruction: “Approve only
-     reviewed Visual Studio Marketplace releases from refs/heads/main.”
+8. On the service connection's **Approvals and checks** tab, add **Branch control** with allowed
+   branch `refs/heads/main`. Do not require a manual approval click for Marketplace publishes —
+   the gate is `publish: true` on an approved `main` run plus branch control.
 
    `main` does not currently have a GitHub branch-protection rule, so **Verify branch protection**
    is intentionally off. Enable it only after GitHub protection is configured, or all releases
@@ -116,7 +114,7 @@ Azure login was working but the managed identity had not yet been added as a pub
 
 For recovery or rotation, recreate the managed identity/service-connection federation, rerun the
 default bootstrap flow to obtain the new Marketplace resource ID, replace the publisher member,
-then verify pipeline-only access, branch control, and approval checks before enabling a publish.
+then verify pipeline-only access and branch control before enabling a publish.
 
 ## Package
 
@@ -171,7 +169,7 @@ republishing an existing version.
 run it manually from approved `main` after the PR is merged and the version has been bumped. It
 defaults to a package-only bootstrap run, which prints the managed identity's Marketplace resource
 ID; add that identity as a publisher Contributor once. Select `publish: true` only for an approved
-release. The service connection's branch-control and approval checks are the authorization boundary.
+release. The service connection's branch-control check is the authorization boundary.
 
 `.github/workflows/publish.yml` owns Open VSX publishing. It has two jobs:
 
@@ -290,4 +288,4 @@ the one-time setup below is done.
 - **Marketplace manual publish:** merge the version bump, then run the Azure DevOps pipeline from
   approved `main`. The first default run prints the managed identity resource ID for the one-time
   Publisher Contributor assignment. For a release, select `publish: true`; the service connection
-  branch control and approval check must pass before `vsce publish --azure-credential` can run.
+  branch control must pass before `vsce publish --azure-credential` can run.
