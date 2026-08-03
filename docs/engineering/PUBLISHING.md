@@ -46,6 +46,78 @@ this tree.
    Azure DevOps approval check. These are enforced outside YAML, so a selected branch cannot
    bypass the publishing gate.
 
+### Azure DevOps workload-identity setup
+
+The Visual Studio Marketplace path intentionally has no PAT. It uses a user-assigned Azure
+managed identity, an Azure Resource Manager service connection, and workload identity federation.
+These names are the durable configuration contract:
+
+| Surface | Value |
+| --- | --- |
+| Azure DevOps organization/project | `CurateLabs` / `GraphForge` |
+| Azure pipeline | `CurateLabs.graphforge-vscode` |
+| Service connection | `graphforge-marketplace-publishing` |
+| Azure resource group | `graphforge-publishing` |
+| User-assigned managed identity | `graphforge-marketplace-publishing-mi` |
+| Federated credential | `graphforge-marketplace-ado` |
+| Azure region | `West US 2` |
+| Marketplace publisher | `CurateLabsAI` |
+
+Tenant, subscription, client, object, service-connection, issuer, subject, and Marketplace resource
+IDs are not secrets, but they are deliberately not copied into this public runbook. Read them from
+the live Azure and Azure DevOps resources so the runbook cannot silently drift from reality.
+
+The one-time setup sequence is:
+
+1. In Azure DevOps, open **Project settings → Service connections**, create an **Azure Resource
+   Manager** connection using **Workload Identity Federation (manual)**, name it
+   `graphforge-marketplace-publishing`, and save it as a draft. Record the generated issuer and
+   subject identifier.
+2. In Azure, create resource group `graphforge-publishing` and user-assigned managed identity
+   `graphforge-marketplace-publishing-mi` in `West US 2`. Grant the identity **Reader** at the
+   subscription scope. Reader is sufficient for the Azure CLI login; Marketplace authorization is
+   granted separately.
+3. On that managed identity, create federated credential `graphforge-marketplace-ado` using the
+   **Other** scenario. Copy the issuer and subject from the draft service connection exactly.
+4. Return to Azure DevOps and fill the service connection with the live subscription name/ID,
+   tenant ID, and managed-identity client ID. Select **Verify and save**.
+5. Open **Security** for the service connection. Keep **Open access** disabled and authorize only
+   the `CurateLabs.graphforge-vscode` YAML pipeline. Keep the service connection shared only with
+   the current `GraphForge` project.
+6. Run the Azure pipeline with its `publish` parameter left at the default `false`. It installs,
+   type-checks, tests, builds, packages a dependency-free VSIX, and runs this identity lookup:
+
+   ```bash
+   az rest --method get \
+     --url https://app.vssps.visualstudio.com/_apis/profile/profiles/me \
+     --resource 499b84ac-1321-427f-aa17-267ca6975798 \
+     --query id --output tsv
+   ```
+
+   The output is the managed identity's Visual Studio Marketplace resource ID. It is different
+   from the Azure client ID and Azure object ID.
+7. In [Marketplace publisher management](https://marketplace.visualstudio.com/manage), open
+   `CurateLabsAI` → **Members**, add that Marketplace resource ID, and assign **Contributor**.
+   The resulting member may render as `<tenant-id>\\<managed-identity-object-id>`.
+8. On the service connection's **Approvals and checks** tab, add:
+
+   - **Branch control** with allowed branch `refs/heads/main`.
+   - **Approvals** with David Spencer as the required approver and the instruction: “Approve only
+     reviewed Visual Studio Marketplace releases from refs/heads/main.”
+
+   `main` does not currently have a GitHub branch-protection rule, so **Verify branch protection**
+   is intentionally off. Enable it only after GitHub protection is configured, or all releases
+   will be blocked.
+
+The setup was proven with Azure run `20260803.2`: checks, unit tests, build, VSIX packaging, and
+identity lookup passed, while the Marketplace publish task was skipped because `publish=false`.
+An earlier `InvalidAccessException` with “The requested operation is not allowed” proved that the
+Azure login was working but the managed identity had not yet been added as a publisher Contributor.
+
+For recovery or rotation, recreate the managed identity/service-connection federation, rerun the
+default bootstrap flow to obtain the new Marketplace resource ID, replace the publisher member,
+then verify pipeline-only access, branch control, and approval checks before enabling a publish.
+
 ## Package
 
 ```bash
