@@ -87,6 +87,11 @@ export function enrichArtifactIndex(
 function latestResultPath(results: AgentResultEntry[]): string | undefined {
   let latest: { path: string; modified: number } | undefined;
   for (const result of results) {
+    // Canonical last-result aliases are exposed separately; history picks only
+    // durable timestamped result files.
+    if (path.basename(result.path) === "query-result.json") {
+      continue;
+    }
     try {
       const modified = fs.statSync(result.absolutePath).mtimeMs;
       if (!latest || modified > latest.modified) {
