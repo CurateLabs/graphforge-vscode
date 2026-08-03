@@ -5,7 +5,6 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { loadQuickstartDataset } from "../session/quickstartSample";
 import {
-  readProjectVisualization,
   scanProjectArtifacts,
 } from "../session/projectArtifacts";
 
@@ -63,10 +62,12 @@ suite("Quickstart e2e (#63)", () => {
       const query = artifacts.queryTemplates.find(
         (item) => item.name === "routes-overview.cypher",
       );
-      const graphSpec = artifacts.visualizations.find((item) => {
-        if (item.kind !== "result-graph") return false;
-        return readProjectVisualization(opened.path!, item.path).format === "graphforge.visualization/v2";
-      });
+      const graphSpec = artifacts.visualizations.find(
+        (item) =>
+          item.kind === "result-graph" &&
+          item.renderer === "cytoscape" &&
+          item.format === "graphforge.visualization/v2",
+      );
       const figureSpec = artifacts.visualizations.find((item) => item.kind === "plotly");
       const v2CompanionSpecs = artifacts.visualizations.filter((item) =>
         item.kind === "chart" || item.kind === "geospatial" || item.kind === "temporal",
@@ -82,6 +83,14 @@ suite("Quickstart e2e (#63)", () => {
         artifacts.mutations.some((item) => item.name === "seed-air-routes.cypher"),
         "sample seed mutation must be a project file",
       );
+      const notebook = await vscode.commands.executeCommand<{
+        path?: string;
+        relativePath?: string;
+        error?: string;
+      }>("graphforge.openSampleNotebook");
+      assert.ok(notebook && !notebook.error, `openSampleNotebook failed: ${JSON.stringify(notebook)}`);
+      assert.equal(notebook.relativePath, "notebooks/air-routes-analysis.ipynb");
+      assert.ok(notebook.path && fs.existsSync(notebook.path));
 
       const queryResult = await vscode.commands.executeCommand<{
         rowCount?: number;
@@ -97,8 +106,10 @@ suite("Quickstart e2e (#63)", () => {
       assert.ok(queryResult.columns?.includes("source"));
       assert.ok(queryResult.columns?.includes("dist"));
       assert.ok(queryResult.columns?.includes("region"));
-      assert.ok(queryResult.columns?.includes("longitude"));
-      assert.ok(queryResult.columns?.includes("latitude"));
+      assert.ok(queryResult.columns?.includes("sourceLongitude"));
+      assert.ok(queryResult.columns?.includes("sourceLatitude"));
+      assert.ok(queryResult.columns?.includes("targetLongitude"));
+      assert.ok(queryResult.columns?.includes("targetLatitude"));
       const persistedJson = path.join(opened.path!, "results", "query-result.json");
       const persistedMarkdown = path.join(opened.path!, "results", "query-result.md");
       assert.ok(fs.existsSync(persistedJson), "query JSON must persist inside the temp project");
@@ -193,7 +204,7 @@ suite("Quickstart e2e (#63)", () => {
       }>("graphforge.openProjectVisualization", {
         path: graphSpec.path,
         waitForReady: true,
-        timeoutMs: 30_000,
+        timeoutMs: 60_000,
       });
 
       assert.ok(graph?.panel === "opened" || graph?.panel === "updated");
@@ -207,10 +218,10 @@ suite("Quickstart e2e (#63)", () => {
       );
       assert.notEqual(graph?.styleMode, "demo");
       const rendered = graph?.lifecycle;
-      assert.ok(rendered, "G6 terminal lifecycle was not returned.");
+      assert.ok(rendered, "Cytoscape terminal lifecycle was not returned.");
       assert.notEqual(rendered.type, "graphforge/renderFailed", `${rendered.code}: ${rendered.message}`);
       assert.equal(rendered.type, "graphforge/renderReady");
-      assert.equal(rendered.renderer, "g6");
+      assert.equal(rendered.renderer, "cytoscape");
       assert.equal(rendered.backend, "canvas");
       assert.ok((rendered.nodeCount ?? 0) >= minGraphNodes);
       assert.ok((rendered.edgeCount ?? 0) >= minRoutes);

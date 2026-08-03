@@ -16,7 +16,7 @@
 
 | Moment | Beat |
 |---|---|
-| **First open** | Premium concierge — Kilo-like guided welcome; clear path in |
+| **First open** | One visible path from environment to a saved, inspectable graph view |
 | **Success** | Clear next options (never a dead end) |
 | **Failure** | Easy recovery; clear what failed |
 | **Wait** | Honest progress — what is happening, and whether it may be stuck |
@@ -49,61 +49,46 @@ Visualization creation requires explicit kind and field bindings and returns the
 saved `{ path, spec, panel? }`; agents do not need to infer state from a canvas.
 The quickstart project carries an `AGENTS.md` copy of this local contract.
 
-## Kilo-inspired workbench onboarding
+## Path-first workbench onboarding
 
 First-run, missing-runtime, and no-project states share one **Get Started** sidebar webview (not raw error dumps):
 
 - Branded header (GraphForge logo), short headline, one sentence of context
-- Checklist cards with step status (pending / current / done) and primary CTAs
-- Flow: runtime → project (**Try sample project** / Open Project) → query (done on `hasLastResult`) → **see results** (Result Graph **and** Figure CTAs; done when both have been shown this session)
-- The **Starter space** card stays visible before runtime setup, explains that the
-  sample needs a runtime, and keeps **Try sample project** directly reachable instead
-  of hiding it behind the runtime milestone.
-- After the first result, the checklist gives way to a persistent **control hub**:
-  project/sample switching, Run Query, Results Table, Result Graph, Figure,
-  Find/Inspect, and Ontology. Get Started remains a return-to-work surface rather
-  than ending as a completed checklist.
-- The control hub has **Hub / Query / Visualize** pages. Query authors save
+- One persistent journey tree: **Environment → Project → Query → Result → Visualize**
+- Exactly one current node, one primary next action, and quiet pending nodes so the
+  user sees both their current location and the entire shortest path to value.
+- Progress comes from visible evidence: an active runtime, the project `FORMAT`
+  marker, a project-owned query, saved result JSON, and saved visualization JSON.
+  The map never advances from an opaque onboarding-complete flag.
+- **Try the air-routes sample** is the secondary Project action. It follows the
+  same path and materializes its data, query, notebook, supporting result, and
+  visualization files inside the sample project.
+- The sample Query node exposes **Open Python notebook** as a parallel analyst
+  path. The notebook reads the same copied CSVs and writes standard `results/`
+  and `visualizations/` artifacts; the extension does not hide or synthesize its
+  Python work.
+- The journey remains visible after completion. Its final node reopens the saved
+  visualization rather than replacing the map with a feature dashboard.
+- **Hub / Query / Visualize** title actions remain available. Query authors save
   `.cypher` files and reopen durable result history; visualization settings are
   saved as `.gfviz.json` files referencing a project result. Renderer/backend,
   layout, bindings, filters, chart encodings, geospatial coordinates/projection,
   and temporal range/playback are project state, not hidden webview state.
 - Buttons dispatch palette commands. Sample actions name project files under
-  `queries/` and `visualizations/`; query text and chart bindings never live in
-  extension constants. Nothing auto-opens both viz surfaces in Guided mode.
+  `queries/`, `notebooks/`, and `visualizations/`; query text, notebook analysis,
+  and chart bindings never live in extension constants. Result Graph does not auto-open by default; users may opt
+  into that independent preference in Settings.
 - Semantic kinds remain distinct even though their adapters share one artifact
   policy: Result Graph consumes `GraphPayload`; charts and timelines consume
   tabular results; maps consume explicit coordinate or GeoJSON fields. Raw
   Plotly Figure JSON remains a separate preview/interchange path.
-- **Check Environment** link for full JSON diagnostics — never inline stack traces in the panel or toasts
+- **Check details** at the Environment node opens full JSON diagnostics — never inline stack traces in the panel or toasts
 - Status bar click and setup recovery (`offerSetupRecovery`) open Get Started; capabilities doc only when a project is already open
 
-Emulate Kilo Code’s **interaction patterns** (guided sidebar, cards, one primary CTA per step), not their brand colors — GraphForge keeps indigo accent (`#4c6ef5`) and the existing activity-bar icon.
-
-## Welcome + experience modes (phase 2)
-
-Kilo's "Choose how you want to work" step (REVIEW FIRST vs. HIGH AUTONOMY) maps
-onto GraphForge's own vocabulary, not agent-autonomy language:
-
-- **Guided** (default) — confirms before Initialize on an empty folder, leaves
-  project auto-detection to the analyst, and keeps Result Graph closed until
-  asked. This is the checklist experience that already existed.
-- **Autonomous** — auto-opens the first detected project on activation, skips
-  the Initialize confirmation for empty folders, and opens Result Graph after
-  every query. Still fails closed on destructive operations (non-empty-folder
-  init still confirms; the engine's write-mode/ontology-strictness guards are
-  unaffected).
-
-Persisted as `graphforge.experienceMode` (`guided` | `autonomous`, default
-`guided`). The Get Started webview gains a **Welcome** screen — logo, one
-sentence, two selectable mode cards, a single primary **Continue** — shown
-before the runtime → project → query → see-results checklist the first time a
-workspace opens the panel (detected via whether the setting has ever been
-written, not a separate flag). "Change mode" in the checklist banner reopens
-Welcome at any time; Continue re-applies the mode's settings. Status bar
-clicks and `offerSetupRecovery` still land on this same panel (Kilo's
-"Get Started / Next" promo-banner role is filled by the status bar + this
-sidebar — GraphForge has no editor-level banner surface yet).
+GraphForge uses VS Code's interaction language and its own indigo accent
+(`#4c6ef5`). There is no startup persona or experience-mode choice. Opening a
+project, initializing an empty folder, running a query, and creating a view are
+explicit actions; destructive replacement of a non-empty target still confirms.
 
 ## Settings webview (phase 3, #24)
 
@@ -113,7 +98,7 @@ It is a friendlier surface over the existing `graphforge.*` settings, not a
 second store: reads/writes go through `workspace.getConfiguration`, and the
 panel live-syncs with edits made in the VS Code Settings UI.
 
-- Categories: **Runtime** (engine choice) / **Experience** (mode, Result Graph
+- Categories: **Runtime** (engine choice) / **Visualizations** (Result Graph
   auto-open, G6/Cytoscape/Sigma and G2/Plotly creation templates) / **Advanced** (manual binding/interpreter paths). Copy is
   analyst-facing; "Project" waits until a project-scoped setting exists (no
   stub categories).
@@ -162,10 +147,11 @@ The manifest and provider contracts live in
 
 ## Figure and analytical charts (#62 / #67)
 
-New saved analytical and temporal artifacts use G2 by default. Their complete
+New saved analytical chart artifacts use Plotly by default; G2 remains an
+explicit chart option and the temporal adapter. Their complete
 encodings, transforms, filters, axes, theme, timezone, range, and playback
 configuration live in v2 JSON. The Vite-built **Figure** webview remains for raw
-Plotly JSON, v1 Plotly artifacts, and an explicit v2 Plotly choice. Agents may
+Plotly JSON, v1 Plotly artifacts, and v2 Plotly charts. Agents may
 still call `showFigure({ figure })` or `figureFromResult(...)`; this preview does
 not replace the project artifact contract. Optional Plotly limits default off.
 Dash is not the IDE host—see ADR-0001.
@@ -173,21 +159,23 @@ Dash is not the IDE host—see ADR-0001.
 ## Result Graph workbench (#65)
 
 Result Graph is a Vite-built interactive network canvas over the existing
-`GraphPayload` contract. New artifacts default to **G6 Canvas** with an explicit
-worker ForceAtlas2 configuration; Cytoscape Canvas and Sigma WebGL remain
-selectable adapters. All preserve epistemic/class colors, legends, empty states,
+`GraphPayload` contract. New artifacts default to **Cytoscape Canvas** with an
+explicit CoSE configuration; AntV G6 Canvas and Sigma WebGL remain selectable
+adapters. All preserve epistemic/class colors, legends, empty states,
 pan, zoom, fit, re-layout, and click-to-inspect. The renderer setting chooses the
 next artifact template only. Saved configuration wins on reopen, and failures
 remain visible rather than changing renderer/layout or applying graph-size magic.
-The G6 creation template keeps all graph elements but explicitly starts with
+The optional G6 creation template keeps all graph elements but explicitly starts with
 edge labels and arrowheads disabled; those optional per-edge decorations remain
 editable and saved in the artifact. Readiness requires visible Canvas output, so
 an invisible scene graph with working hit targets is reported as a render failure.
 
 ## Geospatial and temporal artifacts (#67)
 
-L7 renders geospatial artifacts from explicit longitude/latitude or GeoJSON
-bindings, CRS, projection, layers, explicit blank offline basemap, and viewport. G2 renders
+L7 renders geospatial artifacts from explicit point coordinates, source/target
+link coordinates, or GeoJSON bindings, CRS, projection, ordered point/arc/line/polygon
+layers, explicit blank offline basemap, and viewport. Link maps materialize unique
+endpoint nodes and draw their saved arc layers without guessing field names. G2 renders
 temporal artifacts from explicit timestamp, timezone, granularity, value/series,
 range, window, and playback settings. Neither surface guesses fields or reaches
 for a remote provider. Both include a textual summary and accessible filtered
@@ -197,6 +185,7 @@ commits validated JSON and Revert restores the last committed artifact.
 ## Visual notes
 
 - Activity Bar icon: simple node/edge mark (`media/graphforge.svg`).
+- Get Started is the primary surface when the GraphForge container first opens; Projects, Ontology, and Knowledge are present but initially collapsed.
 - Result Graph: bundled G6/Cytoscape/Sigma adapters under strict CSP and the stable `GraphPayload` protocol.
 - Artifact visualization panel: bundled G2/L7 chart, map, and timeline adapters with Save/Revert and accessible rows.
 - Figure panel: retained full bundled `plotly.js` (`figure.js` / `figure.css`).

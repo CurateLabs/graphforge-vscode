@@ -17,6 +17,9 @@ marker and keep generated work inside the project.
   Cytoscape/Sigma/Plotly specs remain readable and are not rewritten on open.
 - `mutations/**/*.cypher`, `.cql`, or `.json` — writes that require explicit
   confirmation before execution.
+- `notebooks/air-routes-analysis.ipynb` — a visible Python/Jupyter path over the
+  same copied CSVs. It uses the Python binding directly and publishes its table
+  and Plotly specification under `results/` and `visualizations/`.
 
 Paths may be project-relative or absolute, but GraphForge rejects paths outside
 this project.
@@ -38,7 +41,10 @@ Call VS Code commands through `vscode.commands.executeCommand`:
    reviewing the mutation file.
 
 For this sample, start with
-`queries/templates/routes-overview.cypher`, then open the saved AntV graph,
-chart, map, or timeline under `visualizations/`. The v1 files beside them prove
-the retained compatibility path. Do not infer missing fields or silently switch
-renderer, layout, projection, timezone, or data source; fix the artifact instead.
+`queries/templates/routes-overview.cypher`, then open the saved Cytoscape graph.
+For the analyst-owned Python path, open `notebooks/air-routes-analysis.ipynb`,
+select a kernel with GraphForge/pandas/Plotly, and run it top to bottom.
+The explicit G6 graph, G2 chart, L7 map, and G2 timeline remain available under
+`visualizations/`. The v1 files beside them prove the retained compatibility
+path. Do not infer missing fields or silently switch renderer, layout,
+projection, timezone, or data source; fix the artifact instead.

@@ -6,7 +6,7 @@
  * the Vite-built webview app (`webview-ui/src/settings/`), and is unit-tested
  * under plain mocha against `package.json#contributes.configuration`.
  *
- * Categories follow issue #24's scope (Runtime / Experience / Advanced —
+ * Categories follow issue #24's scope (Runtime / Visualizations / Advanced —
  * "Project" is omitted until a project-scoped setting exists; a settings
  * category with no controls would be a stub UI). Copy is analyst-facing per
  * docs/DESIGN.md Voice: no infra jargon, always name the next action.
@@ -88,39 +88,17 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     ],
   },
   {
-    id: "experience",
-    label: "Experience",
-    blurb: "How much GraphForge confirms with you vs. acts on its own.",
+    id: "visualizations",
+    label: "Visualizations",
+    blurb: "Defaults for opening and creating visualization artifacts.",
     settings: [
-      {
-        key: "experienceMode",
-        label: "Experience mode",
-        description:
-          "Guided confirms before changes and keeps the checklist visible. Autonomous auto-opens detected projects and skips routine confirmations — it still fails closed on destructive operations.",
-        type: "enum",
-        default: "guided",
-        options: [
-          {
-            value: "guided",
-            label: "Guided",
-            description:
-              "Confirms before Initialize; quieter auto-run; Result Graph stays closed until opened.",
-          },
-          {
-            value: "autonomous",
-            label: "Autonomous",
-            description:
-              "Auto-opens detected projects and the Result Graph after queries; skips routine confirmations.",
-          },
-        ],
-      },
       {
         key: "openResultGraphOnQuery",
         label: "Open Result Graph after queries",
         description:
           "Show the Result Graph panel automatically after a successful Cypher query or analyst verb.",
         type: "boolean",
-        default: true,
+        default: false,
       },
       {
         key: "resultGraph.renderer",
@@ -128,19 +106,19 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         description:
           "Choose the template used for new Result Graph artifacts. Saved artifacts keep their recorded renderer.",
         type: "enum",
-        default: "g6",
+        default: "cytoscape",
         options: [
           {
-            value: "g6",
-            label: "AntV G6 (recommended)",
-            description:
-              "Canvas rendering with an explicit worker ForceAtlas2 layout, pan, zoom, fit, and inspection.",
-          },
-          {
             value: "cytoscape",
-            label: "Cytoscape",
+            label: "Cytoscape (recommended)",
             description:
               "Canvas rendering with force layout, pan, zoom, fit, and node or edge inspection.",
+          },
+          {
+            value: "g6",
+            label: "AntV G6",
+            description:
+              "Canvas rendering with an explicit worker ForceAtlas2 layout, pan, zoom, fit, and inspection.",
           },
           {
             value: "sigma",
@@ -156,19 +134,19 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         description:
           "Choose the template used for new chart artifacts. Saved artifacts keep their recorded renderer.",
         type: "enum",
-        default: "g2",
+        default: "plotly",
         options: [
           {
-            value: "g2",
-            label: "AntV G2 (recommended)",
-            description:
-              "Declarative charts generated from explicit project-artifact field bindings.",
-          },
-          {
             value: "plotly",
-            label: "Plotly",
+            label: "Plotly (recommended)",
             description:
               "Retains the existing Plotly figure renderer and Python/JavaScript JSON interchange.",
+          },
+          {
+            value: "g2",
+            label: "AntV G2",
+            description:
+              "Declarative charts generated from explicit project-artifact field bindings.",
           },
         ],
       },

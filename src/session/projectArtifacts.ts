@@ -12,6 +12,7 @@ import {
 
 export const PROJECT_QUERIES_DIR = "queries";
 export const PROJECT_QUERY_TEMPLATES_DIR = "queries/templates";
+export const PROJECT_NOTEBOOKS_DIR = "notebooks";
 export const PROJECT_RESULTS_DIR = "results";
 export const PROJECT_VISUALIZATIONS_DIR = "visualizations";
 export const PROJECT_MUTATIONS_DIR = "mutations";
@@ -35,11 +36,14 @@ export interface ProjectResultEntry extends ProjectArtifactEntry {
 export interface ProjectVisualizationEntry extends ProjectArtifactEntry {
   kind: ProjectVisualizationSpec["kind"];
   result: string;
+  format: ProjectVisualizationSpec["format"];
+  renderer: string;
 }
 
 export interface ProjectArtifactIndex {
   queries: ProjectArtifactEntry[];
   queryTemplates: ProjectArtifactEntry[];
+  notebooks: ProjectArtifactEntry[];
   results: ProjectResultEntry[];
   visualizations: ProjectVisualizationEntry[];
   mutations: ProjectArtifactEntry[];
@@ -268,6 +272,9 @@ export function scanProjectArtifacts(projectRoot: string): ProjectArtifactIndex 
   const queryTemplates = queryFiles
     .filter(isTemplate)
     .map((file) => artifactEntry(projectRoot, file));
+  const notebooks = listFiles(path.join(projectRoot, PROJECT_NOTEBOOKS_DIR), [
+    ".ipynb",
+  ]).map((file) => artifactEntry(projectRoot, file));
   const mutations = listFiles(path.join(projectRoot, PROJECT_MUTATIONS_DIR), [
     ".cypher",
     ".cql",
@@ -275,11 +282,7 @@ export function scanProjectArtifacts(projectRoot: string): ProjectArtifactIndex 
     ".json",
   ]).map((file) => artifactEntry(projectRoot, file));
   const resultFiles = listFiles(path.join(projectRoot, PROJECT_RESULTS_DIR), [".json"]);
-  const visibleResultFiles =
-    resultFiles.length > 1
-      ? resultFiles.filter((file) => path.basename(file).toLocaleLowerCase() !== "query-result.json")
-      : resultFiles;
-  const results = visibleResultFiles.flatMap(
+  const results = resultFiles.flatMap(
     (file) => {
       try {
         const result = readProjectResult(projectRoot, file);
@@ -299,12 +302,19 @@ export function scanProjectArtifacts(projectRoot: string): ProjectArtifactIndex 
         ...artifactEntry(projectRoot, file),
         kind: spec.kind,
         result: spec.result,
+        format: spec.format,
+        renderer:
+          spec.format === VISUALIZATION_SPEC_FORMAT_V2
+            ? spec.renderer.id
+            : spec.kind === "result-graph"
+              ? spec.graph.renderer
+              : "plotly",
       }];
     } catch {
       return [];
     }
   });
-  return { queries, queryTemplates, results, visualizations, mutations };
+  return { queries, queryTemplates, notebooks, results, visualizations, mutations };
 }
 
 /** UTC timestamp used by all unnamed project artifacts: YYYYMMDD-HHMMSS-mmm. */

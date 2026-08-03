@@ -5,6 +5,7 @@
 azure-pipelines.yml
 src/**
 webview-ui/**
+scripts/**
 dist/test/**
 docs/**
 node_modules/**
@@ -21,6 +22,11 @@ node_modules/**
 *.vsix
 .cursor/**
 agent-transcripts/**
+.claude/**
 .impeccable/**
+.kilo/**
 .productfeeling/**
 .redteam/**
+design-qa.md
+onboarding-design-qa/**
+graphforge-quickstart/**

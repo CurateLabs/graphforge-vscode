@@ -134,17 +134,27 @@ export interface ChartVisualizationSpecV2 extends VisualizationV2Base {
   };
 }
 
+export interface GeospatialCoordinateBindingV2 {
+  longitudeField: string;
+  latitudeField: string;
+}
+
 export type GeospatialSourceV2 =
   | {
       type: "coordinates";
       longitudeField: string;
       latitudeField: string;
     }
+  | {
+      type: "links";
+      source: GeospatialCoordinateBindingV2;
+      target: GeospatialCoordinateBindingV2;
+    }
   | { type: "geojson"; geometryField: string };
 
 export interface GeospatialLayerV2 {
   id: string;
-  type: "point" | "line" | "polygon";
+  type: "point" | "line" | "arc" | "polygon";
   /** v2 currently supports constant layer styling only; mappings are explicit nulls. */
   colorField: null;
   sizeField: null;
@@ -223,27 +233,18 @@ export type ProjectVisualizationSpecV2 =
 
 export const DEFAULT_VISUALIZATION_POLICY = Object.freeze({
   resultGraph: Object.freeze({
-    renderer: Object.freeze({ id: "g6" as const, backend: "canvas" as const }),
+    renderer: Object.freeze({ id: "cytoscape" as const, backend: "canvas" as const }),
     layout: Object.freeze({
-      type: "force-atlas2" as const,
-      execution: "worker" as const,
+      type: "cose" as const,
+      execution: "main" as const,
       animation: false,
-      maxIteration: 500,
-      barnesHut: true,
-      prune: true,
-      preventOverlap: true,
-      dissuadeHubs: false,
-      nodeSize: 22,
-      nodeSpacing: 4,
-      kr: 5,
-      kg: 1,
-      ks: 0.1,
-      ksmax: 10,
-      tao: 0.1,
-      mode: "normal" as const,
+      maxIterations: 400,
+      gravity: 0.7,
+      nodeRepulsion: 180_000,
+      idealEdgeLength: 42,
     }),
   }),
-  chart: Object.freeze({ renderer: Object.freeze({ id: "g2" as const }) }),
+  chart: Object.freeze({ renderer: Object.freeze({ id: "plotly" as const }) }),
   geospatial: Object.freeze({ renderer: Object.freeze({ id: "l7" as const, backend: "device" as const }) }),
   temporal: Object.freeze({ renderer: Object.freeze({ id: "g2" as const }) }),
 });
@@ -262,21 +263,15 @@ export function createResultGraphSpec(
   input: TemplateBaseInput & { renderer?: GraphRendererV2["id"] },
 ): ResultGraphVisualizationSpecV2 {
   const renderer: GraphRendererV2 =
-    input.renderer === "cytoscape"
-      ? { id: "cytoscape", backend: "canvas" }
+    input.renderer === "g6"
+      ? { id: "g6", backend: "canvas" }
       : input.renderer === "sigma"
         ? { id: "sigma", backend: "webgl" }
         : { ...DEFAULT_VISUALIZATION_POLICY.resultGraph.renderer };
   const layout: GraphLayoutV2 =
     renderer.id === "cytoscape"
       ? {
-          type: "cose",
-          execution: "main",
-          animation: false,
-          maxIterations: 900,
-          gravity: 0.7,
-          nodeRepulsion: 90_000,
-          idealEdgeLength: 70,
+          ...DEFAULT_VISUALIZATION_POLICY.resultGraph.layout,
         }
       : renderer.id === "sigma"
         ? {
@@ -288,7 +283,24 @@ export function createResultGraphSpec(
             slowDown: 3,
             barnesHutOptimize: true,
           }
-        : { ...DEFAULT_VISUALIZATION_POLICY.resultGraph.layout };
+        : {
+            type: "force-atlas2",
+            execution: "worker",
+            animation: false,
+            maxIteration: 500,
+            barnesHut: true,
+            prune: true,
+            preventOverlap: true,
+            dissuadeHubs: false,
+            nodeSize: 22,
+            nodeSpacing: 4,
+            kr: 5,
+            kg: 1,
+            ks: 0.1,
+            ksmax: 10,
+            tao: 0.1,
+            mode: "normal",
+          };
   return {
     format: VISUALIZATION_SPEC_FORMAT_V2,
     name: input.name,
@@ -342,7 +354,9 @@ export function createDefaultChartSpec(
     kind: "chart",
     result: input.result,
     filters: copyFilters(input.filters),
-    renderer: input.renderer === "plotly" ? { id: "plotly" } : { ...DEFAULT_VISUALIZATION_POLICY.chart.renderer },
+    renderer: input.renderer === "g2"
+      ? { id: "g2" }
+      : { ...DEFAULT_VISUALIZATION_POLICY.chart.renderer },
     chart: {
       mark: input.mark,
       bindings: {
@@ -382,6 +396,12 @@ export function createDefaultGeospatialSpec(
   if (input.source.type === "coordinates" && input.layers.some((layer) => layer.type !== "point")) {
     throw new Error("Coordinate geospatial sources support point layers only.");
   }
+  if (input.source.type === "links" && input.layers.some((layer) => layer.type !== "point" && layer.type !== "arc")) {
+    throw new Error("Link geospatial sources support point and arc layers only.");
+  }
+  if (input.source.type === "geojson" && input.layers.some((layer) => layer.type === "arc")) {
+    throw new Error("Arc layers require an explicit link coordinate source.");
+  }
   return {
     format: VISUALIZATION_SPEC_FORMAT_V2,
     name: input.name,
@@ -390,7 +410,9 @@ export function createDefaultGeospatialSpec(
     filters: copyFilters(input.filters),
     renderer: { ...DEFAULT_VISUALIZATION_POLICY.geospatial.renderer },
     geospatial: {
-      source: { ...input.source },
+      source: input.source.type === "links"
+        ? { type: "links", source: { ...input.source.source }, target: { ...input.source.target } }
+        : { ...input.source },
       sourceCrs: input.sourceCrs,
       projection: input.projection,
       aggregation: "none",
@@ -667,6 +689,13 @@ function isGeospatialSource(value: unknown): value is GeospatialSourceV2 {
   if (value.type === "coordinates") {
     return onlyKeys(value, ["type", "longitudeField", "latitudeField"]) && isNonEmptyString(value.longitudeField) && isNonEmptyString(value.latitudeField);
   }
+  if (value.type === "links") {
+    const isCoordinateBinding = (binding: unknown): boolean =>
+      isRecord(binding) && onlyKeys(binding, ["longitudeField", "latitudeField"]) &&
+      isNonEmptyString(binding.longitudeField) && isNonEmptyString(binding.latitudeField);
+    return onlyKeys(value, ["type", "source", "target"]) &&
+      isCoordinateBinding(value.source) && isCoordinateBinding(value.target);
+  }
   return value.type === "geojson" && onlyKeys(value, ["type", "geometryField"]) && isNonEmptyString(value.geometryField);
 }
 
@@ -681,10 +710,12 @@ function isGeospatialV2(value: Record<string, unknown>): boolean {
     isGeospatialSource(value.geospatial.source) && value.geospatial.sourceCrs === "EPSG:4326" && value.geospatial.projection === "EPSG:3857" && value.geospatial.aggregation === "none" &&
     Array.isArray(value.geospatial.layers) && value.geospatial.layers.length > 0 && value.geospatial.layers.every((layer) =>
       isRecord(layer) && onlyKeys(layer, ["id", "type", "colorField", "sizeField", "shapeField", "color", "opacity", "size"]) && isNonEmptyString(layer.id) &&
-      isOneOf(layer.type, ["point", "line", "polygon"]) && isNonEmptyString(layer.color) &&
+      isOneOf(layer.type, ["point", "line", "arc", "polygon"]) && isNonEmptyString(layer.color) &&
       layer.colorField === null && layer.sizeField === null && layer.shapeField === null &&
       isFiniteNumber(layer.opacity) && layer.opacity >= 0 && layer.opacity <= 1 && isFiniteNumber(layer.size) && layer.size >= 0) &&
     (value.geospatial.source.type !== "coordinates" || value.geospatial.layers.every((layer) => isRecord(layer) && layer.type === "point")) &&
+    (value.geospatial.source.type !== "links" || value.geospatial.layers.every((layer) => isRecord(layer) && (layer.type === "point" || layer.type === "arc"))) &&
+    (value.geospatial.source.type !== "geojson" || value.geospatial.layers.every((layer) => isRecord(layer) && layer.type !== "arc")) &&
     isRecord(basemap) && basemap.type === "blank" && onlyKeys(basemap, ["type"]) &&
     isRecord(viewport) && onlyKeys(viewport, ["longitude", "latitude", "zoom", "bearing", "pitch", "bounds"]) &&
     ["longitude", "latitude", "zoom", "bearing", "pitch"].every((key) => isFiniteNumber(viewport[key])) &&

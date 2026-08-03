@@ -9,6 +9,8 @@ import type {
   FigureWebviewToHost,
   PlotlyFigure,
 } from "../../../src/webview/figureSchema";
+import { createVisualizationLoadingController } from "../shared/visualizationLoading";
+import "../shared/visualizationLoading.css";
 import "./figure.css";
 
 const vscode = acquireVsCodeApi();
@@ -20,6 +22,12 @@ function post(message: FigureWebviewToHost): void {
 const root = document.getElementById("app");
 const banner = document.getElementById("banner");
 const plotEl = document.getElementById("plot");
+const renderStatusElement = document.getElementById("render-status");
+const loading = createVisualizationLoadingController(renderStatusElement, plotEl);
+
+function nextPaintFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
 
 function showBanner(message: string | undefined): void {
   if (!banner) {
@@ -54,12 +62,19 @@ async function renderFigure(figure: PlotlyFigure): Promise<void> {
   if (!plotEl) {
     throw new Error("Plot container missing");
   }
+  const startedAt = performance.now();
   showBanner(undefined);
+  loading.update({ renderer: "plotly", phase: "prepare" });
+  await nextPaintFrame();
   const themed = themeLayout(figure);
+  loading.update({ renderer: "plotly", phase: "layout" });
+  await nextPaintFrame();
+  loading.update({ renderer: "plotly", phase: "paint" });
   await Plotly.react(plotEl, themed.data, themed.layout ?? {}, {
     responsive: true,
     displaylogo: false,
   });
+  loading.update({ renderer: "plotly", phase: "ready", durationMs: performance.now() - startedAt });
 }
 
 window.addEventListener("message", (event: MessageEvent<FigureHostToWebview>) => {
@@ -69,12 +84,14 @@ window.addEventListener("message", (event: MessageEvent<FigureHostToWebview>) =>
   }
   if (msg.type === "graphforge/figureError") {
     showBanner(msg.message);
+    loading.update({ renderer: "plotly", phase: "failed", failedAt: "prepare", message: msg.message });
     return;
   }
   if (msg.type === "graphforge/figure") {
     void renderFigure(msg.figure).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       showBanner(`Could not render figure: ${message}`);
+      loading.update({ renderer: "plotly", phase: "failed", failedAt: "paint", message });
       post({ type: "graphforge/renderFailed", message });
     });
   }

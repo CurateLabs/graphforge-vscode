@@ -22,6 +22,7 @@ import {
 const ALL_COMMAND_IDS = [
   "graphforge.openProject",
   "graphforge.openSampleProject",
+  "graphforge.openSampleNotebook",
   "graphforge.closeProject",
   "graphforge.refreshExplorer",
   "graphforge.runQuery",
@@ -44,7 +45,6 @@ const ALL_COMMAND_IDS = [
   "graphforge.getStarted.showHub",
   "graphforge.getStarted.showQuery",
   "graphforge.getStarted.showVisualize",
-  "graphforge.chooseExperienceMode",
   "graphforge.openSettings",
   "graphforge.manageModules",
   "graphforge.installModuleFromFile",
@@ -208,6 +208,9 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     assert.equal(typeof context.settings.runtime, "string");
     assert.ok(
       context.commands.some((command) => command.id === "graphforge.runProjectQuery"),
+    );
+    assert.ok(
+      context.commands.some((command) => command.id === "graphforge.openSampleNotebook"),
     );
     assert.match(context.contracts.result, /columns/);
   });
@@ -495,12 +498,6 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
   test("manageModules opens the module manager webview without prompting", async () => {
     await assert.doesNotReject(
       Promise.resolve(vscode.commands.executeCommand("graphforge.manageModules")),
-    );
-  });
-
-  test("chooseExperienceMode does not throw and does not prompt", async () => {
-    await assert.doesNotReject(
-      Promise.resolve(vscode.commands.executeCommand("graphforge.chooseExperienceMode")),
     );
   });
 

@@ -94,7 +94,8 @@ Source of truth: `package.json#contributes.commands` (85 contributed commands on
 | `graphforge.setupPythonBinding` | none | `void` | 1 QuickPick (use detected interpreter / browse / install via `uv`) | No (this *sets up* the Python runtime, #12) |
 | `graphforge.initializeProjectHere` | none | `void` | 1 QuickPick (workspace folder vs. browse), plus confirmation dialogs for non-empty/missing targets | Needs a usable runtime first (fails closed with "Setup Native Binding" / "Setup Python Binding" action buttons otherwise) |
 | `graphforge.openProject` | `pathArg?: string` | `void` | Folder picker only when `pathArg` omitted | Needs the target to already be a valid `FORMAT` project |
-| `graphforge.openSampleProject` | `{ path?, force? }` | `{ path, project, seeded }` or `{ error, code, nextAction? }` / `{ cancelled: true }` | Guided confirm when called with no args; skipped when args object passed | Needs a usable runtime; materializes project-owned air-routes data/query/viz/mutation files |
+| `graphforge.openSampleProject` | `{ path?, force? }` | `{ path, project, seeded }` or `{ error, code, nextAction? }` / `{ cancelled: true }` | Interactive replacement of a non-empty target confirms; a new target does not | Needs a usable runtime; materializes project-owned air-routes data/query/notebook/result/viz/mutation files |
+| `graphforge.openSampleNotebook` | none | `{ path, relativePath }` or `{ error, code, nextAction? }` | No | Opens the project-owned Python/Jupyter path for the active air-routes sample; never installs packages or selects a kernel |
 | `graphforge.closeProject` | none | `{ closed: true }` | None | No |
 | `graphforge.agent.getContext` | `{ projectPath?: string \| Uri }` | `graphforge.agent-context/v1` context (environment, settings, project marker, artifacts with absolute paths, last-result paths, schemas, compact command descriptors) | None | No — an optional path can be inspected without opening it |
 | `graphforge.agent.listArtifacts` | `{ projectPath?: string \| Uri }` | `graphforge.artifact-index/v1`, or structured `PROJECT_REQUIRED` | None | No runtime required; needs an active or explicit project path |
@@ -159,7 +160,6 @@ Source of truth: `package.json#contributes.commands` (85 contributed commands on
 | `graphforge.explainOntologyMode` | none | `void` (opens a markdown explainer) | None | No |
 | `graphforge.refreshExplorer` | none | `void` | None | No |
 | `graphforge.getStarted` | none | `void` (reveals the Get Started sidebar) | None | No |
-| `graphforge.chooseExperienceMode` | none | `void` (reveals the Welcome mode picker) | None | No |
 | `graphforge.openSettings` | none | `void` (opens the Settings webview) | None | No |
 | `graphforge.manageModules` | none | `void` (opens the Module Bay webview) | None | No |
 | `graphforge.refreshModules` | none | Module view-model array | None | No project required; refreshes GraphForge-owned catalog when one is open |
@@ -174,6 +174,8 @@ Source of truth: `package.json#contributes.commands` (85 contributed commands on
 
 - Project marker: `FORMAT` must contain exactly `graphforge-project/v1\n`.
 - Queries: `.cypher`/`.cql` text, or JSON `{ "cypher": "...", "params": { ... } }`.
+- Notebooks: `.ipynb` files under `notebooks/`; these run in the user's selected VS Code
+  Jupyter kernel and publish ordinary result and visualization artifacts.
 - Results: JSON `{ "columns": ["..."], "rows": [{ ... }], "rowCount": 0 }`. `results/query-result.json` is canonical latest; timestamped JSON/Markdown pairs are history.
 - Visualizations: new files use strict `graphforge.visualization/v2` with kind
   `result-graph`, `chart`, `geospatial`, or `temporal`; existing v1
@@ -226,7 +228,8 @@ flowchart TD
 5. **Create durable visualization work** — call
    `graphforge.createProjectVisualization` with the result path, semantic kind,
    and explicit bindings. It saves first and returns the complete `{ path, spec,
-   panel? }`. G6 and G2 are current creation defaults; L7 owns geospatial views;
+   panel? }`. Cytoscape and Plotly are current graph/chart creation defaults;
+   G2 remains the temporal adapter and L7 owns geospatial views;
    Cytoscape, Sigma, and Plotly remain explicit alternatives. For unsaved raw
    Plotly interchange, `figureFromResult` and `showFigure({ figure })` remain
    available, but they are not a substitute for a project artifact.

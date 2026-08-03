@@ -65,11 +65,19 @@ function validateVisualizationResultBindings(
       ...spec.chart.sort.map((item) => item.field),
     ], "Chart bindings");
   } else if (spec.kind === "geospatial") {
+    const source = spec.geospatial.source;
     requireResultFields(
       result,
-      spec.geospatial.source.type === "coordinates"
-        ? [spec.geospatial.source.longitudeField, spec.geospatial.source.latitudeField]
-        : [spec.geospatial.source.geometryField],
+      source.type === "coordinates"
+        ? [source.longitudeField, source.latitudeField]
+        : source.type === "links"
+          ? [
+              source.source.longitudeField,
+              source.source.latitudeField,
+              source.target.longitudeField,
+              source.target.latitudeField,
+            ]
+          : [source.geometryField],
       "Geospatial bindings",
     );
   } else if (spec.kind === "temporal") {
@@ -196,13 +204,13 @@ function waitForResultGraphLifecycle(
 }
 
 function configuredGraphRenderer(config: vscode.WorkspaceConfiguration): "g6" | "cytoscape" | "sigma" {
-  const renderer = config.get<unknown>("resultGraph.renderer", "g6");
+  const renderer = config.get<unknown>("resultGraph.renderer", "cytoscape");
   if (renderer === "g6" || renderer === "cytoscape" || renderer === "sigma") return renderer;
   throw new Error(`Configured result graph renderer ${String(renderer)} is invalid. Use g6, cytoscape, or sigma.`);
 }
 
 function configuredChartRenderer(config: vscode.WorkspaceConfiguration): "g2" | "plotly" {
-  const renderer = config.get<unknown>("chart.renderer", "g2");
+  const renderer = config.get<unknown>("chart.renderer", "plotly");
   if (renderer === "g2" || renderer === "plotly") return renderer;
   throw new Error(`Configured chart renderer ${String(renderer)} is invalid. Use g2 or plotly.`);
 }
@@ -235,6 +243,8 @@ interface CreateVisualizationArgs {
   color?: string;
   longitude?: string;
   latitude?: string;
+  targetLongitude?: string;
+  targetLatitude?: string;
   timestamp?: string;
   timezone?: string;
   granularity?: TemporalVisualizationSpecV2["temporal"]["granularity"];
@@ -382,27 +392,63 @@ export function registerProjectArtifacts(
             if (!args.longitude || !args.latitude) {
               throw new Error("Geospatial creation requires explicit longitude and latitude fields.");
             }
+            if (Boolean(args.targetLongitude) !== Boolean(args.targetLatitude)) {
+              throw new Error("Geospatial route creation requires both target longitude and target latitude fields.");
+            }
+            const hasTarget = Boolean(args.targetLongitude && args.targetLatitude);
             spec = createDefaultGeospatialSpec({
               name,
               result: args.result,
               filters,
-              source: {
-                type: "coordinates",
-                longitudeField: args.longitude,
-                latitudeField: args.latitude,
-              },
+              source: hasTarget
+                ? {
+                    type: "links",
+                    source: { longitudeField: args.longitude, latitudeField: args.latitude },
+                    target: {
+                      longitudeField: args.targetLongitude!,
+                      latitudeField: args.targetLatitude!,
+                    },
+                  }
+                : {
+                    type: "coordinates",
+                    longitudeField: args.longitude,
+                    latitudeField: args.latitude,
+                  },
               sourceCrs: "EPSG:4326",
               projection: "EPSG:3857",
-              layers: [{
-                id: "points",
-                type: "point",
-                colorField: null,
-                sizeField: null,
-                shapeField: null,
-                color: "#4c6ef5",
-                opacity: 0.8,
-                size: 6,
-              }],
+              layers: hasTarget
+                ? [
+                    {
+                      id: "links",
+                      type: "arc",
+                      colorField: null,
+                      sizeField: null,
+                      shapeField: null,
+                      color: "#6ea8fe",
+                      opacity: 0.18,
+                      size: 0.8,
+                    },
+                    {
+                      id: "endpoints",
+                      type: "point",
+                      colorField: null,
+                      sizeField: null,
+                      shapeField: null,
+                      color: "#f2cc60",
+                      opacity: 0.95,
+                      size: 3,
+                    },
+                  ]
+                : [{
+                    id: "points",
+                    type: "point",
+                    colorField: null,
+                    sizeField: null,
+                    shapeField: null,
+                    color: "#4c6ef5",
+                    opacity: 0.8,
+                    size: 6,
+                  }],
               viewport: { longitude: 0, latitude: 20, zoom: 1.5, bearing: 0, pitch: 0, bounds: null },
             });
           } else {

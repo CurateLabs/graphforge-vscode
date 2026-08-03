@@ -12,11 +12,18 @@ import type {
   ArtifactVisualizationSpec,
   ArtifactVisualizationWebviewToHost,
 } from "../../../src/webview/artifactVisualizationProtocol";
+import {
+  geospatialLinkEndpoints,
+  validGeospatialLinkRows,
+} from "../../../src/webview/geospatialModel";
+import { createVisualizationLoadingController } from "../shared/visualizationLoading";
+import "../shared/visualizationLoading.css";
 import "./artifactVisualization.css";
 
 const vscode = acquireVsCodeApi();
 const titleElement = document.getElementById("title");
-const metaElement = document.getElementById("meta");
+const artifactIdentityElement = document.getElementById("artifact-identity");
+const renderSummaryElement = document.getElementById("render-summary");
 const bannerElement = document.getElementById("banner");
 const container = document.getElementById("visualization");
 const saveButton = document.getElementById("save") as HTMLButtonElement | null;
@@ -28,6 +35,7 @@ const playButton = document.getElementById("play") as HTMLButtonElement | null;
 const pauseButton = document.getElementById("pause") as HTMLButtonElement | null;
 const summaryElement = document.getElementById("summary");
 const tableWrap = document.getElementById("table-wrap");
+const renderStatusElement = document.getElementById("render-status");
 
 let currentPath = "";
 let currentSpec: ArtifactVisualizationSpec | undefined;
@@ -39,6 +47,31 @@ let playbackTimer: number | undefined;
 let playbackUpdateInProgress = false;
 let viewportTimer: number | undefined;
 let renderToken = 0;
+let loadingPhase: "prepare" | "layout" | "paint" = "prepare";
+const loading = createVisualizationLoadingController(
+  renderStatusElement,
+  container,
+  renderSummaryElement,
+);
+
+function updateArtifactLoading(
+  spec: ArtifactVisualizationSpec,
+  phase: "prepare" | "layout" | "paint" | "ready" | "failed",
+  rows: TableRow[],
+  options: { durationMs?: number; message?: string; failedAt?: "prepare" | "layout" | "paint" } = {},
+): void {
+  if (phase === "prepare" || phase === "layout" || phase === "paint") loadingPhase = phase;
+  loading.update({
+    renderer: spec.renderer.id,
+    phase,
+    rowCount: rows.length,
+    ...options,
+  });
+}
+
+function nextPaintFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
 
 const MAP_SCENE_LOAD_TIMEOUT_MS = 15_000;
 const VIEWPORT_SAVE_DEBOUNCE_MS = 200;
@@ -56,8 +89,8 @@ function showBanner(message?: string): void {
 function setDirty(dirty: boolean): void {
   if (saveButton) saveButton.disabled = !dirty;
   if (revertButton) revertButton.disabled = !dirty;
-  if (metaElement && currentSpec) {
-    metaElement.textContent = `${currentSpec.kind} · ${currentSpec.renderer.id} · ${currentPath}${dirty ? " · unsaved changes" : ""}`;
+  if (artifactIdentityElement && currentSpec) {
+    artifactIdentityElement.textContent = `${currentSpec.kind} · ${currentSpec.renderer.id} · ${currentPath}${dirty ? " · unsaved changes" : ""}`;
   }
 }
 
@@ -228,6 +261,7 @@ async function renderChart(spec: ChartVisualizationSpecV2, rows: TableRow[]): Pr
   if (spec.chart.title) options.title = spec.chart.title;
   chart = new Chart({ container, autoFit: true });
   chart.options(options as never);
+  updateArtifactLoading(spec, "paint", rows);
   await chart.render();
 }
 
@@ -311,6 +345,7 @@ async function renderTemporal(spec: TemporalVisualizationSpecV2, rows: TableRow[
     animate: temporal.animation,
     ...(temporal.title ? { title: temporal.title } : {}),
   } as never);
+  updateArtifactLoading(spec, "paint", rows);
   await chart.render();
   if (rangeStart) rangeStart.value = temporal.range.start ?? "";
   if (rangeEnd) rangeEnd.value = temporal.range.end ?? "";
@@ -366,15 +401,41 @@ async function renderGeospatial(spec: GeospatialVisualizationSpecV2, rows: Table
     nextScene.once("loaded", () => {
       if (settled) return;
       try {
+        updateArtifactLoading(spec, "paint", rows);
         for (const layerSpec of spec.geospatial.layers) {
           if (layerSpec.type === "point") {
             const layer = new PointLayer({ name: layerSpec.id });
             if (spec.geospatial.source.type === "coordinates") {
               layer.source(rows, { parser: { type: "json", x: spec.geospatial.source.longitudeField, y: spec.geospatial.source.latitudeField } });
+            } else if (spec.geospatial.source.type === "links") {
+              layer.source(
+                geospatialLinkEndpoints(rows, spec.geospatial.source.source, spec.geospatial.source.target),
+                { parser: { type: "json", x: "longitude", y: "latitude" } },
+              );
             } else {
               layer.source(featureCollection(spec, rows));
             }
             layer.shape("circle").size(layerSpec.size).color(layerSpec.color).style({ opacity: layerSpec.opacity });
+            nextScene.addLayer(layer);
+          } else if (layerSpec.type === "arc") {
+            if (spec.geospatial.source.type !== "links") {
+              throw new Error("Arc layers require an explicit link coordinate source.");
+            }
+            const source = spec.geospatial.source;
+            const layer = new LineLayer({ name: layerSpec.id })
+              .source(validGeospatialLinkRows(rows, source.source, source.target), {
+                parser: {
+                  type: "json",
+                  x: source.source.longitudeField,
+                  y: source.source.latitudeField,
+                  x1: source.target.longitudeField,
+                  y1: source.target.latitudeField,
+                },
+              })
+              .shape("arc")
+              .size(layerSpec.size)
+              .color(layerSpec.color)
+              .style({ opacity: layerSpec.opacity });
             nextScene.addLayer(layer);
           } else if (layerSpec.type === "line") {
             const layer = new LineLayer({ name: layerSpec.id })
@@ -440,22 +501,32 @@ async function render(spec: ArtifactVisualizationSpec, rows: TableRow[]): Promis
   destroyRenderer();
   showBanner();
   if (temporalControls) temporalControls.hidden = spec.kind !== "temporal";
+  updateArtifactLoading(spec, "prepare", rows);
+  await nextPaintFrame();
+  if (token !== renderToken) return;
+  updateArtifactLoading(spec, "layout", rows);
   try {
     if (spec.kind === "chart") await renderChart(spec, rows);
     else if (spec.kind === "temporal") await renderTemporal(spec, rows);
     else await renderGeospatial(spec, rows);
     if (token !== renderToken) return;
+    const durationMs = performance.now() - started;
+    updateArtifactLoading(spec, "ready", rows, { durationMs });
     post({
       type: "graphforge/renderReady",
       kind: spec.kind,
       renderer: spec.renderer.id,
       rowCount: rows.length,
-      durationMs: performance.now() - started,
+      durationMs,
     });
   } catch (error) {
     if (token !== renderToken) return;
     const message = error instanceof Error ? error.message : String(error);
     showBanner(`Could not render ${spec.kind}: ${message}`);
+    updateArtifactLoading(spec, "failed", rows, {
+      failedAt: loadingPhase,
+      message: `${spec.renderer.id.toUpperCase()}_RENDER_FAILED: ${message}`,
+    });
     post({
       type: "graphforge/renderFailed",
       kind: spec.kind,

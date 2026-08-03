@@ -23,12 +23,13 @@ Requires `@vscode/test-electron` ≥ 3.1.0 on macOS (VS Code 1.110+ ships `Code`
 | Project-kind detection | `src/test/projectKind.test.ts` | `detectProjectKind` heuristic (Python/Node/ambiguous markers, both-present tie-break) and `isNotebookDominant` |
 | Python interpreter probe | `src/test/pythonProbe.test.ts` | Nonexistent interpreter, `graphforge` not importable, and (when the sibling `graphforge/.venv` dev venv exists) a real successful import + version |
 | Python bridge protocol | `src/test/pythonBridge.test.ts` | Framing/id-correlation/error-marshalling against a fake Node-run host (`fixtures/fakeGraphforgeHost.js`); `PythonEngineBackend` contract |
+| Python notebook quickstart | `src/test/quickstartSample.test.ts` plus top-to-bottom `nbclient` execution | Notebook v4 structure, clean committed outputs, shared dataset counts, native Python bulk construction/PageRank, and extension-readable result/Plotly artifacts |
 | Module manifests | `src/test/moduleManifest.test.ts` | Entrypoint parsing, malformed/unknown-capability rejection, context-key derivation, and workspace-script path-shape rejection |
 | Import module | `src/test/importData.test.ts` | CSV/JSON/JSONL parsing, format inference, Cypher identifier escaping, create/merge query shape, duplicate headers, and reserved property keys |
 | Result Graph | `src/test/resultGraphModel.test.ts`, `settingsSchema.test.ts`, `extension.test.ts` | Renderer default/options, styling helpers, selection-message resolution, live setting-switch host smoke |
 | Module activation | `src/test/extension.test.ts` | First-party module commands, exported registration API, and Module Bay command/panel activation |
 | Results ↔ graph linking | `src/test/resultTableModel.test.ts`, `quickstart.e2e.test.ts` | Identity/endpoint matching plus the air-routes-scale integration path |
-| Visualization artifacts (#67) | `src/test/projectArtifacts.test.ts`, `settingsSchema.test.ts`, `quickstartSample.test.ts` | v1 read compatibility; strict v2 validation; explicit G6/G2/L7 defaults, bindings, coordinates, and time configuration; project-owned sample artifacts |
+| Visualization artifacts (#67) | `src/test/projectArtifacts.test.ts`, `settingsSchema.test.ts`, `quickstartSample.test.ts` | v1 read compatibility; strict v2 validation; Cytoscape/Plotly graph/chart defaults; explicit G6/G2/L7 alternatives, bindings, coordinates, and time configuration; project-owned sample artifacts |
 
 ### Python runtime testing notes (#12)
 
@@ -84,10 +85,12 @@ developer console open to catch CSP and worker errors.
    transforms, filters, scales, and presentation. Exercise the retained raw
    Plotly preview and confirm it is visibly unsaved until **Save visualization**
    creates a project artifact.
-5. Create and reopen an L7 geospatial artifact with explicit longitude/latitude
-   or GeoJSON binding, CRS, projection, layer order, blank offline basemap, and
-   viewport. Disable the network and confirm there are no fetch attempts, tokens,
-   CSP violations, or hidden remote tiles.
+5. Create and reopen L7 geospatial artifacts with explicit point coordinates,
+   source/target link coordinates, or GeoJSON binding, plus CRS, projection,
+   layer order, blank offline basemap, and viewport. For the airport-route sample,
+   confirm every valid route row produces an arc and the point layer contains the
+   unique source/target endpoints. Disable the network and confirm there are no
+   fetch attempts, tokens, CSP violations, or hidden remote tiles.
 6. Create and reopen a G2 temporal artifact with explicit timestamp, timezone,
    granularity, range, aggregation, and playback. Enable G6 Timebar only through
    explicit graph bindings; a date-like column alone must not create one.
@@ -113,6 +116,12 @@ developer console open to catch CSP and worker errors.
    `GF_G6_CANVAS_RENDER_ERROR` for an asynchronous renderer exception), never
    readiness. The medium sample keeps all 579 nodes and 7,430 edges while its
    artifact explicitly disables edge labels and arrowheads.
+12. For G6, Cytoscape, Sigma, G2, L7, and Plotly, confirm the provisional output
+   stays covered while rendering. Verify the visible and screen-reader status
+   names the selected renderer and advances through its truthful data,
+   layout/composition, and paint stages without a fabricated percentage. The
+   overlay must clear only after readiness and remain as an actionable failed
+   stage when rendering fails.
 
 The required Extension Development Host job should retain bounded construction,
 reopen, schema, and lifecycle smoke coverage. Browser stress and comparative

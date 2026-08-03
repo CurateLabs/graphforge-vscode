@@ -41,6 +41,11 @@ export const AGENT_OPERATION_COMMANDS: readonly AgentCommandDescriptor[] = [
     returns: "{ path, project, seeded }",
   },
   {
+    id: "graphforge.openSampleNotebook",
+    args: "none",
+    returns: "{ path, relativePath }",
+  },
+  {
     id: "graphforge.openProject",
     args: "string | Uri | { path: string | Uri }",
     returns: "{ path, project }",
@@ -94,7 +99,6 @@ function effectiveSettings(): Record<string, unknown> {
     engineVersion: config.get("engineVersion"),
     nativeModulePath: config.get("nativeModulePath"),
     pythonInterpreterPath: config.get("pythonInterpreterPath"),
-    experienceMode: config.get("experienceMode"),
     openResultGraphOnQuery: config.get("openResultGraphOnQuery"),
     resultGraphRenderer: config.get("resultGraph.renderer"),
     chartRenderer: config.get("chart.renderer"),

@@ -27,6 +27,8 @@ suite("project artifacts", () => {
   test("writes, scans, and reloads query and visualization files", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-artifacts-"));
     fs.mkdirSync(path.join(root, "results"), { recursive: true });
+    fs.mkdirSync(path.join(root, "notebooks"), { recursive: true });
+    fs.writeFileSync(path.join(root, "notebooks", "routes.ipynb"), "{}\n");
     fs.writeFileSync(
       path.join(root, "results", "routes.json"),
       JSON.stringify({
@@ -48,6 +50,7 @@ suite("project artifacts", () => {
 
     const artifacts = scanProjectArtifacts(root);
     assert.equal(artifacts.queries[0]?.path, queryPath);
+    assert.equal(artifacts.notebooks[0]?.path, "notebooks/routes.ipynb");
     assert.equal(artifacts.results[0]?.rowCount, 1);
     assert.equal(artifacts.visualizations[0]?.path, visualizationPath);
     assert.equal(readProjectQuery(root, queryPath).cypher, "MATCH (n) RETURN n\n");
@@ -86,6 +89,19 @@ suite("project artifacts", () => {
     assert.match(
       readProjectVisualization(root, visualizationPath).name,
       /^vis-\d{8}-\d{6}-\d{3}$/,
+    );
+  });
+
+  test("keeps the canonical query result visible beside named result history", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-artifact-results-"));
+    fs.mkdirSync(path.join(root, "results"), { recursive: true });
+    const result = JSON.stringify({ columns: ["code"], rows: [{ code: "ATL" }], rowCount: 1 });
+    fs.writeFileSync(path.join(root, "results", "query-result.json"), result);
+    fs.writeFileSync(path.join(root, "results", "route-activity.json"), result);
+
+    assert.deepEqual(
+      scanProjectArtifacts(root).results.map((item) => item.path),
+      ["results/query-result.json", "results/route-activity.json"],
     );
   });
 

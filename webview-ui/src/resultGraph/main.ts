@@ -36,6 +36,8 @@ import type {
   ResultGraphLayoutWorkerResponse,
 } from "./layout.worker";
 import InlineLayoutWorker from "./layout.worker?worker&inline";
+import { createVisualizationLoadingController } from "../shared/visualizationLoading";
+import "../shared/visualizationLoading.css";
 import "./resultGraph.css";
 
 interface RendererHandle {
@@ -53,17 +55,26 @@ const rendererLabel = document.getElementById("renderer-label");
 const statusLegend = document.getElementById("status-legend");
 const typeLegend = document.getElementById("type-legend");
 const banner = document.getElementById("banner");
-const footer = document.getElementById("footer");
+const styleSummaryElement = document.getElementById("style-summary");
 const fitButton = document.getElementById("fit") as HTMLButtonElement | null;
 const relayoutButton = document.getElementById("relayout") as HTMLButtonElement | null;
 const saveArtifactButton = document.getElementById("save-artifact") as HTMLButtonElement | null;
 const revertArtifactButton = document.getElementById("revert-artifact") as HTMLButtonElement | null;
+const renderStatusElement = document.getElementById("render-status");
+const renderSummaryElement = document.getElementById("render-summary");
 
 let payload: GraphPayload | undefined;
-let rendererKind: ResultGraphRenderer = "g6";
+let rendererKind: ResultGraphRenderer = "cytoscape";
 let viewOptions: Omit<ResultGraphViewOptions, "renderer"> = {};
 let renderer: RendererHandle | undefined;
 let runtimeBanner: string | undefined;
+let renderGeneration = 0;
+
+const loading = createVisualizationLoadingController(
+  renderStatusElement,
+  graphElement,
+  renderSummaryElement,
+);
 
 function post(message: WebviewToHost): void {
   vscode.postMessage(message);
@@ -110,6 +121,20 @@ function setEmpty(message: string | undefined): void {
   }
   emptyElement.hidden = !message;
   emptyElement.textContent = message ?? "";
+}
+
+function updateGraphLoading(
+  phase: "prepare" | "layout" | "paint" | "ready" | "failed",
+  options: { durationMs?: number; message?: string; failedAt?: "prepare" | "layout" | "paint" } = {},
+): void {
+  if (!payload) return;
+  loading.update({
+    renderer: rendererKind,
+    phase,
+    nodeCount: payload.nodes.length,
+    edgeCount: payload.edges.length,
+    ...options,
+  });
 }
 
 function showBanner(): void {
@@ -179,9 +204,7 @@ function renderChrome(current: GraphPayload): void {
       : current.styleMode === "demo"
         ? "demo styling"
         : "class-only styling";
-  if (footer) {
-    footer.textContent = `${current.nodes.length} nodes · ${current.edges.length} edges · ${styleLabel}`;
-  }
+  if (styleSummaryElement) styleSummaryElement.textContent = styleLabel;
 }
 
 function initialPosition(index: number, count: number): { x: number; y: number } {
@@ -883,6 +906,9 @@ function createG6(current: GraphPayload): RendererHandle {
     }
     activeLayout?.cancel();
     const layoutStartedAt = performance.now();
+    updateGraphLoading("layout");
+    if (fitButton) fitButton.disabled = true;
+    if (relayoutButton) relayoutButton.disabled = true;
     post({
       type: "graphforge/layoutStarted",
       renderer: "g6",
@@ -926,6 +952,7 @@ function createG6(current: GraphPayload): RendererHandle {
       durationMs: performance.now() - layoutStartedAt,
     });
     if (destroyed) return;
+    updateGraphLoading("paint");
     g6.updateNodeData(
       result.positions.map((position) => ({
         id: position.id,
@@ -945,6 +972,10 @@ function createG6(current: GraphPayload): RendererHandle {
     } finally {
       renderInProgress = false;
     }
+    const durationMs = performance.now() - (hasRendered ? layoutStartedAt : renderStartedAt);
+    updateGraphLoading("ready", { durationMs });
+    if (fitButton) fitButton.disabled = false;
+    if (relayoutButton) relayoutButton.disabled = false;
     if (!hasRendered) {
       hasRendered = true;
       post({
@@ -953,7 +984,7 @@ function createG6(current: GraphPayload): RendererHandle {
         backend: options.backend,
         nodeCount: current.nodes.length,
         edgeCount: renderedEdges.length,
-        durationMs: performance.now() - renderStartedAt,
+        durationMs,
       });
     }
   };
@@ -1007,6 +1038,16 @@ function reportRenderFailure(
     message: failure.message,
   });
   runtimeBanner = `${failedRenderer === "g6" ? "AntV G6" : failedRenderer === "sigma" ? "Sigma" : "Cytoscape"} failed during ${failure.phase} (${failure.code}): ${failure.message}`;
+  if (failure.phase !== "interaction") {
+    updateGraphLoading("failed", {
+      failedAt: failure.phase === "layout"
+        ? "layout"
+        : failure.phase === "render"
+          ? "paint"
+          : "prepare",
+      message: `${failure.code}: ${failure.message}`,
+    });
+  }
   showBanner();
 }
 
@@ -1026,9 +1067,12 @@ function destroyRenderer(): void {
 }
 
 function render(): void {
+  const generation = ++renderGeneration;
   destroyRenderer();
   runtimeBanner = undefined;
   if (!payload) {
+    loading.hide();
+    if (renderSummaryElement) renderSummaryElement.textContent = "Waiting for graph data";
     setEmpty("Waiting for graph data…");
     if (fitButton) fitButton.disabled = true;
     if (relayoutButton) relayoutButton.disabled = true;
@@ -1036,6 +1080,8 @@ function render(): void {
   }
   renderChrome(payload);
   if (payload.nodes.length === 0) {
+    loading.hide();
+    if (renderSummaryElement) renderSummaryElement.textContent = "No graph nodes";
     setEmpty("This result has no graph nodes.");
     if (fitButton) fitButton.disabled = true;
     if (relayoutButton) relayoutButton.disabled = true;
@@ -1043,47 +1089,74 @@ function render(): void {
   }
 
   setEmpty(undefined);
-  if (fitButton) fitButton.disabled = false;
-  if (relayoutButton) relayoutButton.disabled = false;
-  try {
-    const renderStartedAt = performance.now();
-    post({
-      type: "graphforge/renderStarted",
-      renderer: rendererKind,
-      backend: viewOptions.backend,
-      layout: viewOptions.layout?.type,
-      nodeCount: payload.nodes.length,
-      edgeCount: payload.edges.length,
-    });
-    const nextRenderer =
-      rendererKind === "g6"
-        ? createG6(payload)
-        : rendererKind === "sigma"
-          ? createSigma(payload)
-          : createCytoscape(payload);
-    bindRenderer(nextRenderer);
-    if (rendererKind !== "g6") {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (renderer === nextRenderer) {
-            post({
-              type: "graphforge/renderReady",
-              renderer: rendererKind,
-              backend: viewOptions.backend,
-              nodeCount: payload?.nodes.length ?? 0,
-              edgeCount: payload?.edges.length ?? 0,
-              durationMs: performance.now() - renderStartedAt,
-            });
-          }
-        });
+  if (fitButton) fitButton.disabled = true;
+  if (relayoutButton) relayoutButton.disabled = true;
+  updateGraphLoading("prepare");
+  requestAnimationFrame(() => {
+    if (generation !== renderGeneration || !payload) return;
+    try {
+      const renderStartedAt = performance.now();
+      post({
+        type: "graphforge/renderStarted",
+        renderer: rendererKind,
+        backend: viewOptions.backend,
+        layout: viewOptions.layout?.type,
+        nodeCount: payload.nodes.length,
+        edgeCount: payload.edges.length,
       });
+      if (rendererKind !== "g6") updateGraphLoading("layout");
+      const nextRenderer =
+        rendererKind === "g6"
+          ? createG6(payload)
+          : rendererKind === "sigma"
+            ? createSigma(payload)
+            : createCytoscape(payload);
+      bindRenderer(nextRenderer);
+      if (rendererKind !== "g6") {
+        requestAnimationFrame(() => {
+          if (renderer !== nextRenderer) return;
+          updateGraphLoading("paint");
+          requestAnimationFrame(() => {
+            if (renderer === nextRenderer) {
+              const durationMs = performance.now() - renderStartedAt;
+              updateGraphLoading("ready", { durationMs });
+              if (fitButton) fitButton.disabled = false;
+              if (relayoutButton) relayoutButton.disabled = false;
+              post({
+                type: "graphforge/renderReady",
+                renderer: rendererKind,
+                backend: viewOptions.backend,
+                nodeCount: payload?.nodes.length ?? 0,
+                edgeCount: payload?.edges.length ?? 0,
+                durationMs,
+              });
+            }
+          });
+        });
+      }
+    } catch (error) {
+      reportRenderFailure(rendererKind, error);
+      setEmpty("The selected graph renderer could not be started.");
+      if (fitButton) fitButton.disabled = true;
+      if (relayoutButton) relayoutButton.disabled = true;
     }
-  } catch (error) {
-    reportRenderFailure(rendererKind, error);
-    setEmpty("The selected graph renderer could not be started.");
-    if (fitButton) fitButton.disabled = true;
-    if (relayoutButton) relayoutButton.disabled = true;
-  }
+  });
+}
+
+let renderFrame: number | undefined;
+
+/**
+ * Renderer, options, and graph data are separate protocol messages so existing
+ * hosts remain compatible. Coalesce a burst into one render; rebuilding a dense
+ * Cytoscape graph for each message can otherwise run the same force layout
+ * several times before the first frame is painted.
+ */
+function scheduleRender(): void {
+  if (renderFrame !== undefined) return;
+  renderFrame = requestAnimationFrame(() => {
+    renderFrame = undefined;
+    render();
+  });
 }
 
 function runRendererAction(
@@ -1105,15 +1178,48 @@ function runRendererAction(
   }
 }
 
+function relayoutCurrentRenderer(): void {
+  if (!renderer || !payload) return;
+  if (rendererKind === "g6") {
+    renderer.relayout();
+    return;
+  }
+  const activeRenderer = renderer;
+  const startedAt = performance.now();
+  updateGraphLoading("layout");
+  if (fitButton) fitButton.disabled = true;
+  if (relayoutButton) relayoutButton.disabled = true;
+  requestAnimationFrame(() => {
+    if (renderer !== activeRenderer) return;
+    try {
+      activeRenderer.relayout();
+      updateGraphLoading("paint");
+      requestAnimationFrame(() => {
+        if (renderer !== activeRenderer) return;
+        updateGraphLoading("ready", { durationMs: performance.now() - startedAt });
+        if (fitButton) fitButton.disabled = false;
+        if (relayoutButton) relayoutButton.disabled = false;
+      });
+    } catch (error) {
+      reportRenderFailure(
+        rendererKind,
+        new ResultGraphRuntimeError(
+          "layout",
+          "GF_RESULT_GRAPH_LAYOUT_FAILED",
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    }
+  });
+}
+
 fitButton?.addEventListener("click", () => {
   runRendererAction("interaction", "GF_RESULT_GRAPH_FIT_FAILED", () =>
     renderer?.fit(),
   );
 });
 relayoutButton?.addEventListener("click", () => {
-  runRendererAction("layout", "GF_RESULT_GRAPH_LAYOUT_FAILED", () =>
-    renderer?.relayout(),
-  );
+  relayoutCurrentRenderer();
 });
 saveArtifactButton?.addEventListener("click", () => {
   post({ type: "graphforge/saveGraphArtifactState" });
@@ -1129,12 +1235,12 @@ window.addEventListener("message", (event: MessageEvent<HostToWebview>) => {
   }
   if (message.type === "graphforge/graph") {
     payload = message.payload;
-    render();
+    scheduleRender();
   } else if (message.type === "graphforge/graphRenderer") {
     const changed = rendererKind !== message.renderer;
     rendererKind = message.renderer;
-    if (changed || !renderer) {
-      render();
+    if (message.render !== false && (changed || !renderer)) {
+      scheduleRender();
     }
   } else if (message.type === "graphforge/graphOptions") {
     viewOptions = {
@@ -1145,8 +1251,8 @@ window.addEventListener("message", (event: MessageEvent<HostToWebview>) => {
       labels: message.labels,
       timebar: message.timebar,
     };
-    if (renderer && payload) {
-      render();
+    if (message.render !== false && renderer && payload) {
+      scheduleRender();
     }
   } else if (message.type === "graphforge/graphArtifactState") {
     if (saveArtifactButton) {

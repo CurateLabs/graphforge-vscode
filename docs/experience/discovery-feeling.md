@@ -39,7 +39,7 @@ clear results and clear failures, and without anxiety from silent hangs.
 
 | Moment | Beat | Design implication |
 |---|---|---|
-| First open | Premium hotel concierge; Kilo-like guided welcome | Get Started / Welcome: one composition, one primary CTA, guided checklist |
+| First open | Calm, legible route to the first useful result | One persistent journey tree, one current node, and one primary next action |
 | Success | Clear next options | After query/verb: name what happened and offer obvious follow-ons |
 | Failure | Easy recovery | Structured next action; never raw dumps as the only path |
 | Wait | Understand real wait vs stuck | Progress / liveness signal for long analysis; never silent spin |
@@ -67,7 +67,7 @@ plus a recent-projects list for resume, without burying either.
 
 ## Intended behavior (feeling contract)
 
-- First-run, missing-runtime, and no-project share one guided Get Started surface
+- First-run, missing-runtime, and no-project share one path-first Get Started surface
   (see [`../DESIGN.md`](../DESIGN.md)).
 - Success and failure paths always surface a next option.
 - Long-running engine work should communicate activity (and ideally allow cancel /

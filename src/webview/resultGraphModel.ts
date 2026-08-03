@@ -171,10 +171,10 @@ export type GraphSelection = EntityInspectSelection & {
 };
 
 export function normalizeResultGraphRenderer(value: unknown): ResultGraphRenderer {
-  if (value === "cytoscape" || value === "sigma") {
+  if (value === "g6" || value === "sigma") {
     return value;
   }
-  return "g6";
+  return "cytoscape";
 }
 
 function defined<T extends object>(value: T | undefined): Partial<T> {

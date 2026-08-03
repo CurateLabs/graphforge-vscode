@@ -31,7 +31,6 @@ export function registerVisualizationCommands(
           labels: args?.labels,
           timebar: args?.timebar,
         });
-        if (shown.status !== "cancelled") session.markSeenResultGraph();
         return {
           panel: shown.status,
           nodes: payload.nodes.length,

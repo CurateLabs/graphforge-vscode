@@ -74,7 +74,7 @@ async function runFind(
   const hasUuids = result.columns.some((c) => /uuid/i.test(c));
   const openGraph = vscode.workspace
     .getConfiguration("graphforge")
-    .get<boolean>("openResultGraphOnQuery", true);
+    .get<boolean>("openResultGraphOnQuery", false);
   if (hasUuids && openGraph && result.rowCount > 0) {
     const commands = await vscode.commands.getCommands(true);
     if (commands.includes("graphforge.showResultGraph")) {

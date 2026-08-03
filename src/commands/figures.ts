@@ -81,7 +81,6 @@ export function registerFigures(
           return { error: checked.error, code: checked.code };
         }
         const shown = presentFigure(context.extensionUri, checked.figure);
-        session.markSeenFigure();
         return shown;
       },
     ),
@@ -135,7 +134,6 @@ export function registerFigures(
         }
 
         const shown = presentFigure(context.extensionUri, checked.figure);
-        session.markSeenFigure();
         return { ...shown, chartType: chartType! };
       },
     ),

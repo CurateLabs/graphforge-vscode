@@ -116,17 +116,6 @@ export function registerOpenViews(
       showGetStartedPage("visualize"),
     ),
 
-    vscode.commands.registerCommand("graphforge.chooseExperienceMode", async () => {
-      const provider = GetStartedViewProvider.instance;
-      if (provider) {
-        await revealGetStarted(provider);
-        provider.showWelcome();
-      } else {
-        await vscode.commands.executeCommand("workbench.view.extension.graphforge");
-        await vscode.commands.executeCommand("graphforge.getStarted.focus");
-      }
-    }),
-
     vscode.commands.registerCommand("graphforge.statusBarClick", async () => {
       if (session.project && session.activeRuntime) {
         await vscode.commands.executeCommand("graphforge.showCapabilities");

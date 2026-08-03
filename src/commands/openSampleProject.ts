@@ -1,10 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import {
-  defaultsForExperienceMode,
-  resolveExperienceMode,
-} from "../session/experienceMode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { isGraphForgeProject } from "../session/projectDetector";
 import {
@@ -12,6 +8,8 @@ import {
   isQuickstartSamplePath,
   loadQuickstartDataset,
   materializeQuickstartProjectFiles,
+  QUICKSTART_NOTEBOOK_REL,
+  repairQuickstartProjectFiles,
   resolveQuickstartPath,
   writeQuickstartMarker,
 } from "../session/quickstartSample";
@@ -35,14 +33,13 @@ export type OpenSampleProjectSuccess = {
   path: string;
   project: DetectedProject;
   seeded: boolean;
+  repaired?: string[];
 };
 
-function guidedConfirm(): boolean {
-  const mode = resolveExperienceMode(
-    vscode.workspace.getConfiguration("graphforge").get("experienceMode"),
-  );
-  return defaultsForExperienceMode(mode).confirmBeforeInitialize;
-}
+export type OpenSampleNotebookSuccess = {
+  path: string;
+  relativePath: string;
+};
 
 /** Palette/Get Started calls with no args; agents/e2e pass an object. */
 function isInteractiveCall(args?: OpenSampleProjectArgs): boolean {
@@ -57,6 +54,7 @@ async function openExisting(
   session: GraphForgeSession,
   target: string,
   refreshTrees: () => void,
+  repaired: string[] = [],
 ): Promise<CommandOutcome<OpenSampleProjectSuccess>> {
   try {
     await session.openProject(target);
@@ -67,7 +65,12 @@ async function openExisting(
       return { error, code: "SAMPLE_OPEN_FAILED" };
     }
     refreshTrees();
-    return { path: target, project, seeded: false };
+    return {
+      path: target,
+      project,
+      seeded: false,
+      ...(repaired.length > 0 ? { repaired } : {}),
+    };
   } catch (err) {
     return reportEngineError("open sample project failed", err);
   }
@@ -79,6 +82,43 @@ export function registerOpenSampleProject(
   refreshTrees: () => void,
 ): void {
   context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "graphforge.openSampleNotebook",
+      async (): Promise<CommandOutcome<OpenSampleNotebookSuccess>> => {
+        const projectRoot = session.project?.rootPath;
+        if (!projectRoot || !isQuickstartSamplePath(projectRoot)) {
+          const error = "Open the air-routes sample before opening its Python notebook.";
+          presentError(`GraphForge: ${error}`);
+          return {
+            error,
+            code: "SAMPLE_NOTEBOOK_PROJECT_REQUIRED",
+            nextAction: "graphforge.openSampleProject",
+          };
+        }
+        const notebookPath = path.join(projectRoot, QUICKSTART_NOTEBOOK_REL);
+        if (!fs.existsSync(notebookPath)) {
+          try {
+            const dataset = loadQuickstartDataset(context.extensionPath);
+            repairQuickstartProjectFiles(projectRoot, dataset);
+          } catch (err) {
+            const error = err instanceof Error ? err.message : String(err);
+            presentError(`GraphForge: ${error}`);
+            return { error, code: "SAMPLE_NOTEBOOK_MISSING", nextAction: "graphforge.openSampleProject" };
+          }
+        }
+        if (!fs.existsSync(notebookPath)) {
+          const error = `Sample notebook is unavailable: ${QUICKSTART_NOTEBOOK_REL}`;
+          presentError(`GraphForge: ${error}`);
+          return { error, code: "SAMPLE_NOTEBOOK_MISSING", nextAction: "graphforge.openSampleProject" };
+        }
+        await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(notebookPath));
+        return {
+          path: notebookPath,
+          relativePath: QUICKSTART_NOTEBOOK_REL.split(path.sep).join("/"),
+        };
+      },
+    ),
+
     vscode.commands.registerCommand("graphforge.closeProject", async () => {
       await session.closeProject();
       refreshTrees();
@@ -116,11 +156,17 @@ export function registerOpenSampleProject(
         const isSample = isProject && isQuickstartSamplePath(target);
 
         if (isSample && !force) {
-          return openExisting(session, target, refreshTrees);
+          try {
+            const dataset = loadQuickstartDataset(context.extensionPath);
+            const repaired = repairQuickstartProjectFiles(target, dataset);
+            return openExisting(session, target, refreshTrees, repaired);
+          } catch (err) {
+            return reportEngineError("repair sample project failed", err);
+          }
         }
 
         if (exists && !isEmptyDir(target)) {
-          if (interactive && guidedConfirm()) {
+          if (interactive) {
             const choice = await vscode.window.showWarningMessage(
               isSample
                 ? `Recreate the GraphForge quickstart sample at ${target}? Existing data will be replaced.`
@@ -142,15 +188,6 @@ export function registerOpenSampleProject(
             };
           }
           rmrf(target);
-        } else if (interactive && guidedConfirm()) {
-          const choice = await vscode.window.showInformationMessage(
-            `Create the GraphForge quickstart sample at ${target}?`,
-            { modal: true },
-            "Create sample",
-          );
-          if (choice !== "Create sample") {
-            return { cancelled: true };
-          }
         }
 
         let dataset: ReturnType<typeof loadQuickstartDataset>;

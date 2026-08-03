@@ -97,9 +97,6 @@ export class GraphForgeSession implements vscode.Disposable {
   private algorithmContractsCache: AlgorithmDescriptorContract[] | undefined;
   private lastResult: QueryResult | undefined;
   private lastResultTitle: string | undefined;
-  /** Get Started “see results” step — shown this session (#63). */
-  private seenResultGraph = false;
-  private seenFigure = false;
   private beliefPolicy: BeliefPolicySettings = { ...DEFAULT_BELIEF_POLICY };
   private readonly statusBar: vscode.StatusBarItem;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
@@ -181,8 +178,6 @@ export class GraphForgeSession implements vscode.Disposable {
     this.algorithmContractsCache = undefined;
     this.lastResult = undefined;
     this.lastResultTitle = undefined;
-    this.seenResultGraph = false;
-    this.seenFigure = false;
     this.activeWriteMode = "single_writer";
     if (previous) {
       void previous.dispose();
@@ -241,8 +236,6 @@ export class GraphForgeSession implements vscode.Disposable {
     this.algorithmContractsCache = undefined;
     this.lastResult = undefined;
     this.lastResultTitle = undefined;
-    this.seenResultGraph = false;
-    this.seenFigure = false;
     // Write-mode coordination is Node-only; a Python-backed session always
     // reports the (only meaningful) single-writer default.
     this.activeWriteMode = backend.runtime === "node" ? writeMode : "single_writer";
@@ -1350,28 +1343,6 @@ export class GraphForgeSession implements vscode.Disposable {
     this.lastResult = undefined;
     this.lastResultTitle = undefined;
     this._onDidChange.fire();
-  }
-
-  get hasSeenResultGraph(): boolean {
-    return this.seenResultGraph;
-  }
-
-  get hasSeenFigure(): boolean {
-    return this.seenFigure;
-  }
-
-  markSeenResultGraph(): void {
-    if (!this.seenResultGraph) {
-      this.seenResultGraph = true;
-      this._onDidChange.fire();
-    }
-  }
-
-  markSeenFigure(): void {
-    if (!this.seenFigure) {
-      this.seenFigure = true;
-      this._onDidChange.fire();
-    }
   }
 
   private rememberResult(result: QueryResult, title?: string): void {
