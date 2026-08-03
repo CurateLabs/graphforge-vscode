@@ -2,7 +2,7 @@
 
 All notable changes to the GraphForge VS Code extension are documented here.
 
-## 0.1.1
+## 0.1.2
 
 ### Added
 
@@ -10,6 +10,7 @@ All notable changes to the GraphForge VS Code extension are documented here.
 - First-class AntV G6, G2, and L7 renderer options alongside Cytoscape, Sigma, and Plotly.
 - Renderer-specific loading and lifecycle status for graph, chart, map, and timeline views.
 - A Python/Jupyter air-routes analysis that uses the same sample data as the extension.
+- Package-content verification before VSIX packaging.
 
 ### Changed
 
@@ -23,3 +24,9 @@ All notable changes to the GraphForge VS Code extension are documented here.
 - Reopening saved visualizations now follows the same renderer-ready lifecycle as the E2E path.
 - Existing quickstart projects repair newly added sample artifacts without replacing user results.
 - Release packages exclude private review, agent, and local-workspace material.
+
+## 0.1.1
+
+### Changed
+
+- Initial Marketplace and Open VSX release of GraphForge for VS Code.
