@@ -126,10 +126,10 @@ npm run check && npm run compile && npm test
 npx vsce package
 ```
 
-This produces `graphforge-<version>.vsix` at the repo root. Sanity-check its contents before
-publishing — it should **not** contain `dist/test/**`, `src/**`, `.map` files, or `docs/**`
-(enforced by `.vscodeignore`; re-check that file if the package looks bloated or the runtime
-`dist/extension.js` is missing).
+This produces `graphforge-<version>.vsix` at the repo root. Run `npm run verify:package` before
+packaging. It fails when required runtime or sample files are absent, the file/size budget is
+exceeded, or the package contains test, source, documentation, agent, or internal review paths.
+Never publish a locally built VSIX that has not passed this contract.
 
 `.github/workflows/ci.yml`'s `package` job already runs `npx vsce package --no-dependencies` as
 a packaging gate on every PR/push to `main` (see `TESTING.md`) and uploads the `.vsix` as a
@@ -162,7 +162,8 @@ republishing an existing version.
 - Install from the Marketplace into a clean VS Code profile and run
   `GraphForge: Check Environment` to confirm activation and command registration work outside
   the dev tree.
-- Tag the release in git (`vX.Y.Z`) and note the published version in the tracking issue.
+- Confirm the release tag (`vX.Y.Z`) resolves to the same commit that passed CI, and note the
+  verified published version in the tracking issue.
 
 ## Release publishing
 
@@ -175,9 +176,9 @@ release. The service connection's branch-control and approval checks are the aut
 `.github/workflows/publish.yml` owns Open VSX publishing. It has two jobs:
 
 1. **`build`** — always runs on `push` of a `v*` tag or manual `workflow_dispatch`. Runs
-   `npm ci`, `npm run check`, `npm run compile`, `npm run test:unit`, then `vsce package` and
-   uploads the `.vsix` as a workflow artifact. This job needs no secrets and is safe to run at
-   any time (package-only dry run).
+   `npm ci`, type checks, unit tests, the Extension Development Host suite, the package-content
+   contract, and `vsce package`, then uploads the `.vsix` as a workflow artifact. A tag build
+   also fails unless `vX.Y.Z` exactly matches `package.json`.
 2. **`publish`** — runs after `build` when triggered by a `v*` tag push, or by
    `workflow_dispatch` with `dry_run: false`. Uses the GitHub `production` environment for
    optional required-reviewer protection and publishes only to Open VSX.

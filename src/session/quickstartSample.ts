@@ -14,6 +14,12 @@ export const QUICKSTART_MARKER_BYTES = "graphforge-quickstart/air-routes-us/v1\n
 /** Default folder name when materializing under a workspace root. */
 export const QUICKSTART_DIR_NAME = "graphforge-quickstart";
 
+/** Analyst-facing Python path copied into every air-routes sample project. */
+export const QUICKSTART_NOTEBOOK_REL = path.join(
+  "notebooks",
+  "air-routes-analysis.ipynb",
+);
+
 /** Relative path (from the extension root) to the vendored Apache-2.0 sample. */
 export const QUICKSTART_DATASET_REL = path.join("media", "samples", "air-routes");
 
@@ -200,6 +206,39 @@ export function materializeQuickstartProjectFiles(
   fs.mkdirSync(path.dirname(seedMutationPath), { recursive: true });
   fs.writeFileSync(seedMutationPath, `${buildQuickstartSeedCypher(dataset)}\n`, "utf8");
   return { seedMutationPath: relativeProjectPath(projectRoot, seedMutationPath) };
+}
+
+/**
+ * Add sample-owned files introduced by a newer extension without replacing
+ * project results or anything the analyst has already changed.
+ */
+export function repairQuickstartProjectFiles(
+  projectRoot: string,
+  dataset: QuickstartDataset,
+): string[] {
+  const templateRoot = path.join(dataset.datasetDir, "project");
+  if (!fs.existsSync(templateRoot)) {
+    throw new Error(`Quickstart project template missing under ${templateRoot}.`);
+  }
+
+  const added: string[] = [];
+  const copyMissing = (sourceDir: string, targetDir: string): void => {
+    for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+      const source = path.join(sourceDir, entry.name);
+      const target = path.join(targetDir, entry.name);
+      if (entry.isDirectory()) {
+        fs.mkdirSync(target, { recursive: true });
+        copyMissing(source, target);
+      } else if (entry.isFile() && !fs.existsSync(target)) {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.copyFileSync(source, target);
+        added.push(relativeProjectPath(projectRoot, target));
+      }
+    }
+  };
+
+  copyMissing(templateRoot, projectRoot);
+  return added.sort();
 }
 
 export function isQuickstartSamplePath(rootPath: string): boolean {

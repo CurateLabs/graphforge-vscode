@@ -63,12 +63,12 @@ suite("Result Graph model (#65)", () => {
     assert.equal(layoutRuns, 1);
   });
 
-  test("normalizes renderer setting with G6 as the creation default", () => {
+  test("normalizes renderer setting with Cytoscape as the creation default", () => {
     assert.equal(normalizeResultGraphRenderer("g6"), "g6");
     assert.equal(normalizeResultGraphRenderer("sigma"), "sigma");
     assert.equal(normalizeResultGraphRenderer("cytoscape"), "cytoscape");
-    assert.equal(normalizeResultGraphRenderer("unknown"), "g6");
-    assert.equal(normalizeResultGraphRenderer(undefined), "g6");
+    assert.equal(normalizeResultGraphRenderer("unknown"), "cytoscape");
+    assert.equal(normalizeResultGraphRenderer(undefined), "cytoscape");
   });
 
   test("materializes explicit G6 Canvas and ForceAtlas2 worker options", () => {

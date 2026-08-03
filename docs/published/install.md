@@ -9,27 +9,39 @@
 
 1. Install **GraphForge** from the Marketplace (or Open VSX).
 2. Open a folder, then click the **GraphForge icon** in the Activity Bar. The **Get Started**
-   view opens with a short setup checklist.
-3. First visit only: the **Welcome** step asks how you want to work — **Guided** (confirms
-   before changes) or **Autonomous** (fewer prompts, auto-opens results). Pick one and press
-   **Continue**; change it anytime via **Change mode** or `graphforge.experienceMode`.
-4. Work down the checklist:
-   1. **Set up a runtime** (Node or Python — the primary button matches your workspace).
-   2. **Open or create a project** — or choose **Try sample project** to seed the vendored
+   view opens with one persistent journey map. There is no startup-mode choice.
+3. Follow the highlighted node in **Environment → Project → Query → Result → Visualize**:
+   1. **Environment** — set up Node or Python; the primary button matches your workspace.
+   2. **Project** — open a project, or choose **Try the air-routes sample** to seed the vendored
       **US air-routes** graph (586 airports / 7,430 routes, Apache-2.0) via
       `graphforge.openSampleProject`.
-   3. **Run your first query** — with the sample open, use **Run sample query**.
+   3. **Query** — with the sample open, use **Run sample query**.
       This executes `queries/templates/routes-overview.cypher` from the project.
-   4. **See your results** — open the saved G6 route network, G2 route-distance
-      chart, L7 airport map, or G2 route-activity timeline. The sample also keeps
-      v1 Cytoscape and Plotly artifacts so compatibility is visible rather than
-      hidden. Views stay closed until you ask.
-5. Use the Hub, Query, and Visualize icons in the Get Started view title. Query
+      Or choose **Open Python notebook** for the parallel VS Code Jupyter path.
+      It reads the same copied CSVs with pandas, builds the graph through
+      GraphForge Python, runs PageRank, renders Plotly, and publishes normal
+      result and visualization artifacts back into the project.
+   4. **Result** — inspect the saved result in the Results panel.
+   5. **Visualize** — open the saved Cytoscape route network. An explicit G6
+      network, G2 route-distance chart, L7 airport map with arcs between airport
+      nodes, and G2 route-activity timeline remain available. The sample also
+      keeps v1 Cytoscape and Plotly artifacts so compatibility is visible rather
+      than hidden. Result Graph stays closed until you ask unless you opt into
+      auto-open.
+4. The journey remains visible after completion and names the project files that
+   prove each step. Use the Hub, Query, and Visualize icons in the Get Started view title. Query
    saves reusable templates under `queries/templates/` and reopens timestamped
    `results/` history. Visualize saves strict v2 graph, chart, geospatial, or
    temporal settings under `visualizations/`; existing v1 artifacts remain
-   readable. G6/G2 settings affect newly created files only because resolved
+   readable. Renderer settings affect newly created files only because resolved
    behavior is stored in each artifact.
+
+The notebook is `notebooks/air-routes-analysis.ipynb`. Select a kernel that can
+import `graphforge`, `pyarrow`, `pandas`, and `plotly`; its setup instructions
+use `uv` and never install packages automatically. After execution,
+**GraphForge: Refresh Explorer** reveals
+`results/python-airport-pagerank.json` and
+`visualizations/python-airport-pagerank.gfviz.json`.
 
 Prefer the Command Palette, or driving the extension from an agent? Run
 **`GraphForge: Check Environment`** — it reports both runtimes' full diagnostics and always

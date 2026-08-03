@@ -13,7 +13,6 @@ import { registerProjectArtifacts } from "./commands/projectArtifacts";
 import { registerRunCli } from "./commands/runCli";
 import { registerSetup } from "./commands/setup";
 import { registerSetupPython } from "./commands/setupPython";
-import { defaultsForExperienceMode, resolveExperienceMode } from "./session/experienceMode";
 import { GraphForgeSession } from "./session/graphForgeSession";
 import { resetNativeCache } from "./session/nativeLoader";
 import { resetPythonCache } from "./session/pythonLoader";
@@ -121,30 +120,6 @@ export async function activate(
 
   void projects.refresh();
 
-  const autoOpenFirstProject = async () => {
-    if (session.project || !(await session.hasUsableRuntime())) {
-      return;
-    }
-    // Guided (the default) leaves project selection to the analyst — Get
-    // Started still surfaces "Open Project" as the next step. Autonomous
-    // mode auto-detects, matching the Welcome card's promise.
-    const mode = resolveExperienceMode(
-      vscode.workspace.getConfiguration("graphforge").get("experienceMode"),
-    );
-    if (!defaultsForExperienceMode(mode).autoOpenDetectedProject) {
-      return;
-    }
-    const found = await session.listProjects();
-    if (found[0]) {
-      try {
-        await session.openProject(found[0].rootPath);
-        refreshTrees();
-      } catch {
-        // leave unbound; user can open manually
-      }
-    }
-  };
-
   // Re-resolve the active runtime without a window reload after Setup UX
   // changes `nativeModulePath` (#2) or `pythonInterpreterPath`/`runtime`
   // (#12): Run Query becomes available without a full reload when possible.
@@ -153,7 +128,6 @@ export async function activate(
       if (event.affectsConfiguration("graphforge.nativeModulePath")) {
         resetNativeCache();
         session.notifyChanged();
-        void autoOpenFirstProject();
       }
       if (
         event.affectsConfiguration("graphforge.pythonInterpreterPath") ||
@@ -161,7 +135,6 @@ export async function activate(
       ) {
         resetPythonCache();
         session.notifyChanged();
-        void autoOpenFirstProject();
       }
     }),
   );
@@ -195,7 +168,6 @@ export async function activate(
     }
   })();
 
-  void autoOpenFirstProject();
   void modules.refreshGraphForgeCatalog();
   setTimeout(() => void modules.activatePending(), 0);
 }

@@ -10,6 +10,8 @@ import {
   materializeQuickstartProjectFiles,
   QUICKSTART_DIR_NAME,
   QUICKSTART_MARKER_BYTES,
+  QUICKSTART_NOTEBOOK_REL,
+  repairQuickstartProjectFiles,
   resolveQuickstartPath,
   writeQuickstartMarker,
 } from "../session/quickstartSample";
@@ -79,7 +81,7 @@ suite("quickstartSample (#63)", () => {
     assert.equal((seed.match(/:Airport \{/g) ?? []).length, dataset.airports.length);
   });
 
-  test("materializes the six-version visualization matrix and supporting data", () => {
+  test("materializes the explicit visualization matrix and supporting data", () => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-files-"));
     const dataset = loadQuickstartDataset(REPO_ROOT);
     const { seedMutationPath } = materializeQuickstartProjectFiles(projectRoot, dataset);
@@ -87,9 +89,33 @@ suite("quickstartSample (#63)", () => {
 
     assert.equal(artifacts.queries.length, 0);
     assert.equal(artifacts.queryTemplates.length, 1);
-    assert.equal(artifacts.visualizations.length, 6);
+    assert.deepEqual(
+      artifacts.notebooks.map((item) => item.path),
+      [QUICKSTART_NOTEBOOK_REL.split(path.sep).join("/")],
+    );
+    assert.equal(artifacts.visualizations.length, 7);
     assert.ok(artifacts.mutations.some((item) => item.path === seedMutationPath));
     assert.ok(fs.existsSync(path.join(projectRoot, "data", "air-routes", "airports.csv")));
+    const notebookPath = path.join(projectRoot, QUICKSTART_NOTEBOOK_REL);
+    assert.ok(fs.existsSync(notebookPath));
+    const notebook = JSON.parse(fs.readFileSync(notebookPath, "utf8")) as {
+      nbformat?: number;
+      cells?: Array<{ cell_type?: string; source?: string[]; outputs?: unknown[] }>;
+      metadata?: { kernelspec?: { language?: string } };
+    };
+    assert.equal(notebook.nbformat, 4);
+    assert.equal(notebook.metadata?.kernelspec?.language, "python");
+    const cellIds = notebook.cells?.map((cell) => (cell as { id?: string }).id);
+    assert.ok(cellIds?.every((id) => typeof id === "string" && id.length > 0));
+    assert.equal(new Set(cellIds).size, cellIds?.length);
+    assert.ok(notebook.cells?.some((cell) =>
+      cell.cell_type === "code" && cell.source?.join("").includes("forge.rank(")
+    ));
+    assert.ok(notebook.cells?.some((cell) =>
+      cell.cell_type === "code" &&
+      cell.source?.join("").includes("results/python-airport-pagerank.json")
+    ));
+    assert.ok(notebook.cells?.every((cell) => (cell.outputs?.length ?? 0) === 0));
     assert.match(
       fs.readFileSync(path.join(projectRoot, "AGENTS.md"), "utf8"),
       /graphforge\.agent\.getContext/,
@@ -99,8 +125,10 @@ suite("quickstartSample (#63)", () => {
     assert.ok(query.cypher.includes("AS source"));
     assert.ok(query.cypher.includes("AS dist"));
     assert.ok(query.cypher.includes("AS region"));
-    assert.ok(query.cypher.includes("AS longitude"));
-    assert.ok(query.cypher.includes("AS latitude"));
+    assert.ok(query.cypher.includes("AS sourceLongitude"));
+    assert.ok(query.cypher.includes("AS sourceLatitude"));
+    assert.ok(query.cypher.includes("AS targetLongitude"));
+    assert.ok(query.cypher.includes("AS targetLatitude"));
 
     const legacyFiles = ["route-distances.gfviz.json", "routes-network.gfviz.json"];
     for (const fileName of legacyFiles) {
@@ -124,16 +152,16 @@ suite("quickstartSample (#63)", () => {
       readProjectVisualization(projectRoot, item.path),
     );
     const v2 = specs.filter((spec) => spec.format === VISUALIZATION_SPEC_FORMAT_V2);
-    assert.equal(v2.length, 4);
-    const rendererByKind = new Map(
-      v2.map((spec) => [spec.kind, spec.renderer.id]),
-    );
-    assert.deepEqual(Object.fromEntries(rendererByKind), {
-      geospatial: "l7",
-      temporal: "g2",
-      chart: "g2",
-      "result-graph": "g6",
-    });
+    assert.equal(v2.length, 5);
+    assert.ok(v2.some((spec) => spec.kind === "result-graph" && spec.renderer.id === "cytoscape"));
+    assert.ok(v2.some((spec) => spec.kind === "result-graph" && spec.renderer.id === "g6"));
+    assert.ok(v2.some((spec) => spec.kind === "chart" && spec.renderer.id === "g2"));
+    assert.ok(v2.some((spec) => spec.kind === "geospatial" && spec.renderer.id === "l7"));
+    assert.ok(v2.some((spec) => spec.kind === "temporal" && spec.renderer.id === "g2"));
+    const geospatial = v2.find((spec) => spec.kind === "geospatial");
+    assert.ok(geospatial);
+    assert.equal(geospatial.geospatial.source.type, "links");
+    assert.deepEqual(geospatial.geospatial.layers.map((layer) => layer.type), ["arc", "point"]);
 
     const plotly = specs.find((spec) => spec.kind === "plotly");
     assert.ok(plotly);
@@ -149,5 +177,29 @@ suite("quickstartSample (#63)", () => {
     assert.equal(temporal.result, "results/route-activity.json");
     assert.equal(temporal.temporal.timestampField, "timestamp");
     assert.equal(temporal.temporal.timezone, "UTC");
+  });
+
+  test("repairs newly shipped sample artifacts without overwriting analyst files", () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-repair-"));
+    const dataset = loadQuickstartDataset(REPO_ROOT);
+    fs.mkdirSync(path.join(projectRoot, "visualizations"), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, "visualizations", "routes-network.gfviz.json"),
+      "analyst-owned\n",
+    );
+
+    const repaired = repairQuickstartProjectFiles(projectRoot, dataset);
+
+    assert.ok(repaired.includes(QUICKSTART_NOTEBOOK_REL.split(path.sep).join("/")));
+    assert.ok(repaired.includes("visualizations/airports-map.gfviz.json"));
+    assert.ok(repaired.includes("visualizations/routes-network-default.gfviz.json"));
+    assert.equal(
+      fs.readFileSync(
+        path.join(projectRoot, "visualizations", "routes-network.gfviz.json"),
+        "utf8",
+      ),
+      "analyst-owned\n",
+    );
+    assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), []);
   });
 });

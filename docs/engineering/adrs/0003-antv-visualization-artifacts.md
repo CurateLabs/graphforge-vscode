@@ -1,6 +1,6 @@
 # ADR-0003: AntV defaults with explicit visualization artifacts
 
-- Status: Accepted
+- Status: Superseded by ADR-0004
 - Date: 2026-08-02
 - Issue: [#67](https://github.com/CurateLabs/graphforge-vscode/issues/67)
 
@@ -45,7 +45,9 @@ spec behave differently across sessions.
 8. Specs are JSON data, never executable configuration. Webviews bundle assets
    locally under the existing strict CSP: no CDN, remote data fetch, arbitrary
    callbacks, credentials in artifacts, `eval`, or broader implicit network
-   access. The initial L7 adapter uses an explicit blank offline background.
+   access. The L7 adapter uses an explicit blank offline background and accepts
+   saved point coordinates, source/target link coordinates, or GeoJSON. Link
+   sources render only their explicitly ordered point and arc layers.
 9. Canvas/WebGL output is accompanied by keyboard-reachable controls, a textual
    summary, and an accessible data/entity surface. Reduced-motion preferences
    apply to layout animation, temporal playback, and transitions.

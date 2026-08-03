@@ -15,10 +15,12 @@ suite("agent context", () => {
     fs.writeFileSync(path.join(root, "FORMAT"), PROJECT_FORMAT_BYTES);
     fs.writeFileSync(path.join(root, "AGENTS.md"), "# Agent contract\n");
     fs.mkdirSync(path.join(root, "queries"), { recursive: true });
+    fs.mkdirSync(path.join(root, "notebooks"), { recursive: true });
     fs.mkdirSync(path.join(root, "results"), { recursive: true });
     fs.mkdirSync(path.join(root, "visualizations"), { recursive: true });
     fs.mkdirSync(path.join(root, "mutations"), { recursive: true });
     fs.writeFileSync(path.join(root, "queries", "nodes.cypher"), "MATCH (n) RETURN n\n");
+    fs.writeFileSync(path.join(root, "notebooks", "analysis.ipynb"), "{}\n");
     fs.writeFileSync(
       path.join(root, "results", "query-result.json"),
       JSON.stringify({ columns: ["id"], rows: [{ id: "a" }], rowCount: 1 }),
@@ -42,6 +44,12 @@ suite("agent context", () => {
     assert.equal(
       context.artifacts.queries[0]?.absolutePath,
       path.join(root, "queries", "nodes.cypher"),
+    );
+    assert.equal(context.directories.notebooks, path.join(root, "notebooks"));
+    assert.equal(context.artifacts.notebooks[0]?.path, "notebooks/analysis.ipynb");
+    assert.equal(
+      context.artifacts.notebooks[0]?.absolutePath,
+      path.join(root, "notebooks", "analysis.ipynb"),
     );
     assert.equal(context.lastResult.inMemory, true);
     assert.equal(context.lastResult.exists, true);

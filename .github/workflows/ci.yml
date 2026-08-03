@@ -35,6 +35,9 @@ jobs:
       - name: Compile
         run: npm run compile
 
+      - name: Verify VSIX contents
+        run: npm run verify:package
+
       - name: Unit tests
         run: npm run test:unit
 

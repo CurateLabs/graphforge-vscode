@@ -239,7 +239,7 @@ async function runVerb(
 
     const openGraph = vscode.workspace
       .getConfiguration("graphforge")
-      .get<boolean>("openResultGraphOnQuery", true);
+      .get<boolean>("openResultGraphOnQuery", false);
     if (openGraph) {
       const commands = await vscode.commands.getCommands(true);
       if (commands.includes("graphforge.showResultGraph")) {

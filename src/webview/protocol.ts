@@ -1,4 +1,3 @@
-import type { ExperienceMode } from "../session/experienceMode";
 import type {
   EpistemicStatus,
   GraphEdge,
@@ -37,9 +36,10 @@ export interface ResultEntityLink {
 
 export type HostToWebview =
   | { type: "graphforge/graph"; payload: GraphPayload }
-  | { type: "graphforge/graphRenderer"; renderer: ResultGraphRenderer }
+  | { type: "graphforge/graphRenderer"; renderer: ResultGraphRenderer; render?: boolean }
   | {
       type: "graphforge/graphOptions";
+      render?: boolean;
       backend?: ResultGraphBackend;
       source?: ResultGraphOptionSource;
       layout?: ResultGraphLayoutOptions;
@@ -81,6 +81,11 @@ export type HostToWebview =
       projectName?: string;
     }
   | { type: "graphforge/getStarted"; state: GetStartedState }
+  | {
+      type: "graphforge/commandStatus";
+      status: "success" | "error";
+      message: string;
+    }
   | { type: "graphforge/status"; message: string };
 
 export type WebviewToHost =
@@ -146,8 +151,7 @@ export type WebviewToHost =
   | { type: "graphforge/requestReload" }
   | { type: "graphforge/explainMode" }
   | { type: "graphforge/openOntologyFile" }
-  | { type: "graphforge/runCommand"; command: string; args?: unknown[] }
-  | { type: "graphforge/selectExperienceMode"; mode: ExperienceMode };
+  | { type: "graphforge/runCommand"; command: string; args?: unknown[] };
 
 /** Extension-owned palette (product has no official colors). */
 export const EPISTEMIC_COLORS: Record<EpistemicStatus, string> = {

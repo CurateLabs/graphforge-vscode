@@ -5,5 +5,7 @@ RETURN a.code AS source,
        a.code AS label,
        r.dist AS dist,
        a.region AS region,
-       a.lon AS longitude,
-       a.lat AS latitude
+       a.lon AS sourceLongitude,
+       a.lat AS sourceLatitude,
+       b.lon AS targetLongitude,
+       b.lat AS targetLatitude

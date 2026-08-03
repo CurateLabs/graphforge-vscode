@@ -17,6 +17,14 @@ Visualization adapters report the same phases to the extension host:
 - `renderReady` when the view can be used
 - `renderFailed` with a stable error code and next action
 
+The same lifecycle is visible inside the panel. A full-canvas render-pipeline
+surface covers provisional output until it is usable and names renderer-specific
+work: G6/Sigma ForceAtlas2, Cytoscape CoSE, G2 mark composition, L7 scene/layer
+construction, or Plotly trace composition. It shows data, layout/composition,
+and paint as discrete states because the adapters do not expose trustworthy
+percentage completion. Screen readers receive the same status through a polite
+live region; a stable summary remains after readiness.
+
 A diagnostic may include only:
 
 - visualization format and semantic kind;

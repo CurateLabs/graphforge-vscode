@@ -250,6 +250,7 @@ export class ArtifactVisualizationPanel {
     const assetsRoot = vscode.Uri.joinPath(extensionUri, "dist", "webview-ui");
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, "artifactVisualization.js"));
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, "artifactVisualization.css"));
+    const loadingStyleUri = webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, "visualizationLoading.css"));
     const nonce = crypto.randomBytes(16).toString("base64url");
     const csp = [
       `default-src 'none'`,
@@ -267,12 +268,13 @@ export class ArtifactVisualizationPanel {
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="${styleUri}" />
+  <link rel="stylesheet" href="${loadingStyleUri}" />
   <title>GraphForge Visualization</title>
 </head>
 <body>
   <main id="app">
     <header>
-      <div><h1 id="title">Visualization</h1><div class="meta" id="meta"></div></div>
+      <div><h1 id="title">Visualization</h1><div class="meta"><span id="artifact-identity"></span><span aria-hidden="true"> · </span><span id="render-summary">Waiting for visualization data</span></div></div>
       <div class="toolbar" role="toolbar" aria-label="Artifact controls">
         <button id="save" type="button" disabled>Save</button>
         <button id="revert" type="button" disabled>Revert</button>
@@ -281,6 +283,14 @@ export class ArtifactVisualizationPanel {
     <section id="visualization-wrap" aria-label="Visualization">
       <p id="banner" role="alert" aria-live="assertive" hidden></p>
       <div id="visualization"></div>
+      <div class="render-status" id="render-status" role="status" aria-live="polite" aria-atomic="true" hidden>
+        <div class="render-status-card">
+          <p class="render-status-renderer" data-render-status-renderer>Render pipeline</p>
+          <h2 class="render-status-title" data-render-status-title>Preparing visualization</h2>
+          <p class="render-status-detail" data-render-status-detail></p>
+          <ol class="render-status-steps" data-render-status-steps aria-label="Render stages"></ol>
+        </div>
+      </div>
     </section>
     <section id="temporal-controls" hidden aria-label="Temporal range controls">
       <label>Range start (ISO 8601)<input id="range-start" type="text" placeholder="2026-01-01T00:00:00Z" /></label>

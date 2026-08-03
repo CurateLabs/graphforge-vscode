@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   PROJECT_MUTATIONS_DIR,
+  PROJECT_NOTEBOOKS_DIR,
   PROJECT_QUERIES_DIR,
   PROJECT_QUERY_TEMPLATES_DIR,
   PROJECT_RESULTS_DIR,
@@ -25,6 +26,7 @@ export type AgentVisualizationEntry = ProjectVisualizationEntry & { absolutePath
 export interface AgentArtifactIndex {
   queries: AgentArtifactEntry[];
   queryTemplates: AgentArtifactEntry[];
+  notebooks: AgentArtifactEntry[];
   results: AgentResultEntry[];
   visualizations: AgentVisualizationEntry[];
   mutations: AgentArtifactEntry[];
@@ -43,6 +45,7 @@ export interface AgentProjectContext {
   directories: {
     queries: string;
     queryTemplates: string;
+    notebooks: string;
     results: string;
     visualizations: string;
     mutations: string;
@@ -74,6 +77,7 @@ export function enrichArtifactIndex(
   return {
     queries: withAbsolutePath(projectRoot, index.queries),
     queryTemplates: withAbsolutePath(projectRoot, index.queryTemplates),
+    notebooks: withAbsolutePath(projectRoot, index.notebooks),
     results: withAbsolutePath(projectRoot, index.results),
     visualizations: withAbsolutePath(projectRoot, index.visualizations),
     mutations: withAbsolutePath(projectRoot, index.mutations),
@@ -83,6 +87,11 @@ export function enrichArtifactIndex(
 function latestResultPath(results: AgentResultEntry[]): string | undefined {
   let latest: { path: string; modified: number } | undefined;
   for (const result of results) {
+    // Canonical last-result aliases are exposed separately; history picks only
+    // durable timestamped result files.
+    if (path.basename(result.path) === "query-result.json") {
+      continue;
+    }
     try {
       const modified = fs.statSync(result.absolutePath).mtimeMs;
       if (!latest || modified > latest.modified) {
@@ -119,6 +128,7 @@ export function buildAgentProjectContext(
     directories: {
       queries: path.join(rootPath, PROJECT_QUERIES_DIR),
       queryTemplates: path.join(rootPath, PROJECT_QUERY_TEMPLATES_DIR),
+      notebooks: path.join(rootPath, PROJECT_NOTEBOOKS_DIR),
       results: path.join(rootPath, PROJECT_RESULTS_DIR),
       visualizations: path.join(rootPath, PROJECT_VISUALIZATIONS_DIR),
       mutations: path.join(rootPath, PROJECT_MUTATIONS_DIR),

@@ -14,17 +14,17 @@ Every command below is a stable ID, invokable from the Command Palette or progra
 | GraphForge: Setup Python Binding | `graphforge.setupPythonBinding` | QuickPick to select a Python interpreter or install `graphforge` via `uv`. |
 | GraphForge: Initialize Project Here | `graphforge.initializeProjectHere` | Creates a new GraphForge project in an empty/uninitialized folder. |
 | GraphForge: Open Project | `graphforge.openProject` | Opens an existing `FORMAT`-marked project; accepts a string, URI, or `{ path }`. |
-| GraphForge: Open Sample Project | `graphforge.openSampleProject` | Seeds/opens the vendored US air-routes sample (Apache-2.0); accepts `{ path?, force? }` (skips Guided confirms when args are passed). |
+| GraphForge: Open Sample Project | `graphforge.openSampleProject` | Seeds/opens the vendored US air-routes sample (Apache-2.0); accepts `{ path?, force? }`. Interactive replacement of a non-empty target confirms; creating a new sample does not add a redundant prompt. |
+| GraphForge: Open Sample Python Notebook | `graphforge.openSampleNotebook` | Opens the active air-routes sample's project-owned VS Code Jupyter notebook and returns `{ path, relativePath }`. It never installs packages or selects a kernel. |
 | GraphForge: Close Project | `graphforge.closeProject` | Detaches the active engine session (no folder delete). |
 | GraphForge: Refresh Explorer | `graphforge.refreshExplorer` | Refreshes the Projects Activity Bar view. |
 | GraphForge: Agent: Get Context | `graphforge.agent.getContext` | Returns `graphforge.agent-context/v1` runtime, settings, marker, artifact, last-result, schema, and command JSON; optional `{ projectPath }`. |
 | GraphForge: Agent: List Project Artifacts | `graphforge.agent.listArtifacts` | Returns `graphforge.artifact-index/v1` with project-relative and absolute paths; optional `{ projectPath }`. |
-| GraphForge: Get Started | `graphforge.getStarted` | Opens the Get Started sidebar: guided milestones before the first result, then a persistent project/query/results control hub. |
+| GraphForge: Get Started | `graphforge.getStarted` | Opens the persistent Environment → Project → Query → Result → Visualize journey map. |
 | GraphForge: Show Hub | `graphforge.getStarted.showHub` | Opens Get Started's Hub surface; contributed as its Home title action. |
 | GraphForge: Show Query | `graphforge.getStarted.showQuery` | Opens Get Started's Query surface; contributed as its Search title action. |
 | GraphForge: Show Visualize | `graphforge.getStarted.showVisualize` | Opens Get Started's Visualize surface; contributed as its Graph title action. |
-| GraphForge: Choose Experience Mode… | `graphforge.chooseExperienceMode` | Reopens the Welcome mode picker (Guided/Autonomous) inside Get Started. |
-| GraphForge: Settings | `graphforge.openSettings` | Opens the GraphForge Settings panel — left-nav categories (Runtime / Experience / Advanced) over the same `graphforge.*` settings as the VS Code Settings UI. |
+| GraphForge: Settings | `graphforge.openSettings` | Opens the GraphForge Settings panel — left-nav categories (Runtime / Visualizations / Advanced) over the same `graphforge.*` settings as the VS Code Settings UI. |
 
 ## Modules and import
 
@@ -62,7 +62,8 @@ bindings object. In addition to the project-relative `result` and `kind`, pass:
 - `result-graph`: optional `renderer` (`g6`, `cytoscape`, or `sigma`).
 - `chart`: `mark`, `x`, `y` (except histogram), optional `color`, and optional
   `renderer` (`g2` or `plotly`).
-- `geospatial`: `longitude` and `latitude` (L7 is persisted).
+- `geospatial`: source `longitude` and `latitude`; optional `targetLongitude`
+  and `targetLatitude` persist an L7 link source with arc and endpoint layers.
 - `temporal`: `timestamp` and `y`, plus optional `color`, `mark`, IANA
   `timezone`, and `granularity` (G2 is persisted).
 
@@ -168,9 +169,10 @@ UUIDv7 (engine-enforced). Knowledge-ledger writes require the Node runtime.
 | GraphForge: Figure from Result… | `graphforge.figureFromResult` |
 | GraphForge: Show Project Capabilities | `graphforge.showCapabilities` |
 
-New Result Graph artifacts default to G6 Canvas; G2 is the default for new chart
-and temporal artifacts, and L7 renders geospatial artifacts. Cytoscape, Sigma,
-and Plotly remain explicit adapters. `graphforge.resultGraph.renderer` and
+New Result Graph artifacts default to Cytoscape Canvas; Plotly is the default
+for new analytical chart artifacts. G2 remains an explicit chart option and the
+temporal adapter, while L7 renders geospatial artifacts. G6 and Sigma remain
+explicit graph adapters. `graphforge.resultGraph.renderer` and
 `graphforge.chart.renderer` choose creation templates only: a saved artifact
 continues using its recorded renderer, backend, layout, bindings, and filters.
 Unsupported configuration reports a failure and never silently switches adapter.

@@ -16,7 +16,8 @@ through the module lifecycle; modifying or deleting their packaged code is outsi
 module contract and breaks the extension installation.
 
 The first-party Visualize module owns Studio's visualization command and adapter
-surface. New artifacts default to G6/G2/L7 through one extension-owned registry;
+surface. New graph/chart artifacts default to Cytoscape/Plotly through one
+extension-owned registry; G2 remains the temporal adapter and L7 the geospatial adapter;
 Cytoscape, Sigma, and Plotly remain adapters. This module reads v1 compatibility
 files and creates strict v2 project artifacts. It does not move layout, chart,
 map, or temporal presentation into GraphForge Core: Core continues to return

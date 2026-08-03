@@ -98,6 +98,7 @@ export class FigurePanel {
     const assetsRoot = vscode.Uri.joinPath(extensionUri, "dist", "webview-ui");
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, "figure.js"));
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, "figure.css"));
+    const loadingStyleUri = webview.asWebviewUri(vscode.Uri.joinPath(assetsRoot, "visualizationLoading.css"));
     const nonce = crypto.randomBytes(16).toString("base64url");
     // Settings-strict CSP: scripts by nonce only; styles from extension +
     // bundled plotly.css (no CDN, no style-src unsafe-inline as success path).
@@ -117,12 +118,21 @@ export class FigurePanel {
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="${styleUri}" />
+  <link rel="stylesheet" href="${loadingStyleUri}" />
   <title>GraphForge Figure</title>
 </head>
 <body>
   <div id="app">
     <p id="banner" hidden role="alert" aria-live="assertive"></p>
     <div id="plot"></div>
+    <div class="render-status" id="render-status" role="status" aria-live="polite" aria-atomic="true" hidden>
+      <div class="render-status-card">
+        <p class="render-status-renderer" data-render-status-renderer>Render pipeline</p>
+        <h1 class="render-status-title" data-render-status-title>Preparing figure</h1>
+        <p class="render-status-detail" data-render-status-detail></p>
+        <ol class="render-status-steps" data-render-status-steps aria-label="Render stages"></ol>
+      </div>
+    </div>
   </div>
   <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>

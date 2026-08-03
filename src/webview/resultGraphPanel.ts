@@ -48,6 +48,7 @@ export class ResultGraphPanel {
   public static readonly onDidLifecycle = ResultGraphPanel.lifecycleEmitter.event;
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
+  private webviewReady = false;
   private payload: GraphPayload | undefined;
   private viewOptions: ResultGraphViewOptions = {};
   private artifact:
@@ -74,8 +75,9 @@ export class ResultGraphPanel {
     });
     this.panel.webview.onDidReceiveMessage((msg: WebviewToHost) => {
       if (msg.type === "graphforge/ready") {
-        this.postRenderer();
-        this.postOptions();
+        this.webviewReady = true;
+        this.postRenderer(false);
+        this.postOptions(false);
         if (this.payload) {
           this.postGraph(this.payload);
         }
@@ -284,8 +286,11 @@ export class ResultGraphPanel {
 
   private setViewOptions(options: ResultGraphViewOptions): void {
     this.viewOptions = options;
-    this.postRenderer();
-    this.postOptions();
+    // The caller posts the graph immediately after these settings. Suppress
+    // intermediate renders of the previous payload; the graph message applies
+    // the complete renderer/options/payload snapshot once.
+    this.postRenderer(false);
+    this.postOptions(false);
   }
 
   highlightFromResult(
@@ -309,20 +314,24 @@ export class ResultGraphPanel {
     return highlight;
   }
 
-  private postRenderer(): void {
+  private postRenderer(render = true): void {
+    if (!this.webviewReady) return;
     const configured = vscode.workspace
       .getConfiguration("graphforge")
       .get("resultGraph.renderer");
     const msg: HostToWebview = {
       type: "graphforge/graphRenderer",
       renderer: this.viewOptions.renderer ?? normalizeResultGraphRenderer(configured),
+      render,
     };
     void this.panel.webview.postMessage(msg);
   }
 
-  private postOptions(): void {
+  private postOptions(render = true): void {
+    if (!this.webviewReady) return;
     const msg: HostToWebview = {
       type: "graphforge/graphOptions",
+      render,
       backend: this.viewOptions.backend,
       source: this.viewOptions.source,
       layout: this.viewOptions.layout,
@@ -334,6 +343,7 @@ export class ResultGraphPanel {
   }
 
   private postArtifactState(): void {
+    if (!this.webviewReady) return;
     const msg: HostToWebview = {
       type: "graphforge/graphArtifactState",
       saved: Boolean(this.artifact),
@@ -343,6 +353,7 @@ export class ResultGraphPanel {
   }
 
   private postGraph(payload: GraphPayload): void {
+    if (!this.webviewReady) return;
     const msg: HostToWebview = { type: "graphforge/graph", payload };
     void this.panel.webview.postMessage(msg);
   }
@@ -354,6 +365,9 @@ export class ResultGraphPanel {
     );
     const styleUri = webview.asWebviewUri(
       vscode.Uri.joinPath(assetsRoot, "resultGraph.css"),
+    );
+    const loadingStyleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(assetsRoot, "visualizationLoading.css"),
     );
     const nonce = crypto.randomBytes(16).toString("base64url");
     const csp = [
@@ -372,6 +386,7 @@ export class ResultGraphPanel {
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="${styleUri}" />
+  <link rel="stylesheet" href="${loadingStyleUri}" />
   <title>GraphForge Result Graph</title>
 </head>
 <body>
@@ -395,9 +410,17 @@ export class ResultGraphPanel {
     </header>
     <section id="canvas-wrap" aria-label="Interactive result graph">
       <div id="graph" tabindex="0" aria-label="Pan and zoom the result graph"></div>
+      <div class="render-status" id="render-status" role="status" aria-live="polite" aria-atomic="true" hidden>
+        <div class="render-status-card">
+          <p class="render-status-renderer" data-render-status-renderer>Render pipeline</p>
+          <h2 class="render-status-title" data-render-status-title>Preparing graph</h2>
+          <p class="render-status-detail" data-render-status-detail></p>
+          <ol class="render-status-steps" data-render-status-steps aria-label="Render stages"></ol>
+        </div>
+      </div>
       <p class="empty" id="empty">Waiting for graph data…</p>
     </section>
-    <footer id="footer">Colors are extension-owned. Epistemic when the knowledge ledger is resolvable, otherwise class-only.</footer>
+    <footer id="footer"><span id="render-summary">Waiting for graph data</span><span aria-hidden="true"> · </span><span id="style-summary">Colors are extension-owned; styling is epistemic when the ledger is resolvable.</span></footer>
   </main>
   <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>

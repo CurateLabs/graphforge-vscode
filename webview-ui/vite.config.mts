@@ -23,6 +23,7 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       input: {
+        getStarted: resolve(here, "src/getStarted/main.js"),
         settings: resolve(here, "src/settings/main.ts"),
         figure: resolve(here, "src/figure/main.ts"),
         resultGraph: resolve(here, "src/resultGraph/main.ts"),

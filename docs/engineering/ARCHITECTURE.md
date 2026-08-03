@@ -169,7 +169,8 @@ any breaking wire change, and document it here.
 - **ProjectVisualizationSpecV2** — strict writer contract for `result-graph`,
   `chart`, `geospatial`, and `temporal`. It references a project result and
   explicitly records renderer, bindings, filters, layout/coordinate/time, and
-  presentation configuration.
+  presentation configuration. Geospatial link sources name both endpoint
+  coordinate pairs and their ordered L7 point/arc layers.
 
 Workbench artifact layout:
 
@@ -179,6 +180,7 @@ results/query-result.json + query-result.md + timestamped history
 visualizations/*.gfviz.json
 mutations/*.cypher
 data/… (sample source data and attribution)
+notebooks/… (project-owned Python/Jupyter analysis that publishes normal artifacts)
 ```
 
 Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | superseded | statusless`.
@@ -237,9 +239,11 @@ intentionally out of v0 rather than inferred from point order.
 2. The host opens the G2/L7 artifact panel. An explicitly selected v2 Plotly
    **chart** uses the retained Figure adapter; v2 temporal artifacts are G2-only.
    The command returns the artifact path, complete spec, and panel outcome.
-3. The webview renders an accessible filtered-row companion and reports local
+3. L7 link sources materialize unique endpoint points and pass each valid
+   source/target row to the saved arc layer without field-name inference.
+4. The webview renders an accessible filtered-row companion and reports local
    lifecycle events without graph properties, rows, coordinates, timestamps, or paths.
-4. Viewport or temporal-range changes create a host-validated draft and visible
+5. Viewport or temporal-range changes create a host-validated draft and visible
    dirty state. Save atomically replaces the artifact; Revert restores committed JSON.
 
 ### Open ontology
@@ -253,11 +257,11 @@ intentionally out of v0 rather than inferred from point order.
 - **Error handling:** Fail closed on missing binding or invalid FORMAT; `showErrorMessage`. When
   no runtime is usable, the message and recovery actions cover **both** Setup commands (#12).
 - **Configuration:** `graphforge.nativeModulePath`, `graphforge.openResultGraphOnQuery`,
-  `graphforge.resultGraph.renderer` (`g6` creation default; retained `cytoscape`/`sigma`),
-  `graphforge.chart.renderer` (`g2` creation default; retained `plotly`), `graphforge.runtime`,
-  `graphforge.pythonInterpreterPath`, `graphforge.experienceMode`
-  (`guided` | `autonomous`, default `guided` — set from the Get Started Welcome screen; see
-  `docs/DESIGN.md` "Welcome + experience modes").
+  `graphforge.resultGraph.renderer` (`cytoscape` creation default; optional `g6`/`sigma`),
+  `graphforge.chart.renderer` (`plotly` creation default; optional `g2`), `graphforge.runtime`,
+  and `graphforge.pythonInterpreterPath`. Get Started derives its journey from
+  runtime/session state plus project-owned artifacts; it has no separate onboarding
+  mode or completion setting.
 - **Package manager policy:** Python package installs use **`uv` only, never `pip`** —
   `GraphForge: Setup Python Binding`'s install choice runs `uv add graphforge` in a uv-managed
   project (`pyproject.toml`/`uv.lock` present) or `uv pip install --python <interpreter>
@@ -283,8 +287,9 @@ intentionally out of v0 rather than inferred from point order.
 ## Decisions
 
 - Optional peer on `@curatelabs/graphforge` so the extension installs without a prebuilt napi binary.
-- AntV G6 Canvas and G2 are creation defaults; L7 is the geospatial adapter.
-  Cytoscape, Sigma, and Plotly remain explicit alternatives. v1 remains readable,
+- Cytoscape Canvas and Plotly are the graph/chart creation defaults. G6 and G2
+  remain explicit options; Sigma remains an explicit graph alternative; G2 remains
+  the temporal adapter and L7 the geospatial adapter. v1 remains readable,
   v2 is written, and saved artifacts—not current settings or hidden thresholds—own behavior.
 - Demo graph when result rows are not graph-shaped, so the epistemic/class legend is reviewable without data.
 - Python is reached via a **long-lived subprocess bridge**, not per-call spawns: engine startup
@@ -309,6 +314,12 @@ intentionally out of v0 rather than inferred from point order.
 - Bundling `apache-arrow` increases extension size but simplifies runtime.
 - Python bridge adds subprocess lifecycle risk (hangs, unexpected exits) — mitigated by a 30s
   per-request timeout and `exit`/`error` handlers that reject all pending requests.
+- Notebook analysis is intentionally separate from the bridge: VS Code Jupyter
+  runs the user's selected Python kernel, imports GraphForge directly, and writes
+  explicit project artifacts. The extension only opens the notebook and later
+  discovers those files through the normal project scan and agent artifact index.
+  The bridge preserves command parity, while analyst-authored scripts and notebooks
+  are the primary Python product surface.
 - The Python `graphforge` package's API can move independently of `@curatelabs/graphforge`'s; the host
   script and `EngineBackend` mapping may need updates when it does (defensive coding, not a
   compatibility guarantee).

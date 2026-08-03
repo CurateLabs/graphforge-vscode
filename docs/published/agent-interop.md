@@ -12,7 +12,9 @@ Start with `executeCommand("graphforge.agent.getContext")`. Its
 `graphforge.agent-context/v1` result includes the environment report, effective
 settings, project marker, absolute artifact paths, last-result paths, file
 schemas, and the compact path-driven command set. Use
-`graphforge.agent.listArtifacts` when only the artifact index is needed.
+`graphforge.agent.listArtifacts` when only the artifact index is needed. The
+index includes project-owned notebooks under `notebooks/`, so the Python path is
+discoverable without relying on a hard-coded sample command.
 
 ```mermaid
 flowchart TD
@@ -61,6 +63,7 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.agent.getContext` / `agent.listArtifacts` | `{ projectPath?: string \| Uri }` | Versioned context / artifact index JSON |
 | `graphforge.openProject` | `string \| Uri \| { path }` | `{ path, project }` |
 | `graphforge.openSampleProject` | `{ path?, force? }` | `{ path, project, seeded }` |
+| `graphforge.openSampleNotebook` | none | `{ path, relativePath }` or structured error |
 | `graphforge.runQuery` / `runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown> }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) |
 | `graphforge.runProjectQuery` | `string \| Uri \| { path, resultName? }` | `QueryResult` |
 | `graphforge.openProjectResult` | `string \| Uri \| { path }` | `{ path, absolutePath, columns, rowCount }` |
@@ -96,7 +99,7 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.assessConfidence` | `{ assertionUuid?, policy?, value? }` | `QueryResult` |
 | `graphforge.recordAssertionStatus` | `{ assertionUuid?, status?, provenanceUuid? }` | `QueryResult` |
 | `graphforge.setupNativeBinding` / `setupPythonBinding` / `initializeProjectHere` / `loadOntology` / `showResultGraphAdvanced` | No — these are inherently human choices (which folder, which binding source) | — |
-| `graphforge.showOntology` / `showResultGraph` / `showCapabilities` / `openOntologyFile` / `explainOntologyMode` / `refreshExplorer` / `getStarted` / `chooseExperienceMode` / `openSettings` / `manageModules` / `statusBarClick` | No prompts to skip | — (view-openers; their effect is the UI they open) |
+| `graphforge.showOntology` / `showResultGraph` / `showCapabilities` / `openOntologyFile` / `explainOntologyMode` / `refreshExplorer` / `getStarted` / `openSettings` / `manageModules` / `statusBarClick` | No prompts to skip | — (view-openers; their effect is the UI they open) |
 
 ### Exact visualization creation arguments
 
@@ -108,7 +111,8 @@ to `graphforge.createProjectVisualization`. Common optional fields are `name`,
 - `chart`: `mark: "bar" | "scatter" | "line" | "histogram"`, `x`, `y`
   (except histogram), optional `color`, and optional
   `renderer: "g2" | "plotly"`.
-- `geospatial`: `longitude` and `latitude` (L7).
+- `geospatial`: source `longitude` and `latitude`; optional target longitude and
+  latitude create an explicit L7 link source with arc and endpoint layers.
 - `temporal`: `timestamp` and `y`, plus optional `color`, `mark`, IANA
   `timezone`, and `granularity` (G2).
 

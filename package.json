@@ -2,7 +2,7 @@
   "name": "graphforge",
   "displayName": "GraphForge",
   "description": "Explore GraphForge projects in VS Code — Cypher, analyst verbs, ontology, and epistemic-aware result graphs.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "CurateLabsAI",
   "icon": "media/icon.png",
   "license": "Apache-2.0",
@@ -72,6 +72,11 @@
         "command": "graphforge.openSampleProject",
         "title": "GraphForge: Open Sample Project",
         "icon": "$(preview)"
+      },
+      {
+        "command": "graphforge.openSampleNotebook",
+        "title": "GraphForge: Open Sample Python Notebook",
+        "icon": "$(notebook)"
       },
       {
         "command": "graphforge.closeProject",
@@ -161,10 +166,6 @@
         "command": "graphforge.getStarted.showVisualize",
         "title": "GraphForge: Show Visualize",
         "icon": "$(graph)"
-      },
-      {
-        "command": "graphforge.chooseExperienceMode",
-        "title": "GraphForge: Choose Experience Mode…"
       },
       {
         "command": "graphforge.openSettings",
@@ -503,15 +504,18 @@
         },
         {
           "id": "graphforge.projects",
-          "name": "Projects"
+          "name": "Projects",
+          "visibility": "collapsed"
         },
         {
           "id": "graphforge.ontology",
-          "name": "Ontology"
+          "name": "Ontology",
+          "visibility": "collapsed"
         },
         {
           "id": "graphforge.knowledge",
-          "name": "Knowledge"
+          "name": "Knowledge",
+          "visibility": "collapsed"
         }
       ],
       "graphforgeResults": [
@@ -533,35 +537,35 @@
         },
         "graphforge.openResultGraphOnQuery": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Open the Result Graph webview after a successful Cypher query or analyst verb."
         },
         "graphforge.resultGraph.renderer": {
           "type": "string",
           "enum": [
-            "g6",
             "cytoscape",
+            "g6",
             "sigma"
           ],
           "enumDescriptions": [
-            "AntV G6 Canvas renderer with an explicit worker ForceAtlas2 layout.",
             "Canvas renderer with force layout, pan, zoom, fit, and selection.",
+            "AntV G6 Canvas renderer with an explicit worker ForceAtlas2 layout.",
             "WebGL renderer optimized for larger result graphs, with ForceAtlas2 layout and selection."
           ],
-          "default": "g6",
+          "default": "cytoscape",
           "description": "Renderer template for newly created Result Graph artifacts. Saved artifacts keep their recorded renderer."
         },
         "graphforge.chart.renderer": {
           "type": "string",
           "enum": [
-            "g2",
-            "plotly"
+            "plotly",
+            "g2"
           ],
           "enumDescriptions": [
-            "AntV G2 declarative chart renderer.",
-            "Plotly renderer and Python/JavaScript figure JSON interchange."
+            "Plotly renderer and Python/JavaScript figure JSON interchange.",
+            "AntV G2 declarative chart renderer."
           ],
-          "default": "g2",
+          "default": "plotly",
           "description": "Renderer template for newly created chart artifacts. Saved artifacts keep their recorded renderer."
         },
         "graphforge.runtime": {
@@ -588,19 +592,6 @@
           "type": "string",
           "default": "",
           "description": "Optional absolute path to a Python interpreter with `graphforge` installed. Leave empty to auto-detect (VS Code Python extension selection, workspace .venv/venv/env, then python3/python on PATH)."
-        },
-        "graphforge.experienceMode": {
-          "type": "string",
-          "enum": [
-            "guided",
-            "autonomous"
-          ],
-          "enumDescriptions": [
-            "Confirms before Initialize; quieter auto-run; Result Graph stays closed until opened.",
-            "Auto-opens detected projects and the Result Graph after queries; skips routine confirmations. Still fails closed on destructive operations."
-          ],
-          "default": "guided",
-          "description": "How much GraphForge confirms with you vs. acts on its own. Set from the Welcome step in Get Started, or here."
         },
         "graphforge.figureLimitsEnabled": {
           "type": "boolean",
@@ -644,8 +635,9 @@
     "check": "tsc --noEmit && tsc --noEmit -p webview-ui",
     "lint": "npm run check",
     "test": "npm run compile:host && vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/experienceMode.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/quickstartSample.test.js dist/test/projectArtifacts.test.js dist/test/visualizationRegistry.test.js dist/test/visualizationDocumentState.test.js dist/test/agentContext.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js dist/test/figureFromResult.test.js dist/test/figureSchema.test.js dist/test/resultGraphModel.test.js dist/test/resultTableModel.test.js dist/test/entityMutation.test.js dist/test/resultDocument.test.js dist/test/moduleManifest.test.js dist/test/workspaceScript.test.js dist/test/importData.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/viewContributions.test.js dist/test/quickstartSample.test.js dist/test/projectArtifacts.test.js dist/test/visualizationRegistry.test.js dist/test/visualizationDocumentState.test.js dist/test/visualizationLoadingModel.test.js dist/test/geospatialModel.test.js dist/test/agentContext.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js dist/test/figureFromResult.test.js dist/test/figureSchema.test.js dist/test/resultGraphModel.test.js dist/test/resultTableModel.test.js dist/test/entityMutation.test.js dist/test/resultDocument.test.js dist/test/moduleManifest.test.js dist/test/workspaceScript.test.js dist/test/importData.test.js",
     "benchmark:visualizations": "node scripts/benchmark-visualizations.mjs",
+    "verify:package": "node scripts/verify-package-contents.mjs",
     "package": "vsce package"
   },
   "dependencies": {

@@ -4,37 +4,48 @@ import {
   createDefaultGeospatialSpec,
   createDefaultResultGraphSpec,
   createDefaultTemporalSpec,
+  createResultGraphSpec,
   DEFAULT_VISUALIZATION_POLICY,
   isVisualizationSpecV2,
 } from "../session/visualizationRegistry";
 
 suite("visualization registry", () => {
-  test("materializes the reversible AntV creation defaults", () => {
+  test("materializes the stable Cytoscape and Plotly creation defaults", () => {
     assert.deepEqual(DEFAULT_VISUALIZATION_POLICY.resultGraph.renderer, {
-      id: "g6",
+      id: "cytoscape",
       backend: "canvas",
     });
     assert.deepEqual(DEFAULT_VISUALIZATION_POLICY.resultGraph.layout, {
-      type: "force-atlas2",
-      execution: "worker",
+      type: "cose",
+      execution: "main",
       animation: false,
-      maxIteration: 500,
-      barnesHut: true,
-      prune: true,
-      preventOverlap: true,
-      dissuadeHubs: false,
-      nodeSize: 22,
-      nodeSpacing: 4,
-      kr: 5,
-      kg: 1,
-      ks: 0.1,
-      ksmax: 10,
-      tao: 0.1,
-      mode: "normal",
+      maxIterations: 400,
+      gravity: 0.7,
+      nodeRepulsion: 180_000,
+      idealEdgeLength: 42,
     });
-    assert.equal(DEFAULT_VISUALIZATION_POLICY.chart.renderer.id, "g2");
+    assert.equal(DEFAULT_VISUALIZATION_POLICY.chart.renderer.id, "plotly");
     assert.equal(DEFAULT_VISUALIZATION_POLICY.geospatial.renderer.id, "l7");
     assert.equal(DEFAULT_VISUALIZATION_POLICY.temporal.renderer.id, "g2");
+  });
+
+  test("keeps explicit G6 and G2 creation available", () => {
+    const graph = createResultGraphSpec({
+      name: "G6 routes",
+      result: "results/routes.json",
+      renderer: "g6",
+    });
+    const chart = createDefaultChartSpec({
+      name: "G2 distances",
+      result: "results/routes.json",
+      mark: "bar",
+      x: "origin",
+      y: "distance",
+      renderer: "g2",
+    });
+    assert.equal(graph.renderer.id, "g6");
+    assert.equal(graph.graph.layout.type, "force-atlas2");
+    assert.equal(chart.renderer.id, "g2");
   });
 
   test("creates complete strict specs for every v2 visualization kind", () => {
@@ -107,6 +118,28 @@ suite("visualization registry", () => {
       title: "Airports",
       legend: false,
       theme: "editor",
+    });
+    const routeMap = createDefaultGeospatialSpec({
+      name: "Airport routes",
+      result: "results/routes.json",
+      source: {
+        type: "links",
+        source: { longitudeField: "sourceLon", latitudeField: "sourceLat" },
+        target: { longitudeField: "targetLon", latitudeField: "targetLat" },
+      },
+      sourceCrs: "EPSG:4326",
+      projection: "EPSG:3857",
+      layers: [
+        { ...geospatial.geospatial.layers[0], id: "routes", type: "arc" },
+        { ...geospatial.geospatial.layers[0], id: "airports", type: "point" },
+      ],
+      viewport: { longitude: 0, latitude: 0, zoom: 1, bearing: 0, pitch: 0, bounds: null },
+    });
+    assert.equal(isVisualizationSpecV2(routeMap), true);
+    assert.deepEqual(routeMap.geospatial.source, {
+      type: "links",
+      source: { longitudeField: "sourceLon", latitudeField: "sourceLat" },
+      target: { longitudeField: "targetLon", latitudeField: "targetLat" },
     });
     assert.deepEqual(temporal.temporal.playback, {
       enabled: false,
@@ -207,6 +240,18 @@ suite("visualization registry", () => {
     assert.throws(
       () => createDefaultGeospatialSpec({ ...geoBase, layers: [{ ...layer, type: "line" as const }] }),
       /point layers only/,
+    );
+    const linkBase = {
+      ...geoBase,
+      source: {
+        type: "links" as const,
+        source: { longitudeField: "sourceLon", latitudeField: "sourceLat" },
+        target: { longitudeField: "targetLon", latitudeField: "targetLat" },
+      },
+    };
+    assert.throws(
+      () => createDefaultGeospatialSpec({ ...linkBase, layers: [{ ...layer, type: "polygon" as const }] }),
+      /point and arc layers only/,
     );
     assert.throws(
       () => createDefaultTemporalSpec({
