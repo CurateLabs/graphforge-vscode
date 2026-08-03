@@ -1,8 +1,3 @@
-<!-- LLM: This folder carries the product and experience contract through the complete
-engineering lifecycle. Read ../REQUIREMENTS.md first. Fill the canonical lifecycle docs,
-then create focused setup guides, runbooks, API references, or operational docs only when
-the project needs them. Keep the index current and remove LLM comments as you go. -->
-
 # Engineering
 
 Engineering begins with the shared requirements contract and follows it through design,
@@ -20,13 +15,9 @@ pre-release evidence, continuous delivery, and production learning.
 
 ## Supporting documentation
 
-<!-- LLM: Create only the focused documents this project needs. Common examples include
-development setup, API/interface references, data contracts, security guides, migration
-plans, and operational runbooks. Do not duplicate the canonical lifecycle docs above. -->
-
 | Document | Description |
 |---|---|
-| _filename.md_ | _What it covers and who uses it_ |
+| [`MODULES.md`](MODULES.md) | Module manifests, providers, lifecycle, catalog discovery, and side-load security |
 
 ## Decision records
 

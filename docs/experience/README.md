@@ -1,10 +1,3 @@
-<!-- LLM: This folder is the continuous-discovery and experience-design workspace. Read
-../PRODUCT.md and ../DESIGN.md first when they are retained and applicable. Interview the user about actual evidence; never invent
-research, users, quotes, or validation. Keep this README as the operating model and index,
-then create one focused file per meaningful opportunity, journey, study, or product slice.
-Translate validated findings into stable requirements in ../REQUIREMENTS.md rather than
-turning discovery notes into an untraceable backlog. Remove LLM comments as you go. -->
-
 # Experience
 
 This folder connects continuous discovery and experience design to delivery. It captures
@@ -17,13 +10,6 @@ developer experience and agent experience even when product strategy or visual d
 owned elsewhere and omitted from this repo.
 
 ## Discovery practice
-
-<!-- LLM: Describe how the team continuously discovers needs and validates direction. Ask:
-- Who participates in discovery and how often?
-- Which evidence sources are trusted (interviews, support, analytics, observation, sales)?
-- How are assumptions, opportunities, and experiments recorded?
-- What threshold turns a finding into a requirement or product decision?
-Keep this practical; do not prescribe ceremony the team will not use. -->
 
 Maintainer-stated feeling and product intent live in PRODUCT/DESIGN and focused
 experience files. External analyst interviews are not yet a routine practice —
@@ -42,10 +28,6 @@ or in REQUIREMENTS.
 See [`discovery-feeling.md`](./discovery-feeling.md) and [`../DESIGN.md`](../DESIGN.md#emotional-north-star).
 
 ## Artifact template
-
-<!-- LLM: Use this shape when creating a new opportunity, journey, study, or product-slice
-file. Adapt it to the evidence available; do not create empty sections just to satisfy the
-template. Requirements should state what must be true, not prescribe architecture. -->
 
 ```markdown
 # Opportunity or experience
@@ -82,10 +64,7 @@ flowchart LR
 
 ## Index
 
-<!-- LLM: List only artifacts that actually exist. Use one file per substantial artifact
-and give each a stable, descriptive lowercase-kebab-case filename. -->
-
 | Document | Kind | Status | What it informs |
 |---|---|---|---|
 | [discovery-feeling.md](./discovery-feeling.md) | Feeling / journey | Active | Emotional north star (uncovering hunches), need states, moments that matter, trust/anxiety, experience principles |
-| [agent-interop.md](./agent-interop.md) | Agent experience / product slice | Active | Stable `graphforge.*` command IDs, structured output shapes, and the Check Environment → Setup/Init → Run Query/Rank loop a coding agent should follow; gaps for #4 verb-args follow-up |
+| [agent-interop.md](./agent-interop.md) | Agent experience / product slice | Active | Stable `graphforge.*` command IDs, structured output shapes, the Check Environment → Setup/Init → Run Query/Rank loop, and remaining argument-bypass gaps |

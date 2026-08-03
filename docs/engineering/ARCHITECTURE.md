@@ -282,7 +282,7 @@ intentionally out of v0 rather than inferred from point order.
 
 ## Decisions
 
-- Optional peer on `@curatelabs/graphforge` so scaffold installs without a prebuilt napi binary.
+- Optional peer on `@curatelabs/graphforge` so the extension installs without a prebuilt napi binary.
 - AntV G6 Canvas and G2 are creation defaults; L7 is the geospatial adapter.
   Cytoscape, Sigma, and Plotly remain explicit alternatives. v1 remains readable,
   v2 is written, and saved artifacts—not current settings or hidden thresholds—own behavior.

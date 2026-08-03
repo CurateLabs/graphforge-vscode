@@ -71,7 +71,7 @@ active, and the next step to fix whichever is missing.
 
 - Run **`GraphForge: Setup Native Binding`** — one QuickPick offering: link a detected sibling
   build, browse to a built package folder (sets `graphforge.nativeModulePath`), or install it
-  via `npm install @curatelabs/graphforge` once it's published; or
+  via `npm install @curatelabs/graphforge`; or
 - Set `graphforge.nativeModulePath` yourself to an absolute path.
 
 ## Setting up the Python binding

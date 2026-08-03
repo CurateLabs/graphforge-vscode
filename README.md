@@ -10,7 +10,7 @@ Publisher: **CurateLabsAI** (`CurateLabsAI.graphforge`).
 |---|---|
 | **Setup** | Check Environment, Setup Native Binding, Initialize Project Here — palette-first, never a dead end |
 | **Cypher** | `.cypher` / `.cql` language id + TextMate highlighting + **Run Query** (+ Advanced: Run Query with Parameters…) |
-| **Analyst verbs** | Rank, Cluster, Paths, Analyze, Similar, Find (QuickPick → engine; each has an Advanced… variant for optional params) |
+| **Analyst verbs** | Rank, Cluster, Paths, Analyze, Similar, Find (QuickPick → engine; all except Find have an Advanced… variant for optional params) |
 | **Projects** | Activity-bar explorer for folders with a valid `FORMAT` marker |
 | **Ontology** | Mode badge + entity/relation tree; Ontology Viewer webview with a helpful exploratory empty state, **Load Ontology…**, and an Advanced section (open `ontology.json`, explain mode) |
 | **Knowledge** | Inspect and create assertions: list/empty states, **Create Assertion…** (minimal fields), **Show Assertion** / **Show on Graph**, plus Advanced attach-evidence / assess-confidence / record-status commands |
@@ -132,7 +132,7 @@ the selected interpreter (installed automatically as a `graphforge` dependency i
 Commands and trees still register; open/query paths fail closed with a status-bar message and an
 error toast that offers both **Setup Native Binding** and **Setup Python Binding**.
 
-Prefer the guided path: run **GraphForge: Setup Native Binding** from the palette. It offers up to three choices in one QuickPick — link a detected sibling engine build, browse to a built `@curatelabs/graphforge` folder (sets `graphforge.nativeModulePath`), or run `npm install @curatelabs/graphforge` in a terminal once it's published. Setup takes effect immediately; no window reload needed.
+Prefer the guided path: run **GraphForge: Setup Native Binding** from the palette. It offers up to three choices in one QuickPick — link a detected sibling engine build, browse to a built `@curatelabs/graphforge` folder (sets `graphforge.nativeModulePath`), or run `npm install @curatelabs/graphforge` in a terminal. Setup takes effect immediately; no window reload needed.
 
 ### Project detection
 
@@ -162,11 +162,11 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 - **Import** — `Import Data…` (`graphforge.importData`) for CSV, JSON, JSON Lines, and NDJSON node records; agents pass `{ path, label, mode?, idColumn?, confirm: true }`
 - **Setup** — `GraphForge: Check Environment` (`graphforge.checkEnvironment`, accepts optional `{ silent: true }`, always returns the `EnvironmentReport` JSON from `executeCommand`), `Setup Native Binding`, `Setup Python Binding`, `Initialize Project Here`, `Open Project` (`graphforge.openProject`, accepts an optional folder-path string arg to skip the picker), `Refresh Explorer`
 - **Cypher** — `Run Query` (`graphforge.runQuery`: selection → whole file → single input box, or pass `{ cypher, params? }` to skip both; writes canonical JSON/Markdown plus timestamped history under `results/`, reveals the interactive table in the bottom Panel, and returns `{ columns, rows, rowCount }`), `Run Project Query` (`{ path }`), `Run Query with Parameters…`
-- **Analyst verbs** — `Rank` / `Cluster` / `Paths` / `Analyze` / `Similar` / `Find` (each has an `…Advanced…` command for optional parameters) — QuickPick-driven today; each returns its result JSON (or `{ error }` / `{ cancelled: true }`) from `executeCommand`
+- **Analyst verbs** — `Rank` / `Cluster` / `Paths` / `Analyze` / `Similar` / `Find` (all except Find have an `…Advanced…` command for optional parameters) — QuickPick-driven today; each returns its result JSON (or `{ error }` / `{ cancelled: true }`) from `executeCommand`
 - **Indexing** *(Node-only)* — `Index Text…`, `Index Vector…`, `Inspect Text Index…`, `Index Adjacency`, `Inspect Adjacency Index`, `Rebuild Adjacency Index`
-- **Checkpoints** *(Node-only, ADR 0014)* — `Create Checkpoint…`, `List Checkpoints`, `Open Checkpoint…`, `Diff Checkpoints…`, `Delete Checkpoint…`, `Revert to Checkpoint…`
+- **Checkpoints** *(Node-only)* — `Create Checkpoint…`, `List Checkpoints`, `Open Checkpoint…`, `Diff Checkpoints…`, `Delete Checkpoint…`, `Revert to Checkpoint…`
 - **Embedding spaces** *(Node-only)* — `Embedding Spaces`, `Publish Caller Embeddings…`, `Bind Embedding Space Alias…`, `Set Default Embedding Space…`, `Delete Embedding Space…`, `Inspect Embedding Space Freshness…`
-- **Write mode & transactions** *(Node-only, ADR 0015)* — `Enable Capability…`, `Open with Write Mode…`, `Export Invocation Descriptor…`, `List Algorithm Runs`, `Publish Composite Transaction…` (Advanced)
+- **Write mode & transactions** *(Node-only)* — `Enable Capability…`, `Open with Write Mode…`, `Export Invocation Descriptor…`, `List Algorithm Runs`, `Publish Composite Transaction…` (Advanced)
 - **Ontology** — `Show Ontology Viewer`, `Load Ontology…`, `Open ontology.json`, `Explain Ontology Mode`
 - **Knowledge ledger** — `List Assertions`, `Create Assertion…`, `Show Assertion…`, `Show Assertion on Graph…`, `Attach Evidence…` / `Assess Confidence…` / `Record Assertion Status…` (Advanced)
 - **Result views** — `Show Result Graph` (+ `Show Result Graph (Advanced)…`), `Show Project Capabilities`
