@@ -2,6 +2,18 @@
 
 All notable changes to the GraphForge VS Code extension are documented here.
 
+## 0.1.3
+
+### Added
+
+- Portable air-routes Streamlit dashboard under `apps/`, with **Open Sample Streamlit App**.
+- Proto-personas and key human journey docs for analysis experience design.
+
+### Changed
+
+- Quickstart sample materializes under `~/Downloads/graphforge-quickstart` instead of workspace or extension-private storage.
+- Sample notebook focuses on portable CSV/HTML outputs rather than VS Code result/visualization fixtures.
+
 ## 0.1.2
 
 ### Added
