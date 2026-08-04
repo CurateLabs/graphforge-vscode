@@ -11,7 +11,7 @@ export const QUICKSTART_MARKER = "QUICKSTART";
 /** Bumped when the seeded dataset identity changes. */
 export const QUICKSTART_MARKER_BYTES = "graphforge-quickstart/air-routes-us/v1\n";
 
-/** Default folder name when materializing under a workspace root. */
+/** Default folder name when materializing a visible quickstart project. */
 export const QUICKSTART_DIR_NAME = "graphforge-quickstart";
 
 /** Analyst-facing Python path copied into every air-routes sample project. */
@@ -19,6 +19,9 @@ export const QUICKSTART_NOTEBOOK_REL = path.join(
   "notebooks",
   "air-routes-analysis.ipynb",
 );
+
+/** Standalone Streamlit dashboard copied into every air-routes sample project. */
+export const QUICKSTART_STREAMLIT_REL = path.join("apps", "air_routes_dashboard.py");
 
 /** Relative path (from the extension root) to the vendored Apache-2.0 sample. */
 export const QUICKSTART_DATASET_REL = path.join("media", "samples", "air-routes");
@@ -256,23 +259,15 @@ export function writeQuickstartMarker(rootPath: string): void {
 
 /**
  * Resolve where to materialize the sample project.
- * Prefer an explicit path, then workspace/`graphforge-quickstart`, else tmp.
+ * Prefer an explicit path; otherwise create a visible project under the current
+ * user's Downloads directory. This must not depend on the IDE workspace or
+ * extension-private storage, so other local tools can discover the project.
  */
-export function resolveQuickstartPath(options?: {
-  path?: string;
-  workspaceFolder?: string;
-  storageFolder?: string;
-}): string {
+export function resolveQuickstartPath(options?: { path?: string }): string {
   if (options?.path?.trim()) {
     return path.resolve(options.path.trim());
   }
-  if (options?.workspaceFolder?.trim()) {
-    return path.join(options.workspaceFolder.trim(), QUICKSTART_DIR_NAME);
-  }
-  if (options?.storageFolder?.trim()) {
-    return path.join(options.storageFolder.trim(), QUICKSTART_DIR_NAME);
-  }
-  return path.join(os.tmpdir(), QUICKSTART_DIR_NAME);
+  return path.join(os.homedir(), "Downloads", QUICKSTART_DIR_NAME);
 }
 
 /** True when the directory exists and is empty (or only contains ignored noise). */

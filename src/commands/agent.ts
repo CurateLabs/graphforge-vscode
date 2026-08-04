@@ -43,7 +43,12 @@ export const AGENT_OPERATION_COMMANDS: readonly AgentCommandDescriptor[] = [
   {
     id: "graphforge.openSampleNotebook",
     args: "none",
-    returns: "{ path, relativePath }",
+    returns: "{ path, projectPath, relativePath }",
+  },
+  {
+    id: "graphforge.openSampleStreamlit",
+    args: "none",
+    returns: "{ path, projectPath, relativePath, command }",
   },
   {
     id: "graphforge.openProject",

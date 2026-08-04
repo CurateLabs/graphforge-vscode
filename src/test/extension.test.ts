@@ -23,6 +23,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.openProject",
   "graphforge.openSampleProject",
   "graphforge.openSampleNotebook",
+  "graphforge.openSampleStreamlit",
   "graphforge.closeProject",
   "graphforge.refreshExplorer",
   "graphforge.runQuery",
@@ -211,6 +212,9 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     );
     assert.ok(
       context.commands.some((command) => command.id === "graphforge.openSampleNotebook"),
+    );
+    assert.ok(
+      context.commands.some((command) => command.id === "graphforge.openSampleStreamlit"),
     );
     assert.match(context.contracts.result, /columns/);
   });

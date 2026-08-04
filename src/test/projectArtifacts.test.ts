@@ -29,6 +29,8 @@ suite("project artifacts", () => {
     fs.mkdirSync(path.join(root, "results"), { recursive: true });
     fs.mkdirSync(path.join(root, "notebooks"), { recursive: true });
     fs.writeFileSync(path.join(root, "notebooks", "routes.ipynb"), "{}\n");
+    fs.mkdirSync(path.join(root, "apps"), { recursive: true });
+    fs.writeFileSync(path.join(root, "apps", "dashboard.py"), "print('ok')\n");
     fs.writeFileSync(
       path.join(root, "results", "routes.json"),
       JSON.stringify({
@@ -51,6 +53,7 @@ suite("project artifacts", () => {
     const artifacts = scanProjectArtifacts(root);
     assert.equal(artifacts.queries[0]?.path, queryPath);
     assert.equal(artifacts.notebooks[0]?.path, "notebooks/routes.ipynb");
+    assert.equal(artifacts.apps[0]?.path, "apps/dashboard.py");
     assert.equal(artifacts.results[0]?.rowCount, 1);
     assert.equal(artifacts.visualizations[0]?.path, visualizationPath);
     assert.equal(readProjectQuery(root, queryPath).cypher, "MATCH (n) RETURN n\n");

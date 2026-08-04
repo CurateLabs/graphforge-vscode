@@ -90,6 +90,7 @@ const ZERO_PROMPT_COMMAND_IDS = [
   "graphforge.getStarted.showVisualize",
   "graphforge.openSampleProject",
   "graphforge.openSampleNotebook",
+  "graphforge.openSampleStreamlit",
   "graphforge.closeProject",
 ];
 

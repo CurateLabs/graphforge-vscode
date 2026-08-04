@@ -20,6 +20,7 @@ export interface GetStartedStepModel {
   status: GetStartedStepStatus;
   primaryAction?: GetStartedAction;
   secondaryAction?: GetStartedAction;
+  tertiaryAction?: GetStartedAction;
 }
 
 export interface ChecklistStepInput {
@@ -206,7 +207,7 @@ export function buildChecklistSteps(input: ChecklistStepInput): GetStartedStepMo
       : queryComplete
         ? "A saved query has produced a durable result."
         : isSampleProject
-          ? "Run the saved routes query, or explore the same CSVs in Python."
+          ? "Run the saved routes query, or use notebooks/air-routes-analysis.ipynb or apps/air_routes_dashboard.py for Python."
           : "Write and run a saved Cypher query.",
     artifact: sampleQueryPath ?? (projectReady ? "queries/first-query.cypher" : undefined),
     status: stepStatus(queryComplete, runtimeReady && projectReady),
@@ -228,6 +229,13 @@ export function buildChecklistSteps(input: ChecklistStepInput): GetStartedStepMo
         ? {
             label: "Open Python notebook",
             command: "graphforge.openSampleNotebook",
+          }
+        : undefined,
+    tertiaryAction:
+      runtimeReady && projectReady && isSampleProject
+        ? {
+            label: "Open Streamlit app",
+            command: "graphforge.openSampleStreamlit",
           }
         : undefined,
   };

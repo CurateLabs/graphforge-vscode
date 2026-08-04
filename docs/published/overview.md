@@ -36,17 +36,20 @@ graph.
 GraphForge keeps durable exploration state with the project:
 
 - `queries/` — editable `.cypher` queries
-- `notebooks/` — project-owned Python/Jupyter analysis that publishes normal artifacts
+- `notebooks/` — project-owned Python/Jupyter analysis; the air-routes notebook writes portable CSV and self-contained HTML under `notebooks/outputs/`
+- `apps/` — portable Python apps, exposed with absolute paths in the agent artifact index; the air-routes Streamlit dashboard runs in a browser with `uv run … streamlit run apps/air_routes_dashboard.py`
 - `results/` — latest JSON/Markdown plus timestamped result history
 - `visualizations/` — strict v2 graph/chart/geospatial/temporal `.gfviz.json`
   specs plus readable, unchanged v1 Cytoscape/Sigma/Plotly specs
 - `mutations/` and `data/` — project-backed graph changes and source material
 
-The air-routes starter uses this same layout; its query, Python notebook, and
-visualization settings are sample files, not hidden extension presets. The
-notebook reads the same copied CSVs, runs native GraphForge PageRank, renders
-Plotly in VS Code Jupyter, and publishes normal result/visualization artifacts.
-Global renderer settings choose only the next artifact template; saved files explicitly own behavior.
+The air-routes starter uses this same layout; its query, Python notebook,
+Streamlit dashboard, and visualization settings are sample files, not hidden
+extension presets. The notebook and dashboard read the same copied CSVs, run
+native GraphForge PageRank, and render Plotly through Python. The notebook's
+CSV and HTML outputs are portable; neither Python path writes extension-only
+result or visualization artifacts. Global renderer settings choose only the
+next extension artifact template; saved files explicitly own behavior.
 Invalid or unsupported configuration fails visibly without field inference,
 renderer substitution, or network fallback.
 

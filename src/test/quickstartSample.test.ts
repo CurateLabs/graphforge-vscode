@@ -28,22 +28,14 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..");
 
 suite("quickstartSample (#63)", () => {
   test("resolveQuickstartPath prefers explicit path", () => {
-    const resolved = resolveQuickstartPath({
-      path: "/tmp/custom-sample",
-      workspaceFolder: "/ws",
-      storageFolder: "/store",
-    });
+    const resolved = resolveQuickstartPath({ path: "/tmp/custom-sample" });
     assert.equal(resolved, path.resolve("/tmp/custom-sample"));
   });
 
-  test("resolveQuickstartPath uses workspace then storage", () => {
+  test("resolveQuickstartPath defaults to a visible Downloads project", () => {
     assert.equal(
-      resolveQuickstartPath({ workspaceFolder: "/ws" }),
-      path.join("/ws", QUICKSTART_DIR_NAME),
-    );
-    assert.equal(
-      resolveQuickstartPath({ storageFolder: "/store" }),
-      path.join("/store", QUICKSTART_DIR_NAME),
+      resolveQuickstartPath(),
+      path.join(os.homedir(), "Downloads", QUICKSTART_DIR_NAME),
     );
   });
 
@@ -93,11 +85,16 @@ suite("quickstartSample (#63)", () => {
       artifacts.notebooks.map((item) => item.path),
       [QUICKSTART_NOTEBOOK_REL.split(path.sep).join("/")],
     );
+    assert.deepEqual(artifacts.apps.map((item) => item.path), ["apps/air_routes_dashboard.py"]);
     assert.equal(artifacts.visualizations.length, 7);
     assert.ok(artifacts.mutations.some((item) => item.path === seedMutationPath));
     assert.ok(fs.existsSync(path.join(projectRoot, "data", "air-routes", "airports.csv")));
     const notebookPath = path.join(projectRoot, QUICKSTART_NOTEBOOK_REL);
     assert.ok(fs.existsSync(notebookPath));
+    const streamlitPath = path.join(projectRoot, "apps", "air_routes_dashboard.py");
+    assert.ok(fs.existsSync(streamlitPath));
+    assert.match(fs.readFileSync(streamlitPath, "utf8"), /st\.plotly_chart/);
+    assert.match(fs.readFileSync(streamlitPath, "utf8"), /streamlit run apps\/air_routes_dashboard\.py/);
     const notebook = JSON.parse(fs.readFileSync(notebookPath, "utf8")) as {
       nbformat?: number;
       cells?: Array<{ cell_type?: string; source?: string[]; outputs?: unknown[] }>;
@@ -113,7 +110,20 @@ suite("quickstartSample (#63)", () => {
     ));
     assert.ok(notebook.cells?.some((cell) =>
       cell.cell_type === "code" &&
-      cell.source?.join("").includes("results/python-airport-pagerank.json")
+      cell.source?.join("").includes("notebooks' / 'outputs'")
+    ));
+    assert.ok(notebook.cells?.some((cell) =>
+      cell.cell_type === "code" &&
+      cell.source?.join("").includes("air-routes-pagerank.html")
+    ));
+    assert.equal(notebook.cells?.some((cell) =>
+      cell.source?.join("").includes("graphforge.visualization/v2")
+    ), false);
+    assert.equal(notebook.cells?.some((cell) =>
+      cell.source?.join("").includes("python-airport-pagerank.gfviz.json")
+    ), false);
+    assert.ok(notebook.cells?.some((cell) =>
+      cell.source?.join("").includes("Portable HTML:")
     ));
     assert.ok(notebook.cells?.every((cell) => (cell.outputs?.length ?? 0) === 0));
     assert.match(

@@ -15,7 +15,8 @@ Every command below is a stable ID, invokable from the Command Palette or progra
 | GraphForge: Initialize Project Here | `graphforge.initializeProjectHere` | Creates a new GraphForge project in an empty/uninitialized folder. |
 | GraphForge: Open Project | `graphforge.openProject` | Opens an existing `FORMAT`-marked project; accepts a string, URI, or `{ path }`. |
 | GraphForge: Open Sample Project | `graphforge.openSampleProject` | Seeds/opens the vendored US air-routes sample (Apache-2.0); accepts `{ path?, force? }`. Interactive replacement of a non-empty target confirms; creating a new sample does not add a redundant prompt. |
-| GraphForge: Open Sample Python Notebook | `graphforge.openSampleNotebook` | Opens the active air-routes sample's project-owned VS Code Jupyter notebook and returns `{ path, relativePath }`. It never installs packages or selects a kernel. |
+| GraphForge: Open Sample Python Notebook | `graphforge.openSampleNotebook` | Opens the active air-routes sample's project-owned notebook and returns `{ path, projectPath, relativePath }`, where `path` and `projectPath` are absolute. It never installs packages or selects a kernel. |
+| GraphForge: Open Sample Streamlit App | `graphforge.openSampleStreamlit` | Opens the active air-routes sample's portable Streamlit source and returns `{ path, projectPath, relativePath, command }`. Run the returned `uv run … streamlit run …` command in any terminal to serve it in a browser. |
 | GraphForge: Close Project | `graphforge.closeProject` | Detaches the active engine session (no folder delete). |
 | GraphForge: Refresh Explorer | `graphforge.refreshExplorer` | Refreshes the Projects Activity Bar view. |
 | GraphForge: Agent: Get Context | `graphforge.agent.getContext` | Returns `graphforge.agent-context/v1` runtime, settings, marker, artifact, last-result, schema, and command JSON; optional `{ projectPath }`. |

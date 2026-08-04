@@ -13,8 +13,9 @@ Start with `executeCommand("graphforge.agent.getContext")`. Its
 settings, project marker, absolute artifact paths, last-result paths, file
 schemas, and the compact path-driven command set. Use
 `graphforge.agent.listArtifacts` when only the artifact index is needed. The
-index includes project-owned notebooks under `notebooks/`, so the Python path is
-discoverable without relying on a hard-coded sample command.
+index includes project-owned notebooks under `notebooks/` and Python apps under
+`apps/`, each with an absolute path, so both Python paths are discoverable
+without relying on a hard-coded sample command.
 
 ```mermaid
 flowchart TD
@@ -63,7 +64,8 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.agent.getContext` / `agent.listArtifacts` | `{ projectPath?: string \| Uri }` | Versioned context / artifact index JSON |
 | `graphforge.openProject` | `string \| Uri \| { path }` | `{ path, project }` |
 | `graphforge.openSampleProject` | `{ path?, force? }` | `{ path, project, seeded }` |
-| `graphforge.openSampleNotebook` | none | `{ path, relativePath }` or structured error |
+| `graphforge.openSampleNotebook` | none | `{ path, projectPath, relativePath }` or structured error; paths are absolute |
+| `graphforge.openSampleStreamlit` | none | `{ path, projectPath, relativePath, command }` or structured error; `command` starts the browser app |
 | `graphforge.runQuery` / `runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown> }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) |
 | `graphforge.runProjectQuery` | `string \| Uri \| { path, resultName? }` | `QueryResult` |
 | `graphforge.openProjectResult` | `string \| Uri \| { path }` | `{ path, absolutePath, columns, rowCount }` |

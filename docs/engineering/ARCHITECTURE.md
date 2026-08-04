@@ -181,6 +181,7 @@ visualizations/*.gfviz.json
 mutations/*.cypher
 data/… (sample source data and attribution)
 notebooks/… (project-owned Python/Jupyter analysis that publishes normal artifacts)
+apps/… (portable Python apps such as the air-routes Streamlit dashboard)
 ```
 
 Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | superseded | statusless`.
@@ -314,12 +315,12 @@ intentionally out of v0 rather than inferred from point order.
 - Bundling `apache-arrow` increases extension size but simplifies runtime.
 - Python bridge adds subprocess lifecycle risk (hangs, unexpected exits) — mitigated by a 30s
   per-request timeout and `exit`/`error` handlers that reject all pending requests.
-- Notebook analysis is intentionally separate from the bridge: VS Code Jupyter
-  runs the user's selected Python kernel, imports GraphForge directly, and writes
-  explicit project artifacts. The extension only opens the notebook and later
-  discovers those files through the normal project scan and agent artifact index.
-  The bridge preserves command parity, while analyst-authored scripts and notebooks
-  are the primary Python product surface.
+- Python analysis is intentionally separate from the bridge: VS Code Jupyter and
+  Streamlit use the user's Python environment and import GraphForge directly.
+  The extension only opens the notebook or app source; the notebook writes
+  portable CSV/HTML exports and the app serves a browser dashboard rather than
+  creating extension-only artifacts. The bridge preserves command parity, while
+  analyst-authored notebooks and apps are the primary Python product surface.
 - The Python `graphforge` package's API can move independently of `@curatelabs/graphforge`'s; the host
   script and `EngineBackend` mapping may need updates when it does (defensive coding, not a
   compatibility guarantee).

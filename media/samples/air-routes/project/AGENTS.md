@@ -18,11 +18,16 @@ marker and keep generated work inside the project.
 - `mutations/**/*.cypher`, `.cql`, or `.json` — writes that require explicit
   confirmation before execution.
 - `notebooks/air-routes-analysis.ipynb` — a visible Python/Jupyter path over the
-  same copied CSVs. It uses the Python binding directly and publishes its table
-  and Plotly specification under `results/` and `visualizations/`.
+  same copied CSVs. It uses the Python binding directly and writes portable CSV
+  and self-contained Plotly HTML under `notebooks/outputs/`.
+- `apps/air_routes_dashboard.py` — a portable Python/Streamlit dashboard over
+  the same CSVs. Run `uv run --with streamlit --with graphforge --with pandas
+  --with plotly streamlit run apps/air_routes_dashboard.py` from the project
+  root to serve it in a browser.
 
 Paths may be project-relative or absolute, but GraphForge rejects paths outside
-this project.
+this project. The agent artifact index exposes the notebook and Streamlit app
+with absolute paths under `artifacts.notebooks` and `artifacts.apps`.
 
 ## Operate without webview clicks
 
@@ -42,8 +47,10 @@ Call VS Code commands through `vscode.commands.executeCommand`:
 
 For this sample, start with
 `queries/templates/routes-overview.cypher`, then open the saved Cytoscape graph.
-For the analyst-owned Python path, open `notebooks/air-routes-analysis.ipynb`,
-select a kernel with GraphForge/pandas/Plotly, and run it top to bottom.
+For the analyst-owned Python paths, open `notebooks/air-routes-analysis.ipynb`
+and select a kernel with GraphForge/pandas/Plotly, or run
+`apps/air_routes_dashboard.py` with its documented `uv run` command. Neither
+path relies on VS Code results or visualization fixtures.
 The explicit G6 graph, G2 chart, L7 map, and G2 timeline remain available under
 `visualizations/`. The v1 files beside them prove the retained compatibility
 path. Do not infer missing fields or silently switch renderer, layout,

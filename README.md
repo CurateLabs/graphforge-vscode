@@ -17,7 +17,7 @@ Publisher: **CurateLabsAI** (`CurateLabsAI.graphforge`).
 | **Result Graph** | Cytoscape Canvas by default, with optional AntV G6 and Sigma adapters; explicit artifact-owned layout, styling, interactions, and optional time configuration |
 | **Charts, maps, and timelines** | Plotly analytical charts by default; optional AntV G2 charts, G2 timelines, and L7 geospatial views from saved project artifacts |
 | **Results** | Interactive table in the bottom Panel; expandable nested JSON and row/cell selection linked to matching Result Graph nodes/edges |
-| **Python notebooks** | A VS Code Jupyter path over the same air-routes sample: pandas inspection, native GraphForge bulk construction and PageRank, Plotly output, and saved `results/` / `visualizations/` artifacts |
+| **Python analysis** | A notebook and Streamlit dashboard over the same air-routes sample: pandas inspection, native GraphForge PageRank, Plotly output, and portable CSV/HTML/browser views that do not require VS Code panels |
 | **Modules** | One Module Bay for default, non-removable Query/Visualize/Import modules, future GraphForge-catalog modules, and advanced side-loads |
 
 ## Requirements
@@ -52,8 +52,9 @@ The extension can run Cypher and analyst verbs through either engine binding:
 - **Node (`@curatelabs/graphforge`)** — the default. Fast, in-process, no subprocess.
 - **Python (`graphforge` on PyPI)** — a first-class alternative for analysts already living in
   a Python/notebook workflow, or when a native Node binding isn't available for your platform.
-  In the air-routes sample, choose **Open Python notebook** to run the same dataset through
-  pandas, PyArrow, GraphForge, and Plotly while publishing normal project artifacts.
+  In the air-routes sample, choose **Open Python notebook** for exploratory analysis or
+  **Open Streamlit app** for a browser dashboard. Both run the same data through pandas,
+  PyArrow, GraphForge, and Plotly without using VS Code result or visualization artifacts.
 
 The command bridge preserves runtime parity, but the primary Python experience is
 analyst-authored scripts and notebooks in the selected environment. GraphForge opens and
@@ -180,7 +181,7 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 - **Visualization artifacts** — `Create Project Visualization` (`graphforge.createProjectVisualization`) creates a complete v2 graph, chart, geospatial, or temporal artifact from explicit bindings; `Save Project Visualization` and `Open Saved Visualization` return the saved `path` and `spec` (plus panel status when opened)
 
 Get Started's **Hub / Query / Visualize** pages are an editor over durable
-project files: `queries/*.cypher`, `notebooks/*.ipynb`, `results/*`,
+project files: `queries/*.cypher`, `notebooks/*.ipynb`, `apps/*.py`, `results/*`,
 `visualizations/*.gfviz.json`, and `mutations/*.cypher`. New visualizations use the strict
 `graphforge.visualization/v2` contract; existing v1 Cytoscape/Sigma/Plotly files
 remain readable and are not rewritten on open. The graph/chart renderer settings are creation
@@ -193,11 +194,12 @@ renderer substitution, or layout fallback.
 G2/L7/temporal panels expose the filtered rows in an accessible companion table.
 Material viewport or temporal-range changes become visibly dirty and require an
 explicit **Save**; **Revert** restores the committed artifact. The air-routes
-sample copies its source data, query, notebook, supporting result, and v1/v2
-visualization specs into this layout and generates its seed mutation there
-before execution. The notebook writes PageRank output under `results/` and an
-extension-readable Plotly spec under `visualizations/`; its work is project
-state rather than hidden extension state.
+sample copies its source data, query, notebook, Streamlit app, supporting
+result, and v1/v2 visualization specs into this layout and generates its seed
+mutation there before execution. The notebook writes portable PageRank CSV and
+self-contained Plotly HTML under `notebooks/outputs/`; the Streamlit app serves
+the same Python analysis in a browser. Neither Python path depends on VS Code
+result or visualization fixtures.
 
 Selecting a Results cell that contains a node/edge identity (including airport-style codes)
 highlights that element in an open Result Graph. Selecting a metric cell or whole row falls back

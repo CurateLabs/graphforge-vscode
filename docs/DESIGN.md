@@ -24,7 +24,10 @@
 
 **Trust:** clear results and clear failures. **Anxiety spike:** hung analysis with no signal whether the engine is crunching or dead.
 
-Durable journey detail lives in [`experience/discovery-feeling.md`](./experience/discovery-feeling.md). Positioning note: [`strategy/positioning.md`](./strategy/positioning.md).
+Durable journey detail lives in [`experience/discovery-feeling.md`](./experience/discovery-feeling.md)
+and [`experience/key-journeys.md`](./experience/key-journeys.md). Behavioral
+persona hypotheses live in [`strategy/personas.md`](./strategy/personas.md).
+Positioning note: [`strategy/positioning.md`](./strategy/positioning.md).
 
 ## Product experience
 
@@ -63,10 +66,12 @@ First-run, missing-runtime, and no-project states share one **Get Started** side
 - **Try the air-routes sample** is the secondary Project action. It follows the
   same path and materializes its data, query, notebook, supporting result, and
   visualization files inside the sample project.
-- The sample Query node exposes **Open Python notebook** as a parallel analyst
-  path. The notebook reads the same copied CSVs and writes standard `results/`
-  and `visualizations/` artifacts; the extension does not hide or synthesize its
-  Python work.
+- The sample Query node exposes **Open Python notebook** and **Open Streamlit
+  app** as parallel analyst paths. They read the same copied CSVs and use Python
+  and Plotly directly: the notebook writes portable CSV/HTML exports under
+  `notebooks/outputs/`, while Streamlit serves an interactive browser dashboard.
+  Neither path depends on or creates VS Code result-panel or visualization
+  artifacts.
 - The journey remains visible after completion. Its final node reopens the saved
   visualization rather than replacing the map with a feature dashboard.
 - **Hub / Query / Visualize** title actions remain available. Query authors save

@@ -54,6 +54,8 @@ suite("getStartedContent", () => {
     ]);
     assert.equal(query?.secondaryAction?.label, "Open Python notebook");
     assert.equal(query?.secondaryAction?.command, "graphforge.openSampleNotebook");
+    assert.equal(query?.tertiaryAction?.label, "Open Streamlit app");
+    assert.equal(query?.tertiaryAction?.command, "graphforge.openSampleStreamlit");
     assert.equal(query?.artifact, "queries/templates/routes-overview.cypher");
   });
 
@@ -66,6 +68,7 @@ suite("getStartedContent", () => {
     assert.equal(query?.primaryAction?.label, "Write and run query");
     assert.equal(query?.primaryAction?.command, "graphforge.getStarted.showQuery");
     assert.equal(query?.secondaryAction, undefined);
+    assert.equal(query?.tertiaryAction, undefined);
     assert.equal(query?.artifact, "queries/first-query.cypher");
   });
 
