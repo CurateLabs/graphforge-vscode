@@ -186,6 +186,7 @@ export async function buildGetStartedState(
         queries: [],
         queryTemplates: [],
         notebooks: [],
+        apps: [],
         results: [],
         visualizations: [],
         mutations: [],

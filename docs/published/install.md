@@ -14,13 +14,15 @@
    1. **Environment** — set up Node or Python; the primary button matches your workspace.
    2. **Project** — open a project, or choose **Try the air-routes sample** to seed the vendored
       **US air-routes** graph (586 airports / 7,430 routes, Apache-2.0) via
-      `graphforge.openSampleProject`.
+      `graphforge.openSampleProject`. By default, it creates the visible project at
+      `~/Downloads/graphforge-quickstart`; it does not write into the open IDE folder or
+      extension-private storage.
    3. **Query** — with the sample open, use **Run sample query**.
       This executes `queries/templates/routes-overview.cypher` from the project.
-      Or choose **Open Python notebook** for the parallel VS Code Jupyter path.
-      It reads the same copied CSVs with pandas, builds the graph through
-      GraphForge Python, runs PageRank, renders Plotly, and publishes normal
-      result and visualization artifacts back into the project.
+      Or choose **Open Python notebook** for exploratory Jupyter work, or
+      **Open Streamlit app** for the browser dashboard. Both read the same copied
+      CSVs with pandas, build the graph through GraphForge Python, run PageRank,
+      and render Plotly without using VS Code result or visualization artifacts.
    4. **Result** — inspect the saved result in the Results panel.
    5. **Visualize** — open the saved Cytoscape route network. An explicit G6
       network, G2 route-distance chart, L7 airport map with arcs between airport
@@ -36,12 +38,17 @@
    readable. Renderer settings affect newly created files only because resolved
    behavior is stored in each artifact.
 
-The notebook is `notebooks/air-routes-analysis.ipynb`. Select a kernel that can
-import `graphforge`, `pyarrow`, `pandas`, and `plotly`; its setup instructions
-use `uv` and never install packages automatically. After execution,
-**GraphForge: Refresh Explorer** reveals
-`results/python-airport-pagerank.json` and
-`visualizations/python-airport-pagerank.gfviz.json`.
+The Python paths are explicit inside the project: `notebooks/air-routes-analysis.ipynb`
+and `apps/air_routes_dashboard.py`. The notebook prints its absolute project,
+notebook, and output paths, then writes a portable CSV and self-contained Plotly
+HTML under `notebooks/outputs/`. Select a kernel that can import `graphforge`,
+`pyarrow`, `pandas`, and `plotly`; its setup instructions use `uv` and never
+install packages automatically. To run the dashboard from any terminal, use:
+
+```bash
+uv run --with streamlit --with graphforge --with pandas --with plotly \
+  streamlit run apps/air_routes_dashboard.py
+```
 
 Prefer the Command Palette, or driving the extension from an agent? Run
 **`GraphForge: Check Environment`** — it reports both runtimes' full diagnostics and always

@@ -85,12 +85,27 @@ suite("Quickstart e2e (#63)", () => {
       );
       const notebook = await vscode.commands.executeCommand<{
         path?: string;
+        projectPath?: string;
         relativePath?: string;
         error?: string;
       }>("graphforge.openSampleNotebook");
       assert.ok(notebook && !notebook.error, `openSampleNotebook failed: ${JSON.stringify(notebook)}`);
       assert.equal(notebook.relativePath, "notebooks/air-routes-analysis.ipynb");
       assert.ok(notebook.path && fs.existsSync(notebook.path));
+      assert.equal(notebook.projectPath, opened.path);
+
+      const streamlit = await vscode.commands.executeCommand<{
+        path?: string;
+        projectPath?: string;
+        relativePath?: string;
+        command?: string;
+        error?: string;
+      }>("graphforge.openSampleStreamlit");
+      assert.ok(streamlit && !streamlit.error, `openSampleStreamlit failed: ${JSON.stringify(streamlit)}`);
+      assert.equal(streamlit.relativePath, "apps/air_routes_dashboard.py");
+      assert.ok(streamlit.path && fs.existsSync(streamlit.path));
+      assert.equal(streamlit.projectPath, opened.path);
+      assert.match(streamlit.command ?? "", /streamlit run/);
 
       const queryResult = await vscode.commands.executeCommand<{
         rowCount?: number;

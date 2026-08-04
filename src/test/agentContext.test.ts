@@ -46,6 +46,7 @@ suite("agent context", () => {
       path.join(root, "queries", "nodes.cypher"),
     );
     assert.equal(context.directories.notebooks, path.join(root, "notebooks"));
+    assert.equal(context.directories.apps, path.join(root, "apps"));
     assert.equal(context.artifacts.notebooks[0]?.path, "notebooks/analysis.ipynb");
     assert.equal(
       context.artifacts.notebooks[0]?.absolutePath,

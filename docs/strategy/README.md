@@ -16,3 +16,4 @@ roadmap, and strategic-bet detail that does not belong in compact product contex
 | Document | Description |
 |---|---|
 | [positioning.md](./positioning.md) | Feeling-led frame: workbench for uncovering hunches vs graph admin console |
+| [personas.md](./personas.md) | Behavioral proto-personas, emotional needs, collisions, and discovery questions |

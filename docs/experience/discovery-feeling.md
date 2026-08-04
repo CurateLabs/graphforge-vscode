@@ -27,6 +27,11 @@ clear results and clear failures, and without anxiety from silent hangs.
   is unvalidated — prefer customer discovery before locking ICP claims beyond
   [`../PRODUCT.md`](../PRODUCT.md).
 
+The current working hypotheses are split between
+[`../strategy/personas.md`](../strategy/personas.md) and
+[`key-journeys.md`](./key-journeys.md). They deliberately remain unvalidated
+until external discovery confirms them.
+
 ## Emotional jobs (before / during / after)
 
 | Phase | Feeling | Job |
@@ -91,5 +96,7 @@ plus a recent-projects list for resume, without burying either.
 - Feeling north star: [`../DESIGN.md`](../DESIGN.md#emotional-north-star)
 - Positioning: [`../strategy/positioning.md`](../strategy/positioning.md)
 - Agent loop (parallel consumer): [`agent-interop.md`](./agent-interop.md)
+- Proto-personas: [`../strategy/personas.md`](../strategy/personas.md)
+- Human journey hypotheses: [`key-journeys.md`](./key-journeys.md)
 - Prior audits: `.productfeeling/reviews/graphforge-full-product-audit.md`,
   `.productfeeling/reviews/graphforge-vs-kilocode-audit.md`

@@ -79,6 +79,11 @@
         "icon": "$(notebook)"
       },
       {
+        "command": "graphforge.openSampleStreamlit",
+        "title": "GraphForge: Open Sample Streamlit App",
+        "icon": "$(browser)"
+      },
+      {
         "command": "graphforge.closeProject",
         "title": "GraphForge: Close Project"
       },

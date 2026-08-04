@@ -13,6 +13,7 @@ import {
 export const PROJECT_QUERIES_DIR = "queries";
 export const PROJECT_QUERY_TEMPLATES_DIR = "queries/templates";
 export const PROJECT_NOTEBOOKS_DIR = "notebooks";
+export const PROJECT_APPS_DIR = "apps";
 export const PROJECT_RESULTS_DIR = "results";
 export const PROJECT_VISUALIZATIONS_DIR = "visualizations";
 export const PROJECT_MUTATIONS_DIR = "mutations";
@@ -44,6 +45,7 @@ export interface ProjectArtifactIndex {
   queries: ProjectArtifactEntry[];
   queryTemplates: ProjectArtifactEntry[];
   notebooks: ProjectArtifactEntry[];
+  apps: ProjectArtifactEntry[];
   results: ProjectResultEntry[];
   visualizations: ProjectVisualizationEntry[];
   mutations: ProjectArtifactEntry[];
@@ -275,6 +277,8 @@ export function scanProjectArtifacts(projectRoot: string): ProjectArtifactIndex 
   const notebooks = listFiles(path.join(projectRoot, PROJECT_NOTEBOOKS_DIR), [
     ".ipynb",
   ]).map((file) => artifactEntry(projectRoot, file));
+  const apps = listFiles(path.join(projectRoot, PROJECT_APPS_DIR), [".py"])
+    .map((file) => artifactEntry(projectRoot, file));
   const mutations = listFiles(path.join(projectRoot, PROJECT_MUTATIONS_DIR), [
     ".cypher",
     ".cql",
@@ -314,7 +318,7 @@ export function scanProjectArtifacts(projectRoot: string): ProjectArtifactIndex 
       return [];
     }
   });
-  return { queries, queryTemplates, notebooks, results, visualizations, mutations };
+  return { queries, queryTemplates, notebooks, apps, results, visualizations, mutations };
 }
 
 /** UTC timestamp used by all unnamed project artifacts: YYYYMMDD-HHMMSS-mmm. */

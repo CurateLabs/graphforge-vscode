@@ -9,6 +9,7 @@ import {
   loadQuickstartDataset,
   materializeQuickstartProjectFiles,
   QUICKSTART_NOTEBOOK_REL,
+  QUICKSTART_STREAMLIT_REL,
   repairQuickstartProjectFiles,
   resolveQuickstartPath,
   writeQuickstartMarker,
@@ -37,8 +38,20 @@ export type OpenSampleProjectSuccess = {
 };
 
 export type OpenSampleNotebookSuccess = {
+  /** Absolute path of the notebook opened in the editor. */
   path: string;
+  /** Absolute project root that contains the notebook and its data. */
+  projectPath: string;
   relativePath: string;
+};
+
+export type OpenSampleStreamlitSuccess = {
+  /** Absolute path of the Streamlit app opened in the editor. */
+  path: string;
+  /** Absolute project root that contains the app and its data. */
+  projectPath: string;
+  relativePath: string;
+  command: string;
 };
 
 /** Palette/Get Started calls with no args; agents/e2e pass an object. */
@@ -112,9 +125,54 @@ export function registerOpenSampleProject(
           return { error, code: "SAMPLE_NOTEBOOK_MISSING", nextAction: "graphforge.openSampleProject" };
         }
         await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(notebookPath));
+        void vscode.window.showInformationMessage(`Opened Python notebook: ${notebookPath}`);
         return {
           path: notebookPath,
+          projectPath: projectRoot,
           relativePath: QUICKSTART_NOTEBOOK_REL.split(path.sep).join("/"),
+        };
+      },
+    ),
+
+    vscode.commands.registerCommand(
+      "graphforge.openSampleStreamlit",
+      async (): Promise<CommandOutcome<OpenSampleStreamlitSuccess>> => {
+        const projectRoot = session.project?.rootPath;
+        if (!projectRoot || !isQuickstartSamplePath(projectRoot)) {
+          const error = "Open the air-routes sample before opening its Streamlit app.";
+          presentError(`GraphForge: ${error}`);
+          return {
+            error,
+            code: "SAMPLE_STREAMLIT_PROJECT_REQUIRED",
+            nextAction: "graphforge.openSampleProject",
+          };
+        }
+        const appPath = path.join(projectRoot, QUICKSTART_STREAMLIT_REL);
+        if (!fs.existsSync(appPath)) {
+          try {
+            const dataset = loadQuickstartDataset(context.extensionPath);
+            repairQuickstartProjectFiles(projectRoot, dataset);
+          } catch (err) {
+            const error = err instanceof Error ? err.message : String(err);
+            presentError(`GraphForge: ${error}`);
+            return { error, code: "SAMPLE_STREAMLIT_MISSING", nextAction: "graphforge.openSampleProject" };
+          }
+        }
+        if (!fs.existsSync(appPath)) {
+          const error = `Sample Streamlit app is unavailable: ${QUICKSTART_STREAMLIT_REL}`;
+          presentError(`GraphForge: ${error}`);
+          return { error, code: "SAMPLE_STREAMLIT_MISSING", nextAction: "graphforge.openSampleProject" };
+        }
+        const command = `uv run --with streamlit --with graphforge --with pandas --with plotly streamlit run ${appPath}`;
+        await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(appPath));
+        void vscode.window.showInformationMessage(
+          `Opened Streamlit app: ${appPath}. Run: ${command}`,
+        );
+        return {
+          path: appPath,
+          projectPath: projectRoot,
+          relativePath: QUICKSTART_STREAMLIT_REL.split(path.sep).join("/"),
+          command,
         };
       },
     ),
@@ -141,13 +199,7 @@ export function registerOpenSampleProject(
           };
         }
 
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const storageFolder = context.globalStorageUri.fsPath;
-        const target = resolveQuickstartPath({
-          path: args?.path,
-          workspaceFolder,
-          storageFolder,
-        });
+        const target = resolveQuickstartPath({ path: args?.path });
         const force = Boolean(args?.force);
         const interactive = isInteractiveCall(args);
 

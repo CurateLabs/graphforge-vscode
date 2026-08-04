@@ -18,6 +18,7 @@ document.body.innerHTML = `
   <div class="actions compact-actions">
     <button class="secondary" type="button" id="open-hub-result">Inspect result</button>
     <button class="secondary" type="button" id="open-hub-notebook">Open Python notebook</button>
+    <button class="secondary" type="button" id="open-hub-streamlit">Open Streamlit app</button>
   </div>
 </section>
 <details id="journey-details" class="journey-details" open>
@@ -169,6 +170,8 @@ function renderArtifacts(artifacts) {
   byId('open-hub-visualization').disabled = readyVisualizations.length === 0;
   const notebookAvailable = (artifacts?.notebooks || []).length > 0;
   byId('open-hub-notebook').hidden = !notebookAvailable;
+  const streamlitAvailable = (artifacts?.apps || []).some((item) => item.path === 'apps/air_routes_dashboard.py');
+  byId('open-hub-streamlit').hidden = !streamlitAvailable;
   byId('open-hub-result').disabled = results.length === 0;
   byId('template-list').innerHTML = templates.length
     ? templates.map((item) => artifactRow(item, [
@@ -332,6 +335,9 @@ byId('open-hub-result').addEventListener('click', () => {
 byId('open-hub-notebook').addEventListener('click', () =>
   runCommand('graphforge.openSampleNotebook')
 );
+byId('open-hub-streamlit').addEventListener('click', () =>
+  runCommand('graphforge.openSampleStreamlit')
+);
 
 document.getElementById('refresh').addEventListener('click', () =>
   vscode.postMessage({ type: 'graphforge/runCommand', command: 'graphforge.checkEnvironment' })
@@ -390,6 +396,9 @@ function renderSteps(steps) {
     }
     if (step.secondaryAction) {
       actions.push(actionButton('secondary', step.secondaryAction));
+    }
+    if (step.tertiaryAction) {
+      actions.push(actionButton('secondary', step.tertiaryAction));
     }
     const currentAttr = step.status === 'current' ? ' aria-current="step"' : '';
     const artifact = step.artifact
