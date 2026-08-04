@@ -2,7 +2,7 @@
   "name": "graphforge",
   "displayName": "GraphForge",
   "description": "Explore GraphForge projects in VS Code — Cypher, analyst verbs, ontology, and epistemic-aware result graphs.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "CurateLabsAI",
   "icon": "media/icon.png",
   "license": "Apache-2.0",
