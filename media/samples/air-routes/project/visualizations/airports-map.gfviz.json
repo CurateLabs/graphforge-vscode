@@ -1,0 +1,25 @@
+{
+  "format": "graphforge.visualization/v2",
+  "name": "US airport routes",
+  "kind": "geospatial",
+  "result": "results/query-result.json",
+  "filters": [],
+  "renderer": { "id": "l7", "backend": "device" },
+  "geospatial": {
+    "source": {
+      "type": "links",
+      "source": { "longitudeField": "sourceLongitude", "latitudeField": "sourceLatitude" },
+      "target": { "longitudeField": "targetLongitude", "latitudeField": "targetLatitude" }
+    },
+    "sourceCrs": "EPSG:4326",
+    "projection": "EPSG:3857",
+    "aggregation": "none",
+    "layers": [
+      { "id": "routes", "type": "arc", "colorField": null, "sizeField": null, "shapeField": null, "color": "#6ea8fe", "opacity": 0.18, "size": 0.8 },
+      { "id": "airports", "type": "point", "colorField": null, "sizeField": null, "shapeField": null, "color": "#f2cc60", "opacity": 0.95, "size": 3 }
+    ],
+    "basemap": { "type": "blank" },
+    "viewport": { "longitude": -98.5, "latitude": 39.5, "zoom": 3, "bearing": 0, "pitch": 0, "bounds": null },
+    "presentation": { "title": "US airport routes", "legend": false, "theme": "editor" }
+  }
+}

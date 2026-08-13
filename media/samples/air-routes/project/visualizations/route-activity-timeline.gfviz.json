@@ -1,0 +1,26 @@
+{
+  "format": "graphforge.visualization/v2",
+  "name": "Route activity timeline",
+  "kind": "temporal",
+  "result": "results/route-activity.json",
+  "filters": [],
+  "renderer": { "id": "g2" },
+  "temporal": {
+    "mark": "line",
+    "timestampField": "timestamp",
+    "timezone": "UTC",
+    "granularity": "month",
+    "valueField": "routes",
+    "aggregation": "none",
+    "seriesField": "region",
+    "sort": "ascending",
+    "range": { "start": null, "end": null },
+    "window": { "size": null, "unit": "point" },
+    "playback": { "enabled": false, "step": null, "speedMs": null },
+    "axes": { "time": true, "value": true },
+    "legend": true,
+    "theme": "editor",
+    "animation": false,
+    "title": "Monthly route activity"
+  }
+}

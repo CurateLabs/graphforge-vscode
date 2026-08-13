@@ -1,0 +1,136 @@
+.render-status {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--vscode-focusBorder, #4c6ef5) 7%, transparent), transparent 42%),
+    color-mix(in srgb, var(--vscode-editor-background) 97%, var(--vscode-panel-border, #444));
+}
+
+.render-status[hidden] { display: none; }
+
+.render-status-card {
+  width: min(460px, 100%);
+  padding: 18px 20px 16px;
+  border: 1px solid var(--vscode-panel-border, #444);
+  border-left: 3px solid var(--vscode-focusBorder, #4c6ef5);
+  border-radius: 3px;
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  box-shadow: 0 10px 32px color-mix(in srgb, #000 24%, transparent);
+}
+
+.render-status[data-phase="failed"] .render-status-card {
+  border-left-color: var(--vscode-errorForeground, #f14c4c);
+}
+
+.render-status-renderer {
+  margin: 0 0 7px;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.render-status-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.render-status-detail {
+  margin: 5px 0 16px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.render-status-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.render-status-steps li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
+  font-size: 11px;
+}
+
+.render-status-steps li:not(:last-child)::after {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  right: 5px;
+  left: 12px;
+  height: 1px;
+  background: var(--vscode-panel-border, #444);
+  content: "";
+}
+
+.render-status-steps li > span:last-child {
+  z-index: 1;
+  width: fit-content;
+  max-width: calc(100% - 4px);
+  padding-right: 5px;
+  overflow: hidden;
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.render-status-marker {
+  z-index: 1;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--vscode-panel-border, #666);
+  border-radius: 50%;
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+}
+
+.render-status-steps li[data-state="complete"] { color: var(--vscode-foreground); }
+.render-status-steps li[data-state="complete"] .render-status-marker {
+  border-color: var(--vscode-testing-iconPassed, #73c991);
+  background: var(--vscode-testing-iconPassed, #73c991);
+}
+
+.render-status-steps li[data-state="current"] { color: var(--vscode-foreground); }
+.render-status-steps li[data-state="current"] .render-status-marker {
+  border-color: var(--vscode-focusBorder, #4c6ef5);
+  background: var(--vscode-focusBorder, #4c6ef5);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--vscode-focusBorder, #4c6ef5) 22%, transparent);
+  animation: render-status-pulse 1.4s ease-in-out infinite;
+}
+
+.render-status-steps li[data-state="failed"] { color: var(--vscode-errorForeground, #f14c4c); }
+.render-status-steps li[data-state="failed"] .render-status-marker {
+  border-color: var(--vscode-errorForeground, #f14c4c);
+  background: var(--vscode-errorForeground, #f14c4c);
+}
+
+@keyframes render-status-pulse {
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--vscode-focusBorder, #4c6ef5) 5%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .render-status-steps li[data-state="current"] .render-status-marker { animation: none; }
+}
+
+@media (max-width: 520px) {
+  .render-status { padding: 12px; }
+  .render-status-card { padding: 15px 14px 14px; }
+  .render-status-steps li { grid-template-columns: 10px minmax(0, 1fr); gap: 4px; font-size: 10px; }
+}

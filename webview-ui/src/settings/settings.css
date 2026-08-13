@@ -1,0 +1,220 @@
+/* GraphForge Settings webview — VS Code theme tokens throughout; the indigo
+ * accent (#4c6ef5) matches the Get Started webview (docs/DESIGN.md). */
+:root {
+  color-scheme: light dark;
+  --gf-accent: #4c6ef5;
+  --gf-border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--vscode-font-family);
+  font-size: 13px;
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+}
+
+.header {
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--gf-border);
+}
+
+.header h1 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.header-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  max-width: 640px;
+}
+
+.layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* Left nav (vertical tablist) */
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 168px;
+  padding: 16px 8px 16px 16px;
+  position: sticky;
+  top: 0;
+}
+
+.nav-item {
+  font-family: var(--vscode-font-family);
+  font-size: 13px;
+  text-align: left;
+  padding: 6px 12px;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.nav-item[aria-selected="true"] {
+  background: var(--vscode-list-activeSelectionBackground, rgba(76, 110, 245, 0.16));
+  color: var(--vscode-list-activeSelectionForeground, var(--vscode-foreground));
+  border-left-color: var(--gf-accent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  font-weight: 600;
+}
+
+.nav-item:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--gf-accent));
+  outline-offset: 1px;
+}
+
+/* Category panels */
+.content {
+  flex: 1;
+  min-width: 0;
+  max-width: 680px;
+  padding: 16px 24px 32px 8px;
+}
+
+.panel:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--gf-accent));
+  outline-offset: 2px;
+}
+
+.panel-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.panel-blurb {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* Individual settings */
+.setting {
+  border: 1px solid var(--gf-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--vscode-sideBar-background, transparent);
+}
+
+fieldset.setting {
+  margin-inline: 0;
+}
+
+.setting-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0;
+}
+
+.setting-description {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--vscode-descriptionForeground);
+}
+
+.setting-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.setting-option input[type="radio"] {
+  margin-top: 3px;
+}
+
+.setting-option-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.setting-option-text .setting-description {
+  margin-top: 2px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--gf-accent);
+}
+
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--gf-accent));
+  outline-offset: 2px;
+}
+
+input[type="text"] {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 5px 8px;
+  font-family: var(--vscode-font-family);
+  font-size: 12px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--gf-border));
+  border-radius: 4px;
+}
+
+input[type="text"]::placeholder {
+  color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground));
+}
+
+input[type="text"]:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--gf-accent));
+  outline-offset: -1px;
+}
+
+@media (max-width: 560px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+    min-width: 0;
+    padding: 12px 16px 0;
+  }
+
+  .nav-item[aria-selected="true"] {
+    border-left-color: transparent;
+    border-bottom: 2px solid var(--gf-accent);
+    border-radius: 4px 4px 0 0;
+  }
+
+  .content {
+    padding: 8px 16px 24px;
+  }
+}

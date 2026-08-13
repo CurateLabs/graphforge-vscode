@@ -1,0 +1,290 @@
+import * as vscode from "vscode";
+import type { GraphForgeSession } from "../session/graphForgeSession";
+import { GetStartedViewProvider, revealGetStarted } from "../views/getStartedView";
+import { engineErrorCode, errorMessage, presentError } from "./errorPresentation";
+
+// Pure helpers live in `errorPresentation.ts` (vscode-free, unit tested);
+// re-exported here so existing command imports keep working.
+export {
+  engineErrorCode,
+  errorMessage,
+  isMissingIndexError,
+  isVectorIndexShapedInvocation,
+  presentError,
+} from "./errorPresentation";
+
+/** Short, single-line, whitespace-collapsed preview of a query for error toasts. */
+export function querySnippet(text: string, max = 80): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+}
+
+/** Short labels for `showErrorMessage` action buttons (toast space is tight). */
+export const RECOVERY_SETUP_NATIVE = "Setup Native (Node)";
+export const RECOVERY_SETUP_PYTHON = "Setup Python";
+export const RECOVERY_OPEN_PROJECT = "Open Project";
+export const RECOVERY_INIT_PROJECT = "Initialize";
+export const RECOVERY_CHECK_ENV = "$(refresh)";
+export const RECOVERY_USE_NODE = "Use Node runtime";
+export const SHOW_ERROR_DETAILS = "Show Details";
+
+/**
+ * Wrap a long/write engine call in a non-modal status-bar progress indicator
+ * (#31 extended): the same idiom Run Query already used, factored out so every
+ * write command (checkpoints, embeddings, indexing, knowledge, power) shows an
+ * in-flight cue instead of a silent pause. Window location keeps agent-invoked
+ * runs unblocked; it clears when the call settles either way.
+ */
+export function withEngineProgress<T>(title: string, task: () => Thenable<T>): Thenable<T> {
+  return vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Window, title: `GraphForge: ${title}` },
+    () => task(),
+  );
+}
+
+let errorChannel: vscode.OutputChannel | undefined;
+
+/** Lazily created channel that keeps full raw diagnostics out of toasts without losing them. */
+function errorOutput(): vscode.OutputChannel {
+  errorChannel ??= vscode.window.createOutputChannel("GraphForge Errors");
+  return errorChannel;
+}
+
+/** Append full raw diagnostics for a failure to the error output channel. */
+export function logErrorDetail(what: string, err: unknown, extraDetail?: string): void {
+  const presented = presentError(err);
+  const channel = errorOutput();
+  channel.appendLine(
+    `[${new Date().toISOString()}] ${what}${presented.code ? ` [${presented.code}]` : ""}`,
+  );
+  if (extraDetail) {
+    channel.appendLine(extraDetail);
+  }
+  channel.appendLine(presented.detail);
+}
+
+/**
+ * Single curated error reporter for command catch blocks (#28):
+ *
+ * - Warning-class errors (`UnsupportedByBindingError`, `NodeOnlyFeatureError`
+ *   — policy facts that name their own fix, #38) get a soft
+ *   `showWarningMessage`, never a red error toast.
+ * - Setup/runtime failures get a short toast with the existing recovery
+ *   action buttons (Setup Native / Setup Python).
+ * - Everything else (query/user-input failures) gets a concise one-line
+ *   toast with a "Show Details" button; the full raw message goes to the
+ *   "GraphForge Errors" output channel.
+ *
+ * Returns the structured `{ error, code }` shape — with the *full* raw
+ * message, not the curated one — so command handlers stay agent-copyable.
+ * Toasts are fire-and-forget: never awaited, so headless runs can't hang.
+ */
+export function reportEngineError(
+  what: string,
+  err: unknown,
+  extraDetail?: string,
+): { error: string; code?: string } {
+  const presented = presentError(err);
+  logErrorDetail(what, err, extraDetail);
+
+  if (presented.severity === "warning") {
+    void vscode.window.showWarningMessage(`GraphForge: ${presented.message}`);
+    return { error: presented.detail, code: presented.code };
+  }
+
+  if (presented.setup) {
+    void vscode.window
+      .showErrorMessage(
+        `GraphForge: ${what} — ${presented.message}`,
+        RECOVERY_SETUP_NATIVE,
+        RECOVERY_SETUP_PYTHON,
+      )
+      .then((action) => {
+        if (action === RECOVERY_SETUP_NATIVE) {
+          return vscode.commands.executeCommand("graphforge.setupNativeBinding");
+        }
+        if (action === RECOVERY_SETUP_PYTHON) {
+          return vscode.commands.executeCommand("graphforge.setupPythonBinding");
+        }
+        return undefined;
+      });
+    return { error: presented.detail, code: presented.code };
+  }
+
+  void vscode.window
+    .showErrorMessage(
+      `GraphForge: ${what} — ${presented.message}${presented.code ? ` [${presented.code}]` : ""}`,
+      SHOW_ERROR_DETAILS,
+    )
+    .then((action) => {
+      if (action === SHOW_ERROR_DETAILS) {
+        errorOutput().show(true);
+      }
+      return undefined;
+    });
+  return { error: presented.detail, code: presented.code };
+}
+
+/** Which index a missing-index remediation toast should offer to build (#39). */
+export interface MissingIndexRemediation {
+  /** Which index command fixes the failure. */
+  index: "text" | "vector";
+  /** Pre-fill the index command with the same label the verb ran against. */
+  label?: string;
+}
+
+/**
+ * Curated missing-index remediation toast shared by Find/Similar/Cluster
+ * (#8/#39): instead of echoing the raw engine message, the toast names the
+ * remediation command and offers to run it inline, pre-filled with the same
+ * label. Full detail goes to the error output channel, and the structured
+ * `{ error, code }` shape is returned immediately (the toast is
+ * fire-and-forget so headless/agent runs can't hang).
+ */
+export function reportMissingIndexError(
+  what: string,
+  err: unknown,
+  remediation: MissingIndexRemediation,
+): { error: string; code?: string } {
+  const code = engineErrorCode(err);
+  const detail = errorMessage(err);
+  logErrorDetail(`${what} (missing/stale index?)`, err);
+
+  const commandId =
+    remediation.index === "text" ? "graphforge.indexText" : "graphforge.indexVector";
+  const commandTitle =
+    remediation.index === "text" ? "GraphForge: Index Text…" : "GraphForge: Index Vector…";
+  const button = remediation.index === "text" ? "Index Text…" : "Index Vector…";
+  const namedRemediation = remediation.label
+    ? `${commandTitle} (label: ${remediation.label})`
+    : commandTitle;
+
+  void vscode.window
+    .showErrorMessage(
+      `GraphForge: ${what}${code ? ` [${code}]` : ""} — the ${remediation.index} index looks missing or stale. ` +
+        `Run "${namedRemediation}" then retry.`,
+      button,
+    )
+    .then((choice) =>
+      choice ? vscode.commands.executeCommand(commandId, remediation.label) : undefined,
+    );
+  return { error: detail, code };
+}
+
+/**
+ * Structured, agent-copyable failure shape returned by command handlers when
+ * setup is incomplete (see `docs/experience/agent-interop.md` #3: fail
+ * closed with an actionable `nextAction` instead of a bare throw).
+ */
+export interface SetupRecovery {
+  error: string;
+  code?: string;
+  nextAction: string;
+}
+
+/**
+ * Structured outcome union returned by every GraphForge command handler to
+ * `executeCommand` callers (#36 — no `void`-and-discard handlers):
+ *
+ * - `SetupRecovery` — no usable runtime / no open project (fail closed).
+ * - `{ cancelled: true }` — the human dismissed an interactive prompt.
+ * - `{ error, code? }` — the engine call failed (from `reportEngineError`).
+ * - `T` — the command's success payload (the JSON it already computes).
+ */
+export type CommandOutcome<T> =
+  | SetupRecovery
+  | { cancelled: true }
+  | { error: string; code?: string }
+  | T;
+
+/** Human-readable next command an agent (or human) should run to unblock setup (#12: covers both runtimes). */
+export async function nextSetupAction(session: GraphForgeSession): Promise<string> {
+  const hasRuntime = await session.hasUsableRuntime();
+  return hasRuntime
+    ? 'Run "GraphForge: Open Project" (graphforge.openProject) or "GraphForge: Initialize Project Here" (graphforge.initializeProjectHere).'
+    : 'Run "GraphForge: Setup Native Binding" (graphforge.setupNativeBinding) or "GraphForge: Setup Python Binding" (graphforge.setupPythonBinding).';
+}
+
+/**
+ * Open the Get Started sidebar (primary human recovery surface) and return
+ * structured recovery info for agents. Toasts are omitted — the panel has
+ * the same actions with room for short copy, not stack traces.
+ */
+export async function offerSetupRecovery(
+  session: GraphForgeSession,
+  err: unknown,
+): Promise<SetupRecovery> {
+  const code = engineErrorCode(err);
+  const message = errorMessage(err);
+  const provider = GetStartedViewProvider.instance;
+  if (provider) {
+    await revealGetStarted(provider);
+  } else {
+    void vscode.commands.executeCommand("graphforge.getStarted");
+  }
+  return { error: message, code, nextAction: await nextSetupAction(session) };
+}
+
+/** Gate commands that need an open project; returns structured recovery on failure. */
+export async function ensureProjectOrRecover(
+  session: GraphForgeSession,
+): Promise<SetupRecovery | undefined> {
+  try {
+    await session.ensureProject();
+    return undefined;
+  } catch (err) {
+    return offerSetupRecovery(session, err);
+  }
+}
+
+/** Boolean gate for handlers that only need to know whether a project is ready. */
+export async function ensureProjectReady(session: GraphForgeSession): Promise<boolean> {
+  return (await ensureProjectOrRecover(session)) === undefined;
+}
+
+/**
+ * Gate for Node-only features (checkpoints, embedding spaces, indexing, power
+ * commands): surface an actionable "this needs the Node runtime" cue *before*
+ * the engine call, instead of letting it fail mid-flight with a
+ * `NodeOnlyFeatureError` the user only discovers after committing to the flow
+ * (audit cliff #3). Call after `ensureProjectOrRecover` so a backend exists.
+ *
+ * Returns `undefined` when the active runtime is Node (proceed); otherwise a
+ * structured `SetupRecovery` (agent-copyable) and shows a warning toast whose
+ * action either switches the runtime to Node or opens Setup Native Binding.
+ */
+export async function ensureNodeRuntime(
+  session: GraphForgeSession,
+  featureName: string,
+): Promise<SetupRecovery | undefined> {
+  if (session.activeRuntime === "node") {
+    return undefined;
+  }
+
+  const snapshot = await session.environmentSnapshot();
+  const activeLabel = session.activeRuntime ?? snapshot.active ?? "not Node";
+  const message =
+    `${featureName} needs the Node runtime (@curatelabs/graphforge) — active runtime is ${activeLabel}.`;
+  const nodeReady = snapshot.node.available;
+  const action = nodeReady ? RECOVERY_USE_NODE : RECOVERY_SETUP_NATIVE;
+
+  void vscode.window.showWarningMessage(`GraphForge: ${message}`, action).then((choice) => {
+    if (choice === RECOVERY_SETUP_NATIVE) {
+      return vscode.commands.executeCommand("graphforge.setupNativeBinding");
+    }
+    if (choice === RECOVERY_USE_NODE) {
+      return vscode.workspace
+        .getConfiguration("graphforge")
+        .update("runtime", "node", vscode.ConfigurationTarget.Workspace);
+    }
+    return undefined;
+  });
+
+  return {
+    error: message,
+    code: "NODE_ONLY_FEATURE",
+    nextAction: nodeReady
+      ? 'Set graphforge.runtime to "node" (or "auto" with the Node binding available), then retry.'
+      : 'Run "GraphForge: Setup Native Binding" (graphforge.setupNativeBinding), then retry.',
+  };
+}

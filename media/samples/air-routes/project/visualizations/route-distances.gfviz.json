@@ -1,0 +1,13 @@
+{
+  "format": "graphforge.visualization/v1",
+  "name": "Route distances by origin region",
+  "kind": "plotly",
+  "result": "results/query-result.json",
+  "plotly": {
+    "chartType": "scatter",
+    "x": "label",
+    "y": "dist",
+    "color": "region",
+    "title": "US route distances by origin region"
+  }
+}

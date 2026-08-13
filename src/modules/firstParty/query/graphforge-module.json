@@ -1,0 +1,10 @@
+{
+  "format": "graphforge.module/v1",
+  "id": "graphforge.query",
+  "name": "Query",
+  "version": "1.0.0",
+  "publisher": "GraphForge",
+  "description": "Run openCypher against the active project and publish durable result tables.",
+  "capabilities": ["query"],
+  "entrypoint": { "kind": "builtin" }
+}

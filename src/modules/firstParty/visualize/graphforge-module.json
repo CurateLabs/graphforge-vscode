@@ -1,0 +1,10 @@
+{
+  "format": "graphforge.module/v1",
+  "id": "graphforge.visualize",
+  "name": "Visualize",
+  "version": "1.0.0",
+  "publisher": "GraphForge",
+  "description": "Turn project results into explicit graph, chart, geospatial, and temporal visualizations.",
+  "capabilities": ["visualize"],
+  "entrypoint": { "kind": "builtin" }
+}

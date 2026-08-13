@@ -1,0 +1,20 @@
+{
+  "format": "graphforge.visualization/v2",
+  "name": "Route distances by origin region — AntV G2",
+  "kind": "chart",
+  "result": "results/query-result.json",
+  "filters": [],
+  "renderer": { "id": "g2" },
+  "chart": {
+    "mark": "scatter",
+    "bindings": { "x": "label", "y": "dist", "color": "region", "size": null, "shape": null, "series": null },
+    "aggregation": "none",
+    "binning": { "enabled": false, "thresholds": null },
+    "sort": [],
+    "axes": { "x": true, "y": true },
+    "legend": true,
+    "theme": "editor",
+    "animation": false,
+    "title": "US route distances by origin region"
+  }
+}

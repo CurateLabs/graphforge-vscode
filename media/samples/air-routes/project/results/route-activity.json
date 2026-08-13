@@ -1,0 +1,18 @@
+{
+  "columns": ["timestamp", "routes", "region"],
+  "rows": [
+    { "timestamp": "2025-01-01T00:00:00Z", "routes": 482, "region": "West" },
+    { "timestamp": "2025-02-01T00:00:00Z", "routes": 501, "region": "West" },
+    { "timestamp": "2025-03-01T00:00:00Z", "routes": 537, "region": "West" },
+    { "timestamp": "2025-04-01T00:00:00Z", "routes": 558, "region": "West" },
+    { "timestamp": "2025-05-01T00:00:00Z", "routes": 579, "region": "West" },
+    { "timestamp": "2025-06-01T00:00:00Z", "routes": 603, "region": "West" },
+    { "timestamp": "2025-07-01T00:00:00Z", "routes": 617, "region": "West" },
+    { "timestamp": "2025-08-01T00:00:00Z", "routes": 609, "region": "West" },
+    { "timestamp": "2025-09-01T00:00:00Z", "routes": 584, "region": "West" },
+    { "timestamp": "2025-10-01T00:00:00Z", "routes": 552, "region": "West" },
+    { "timestamp": "2025-11-01T00:00:00Z", "routes": 519, "region": "West" },
+    { "timestamp": "2025-12-01T00:00:00Z", "routes": 495, "region": "West" }
+  ],
+  "rowCount": 12
+}
