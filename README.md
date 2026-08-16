@@ -1,5 +1,7 @@
 # GraphForge for VS Code
 
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/CurateLabs/graphforge-vscode?utm_source=badge)
+
 Explore [GraphForge](https://docs.graphforge.sh/) projects in the editor: Cypher, analyst verbs, progressive ontology, and epistemic-aware result graphs.
 
 Publisher: **CurateLabsAI** (`CurateLabsAI.graphforge`).
@@ -53,6 +55,24 @@ G6, Cytoscape, and Sigma. Layouts run in isolated Node workers with an explicit
 60-second per-layout evidence budget. This is opt-in and does not claim browser
 paint, interaction, accessibility, or peak-memory performance; it is intentionally
 absent from CI and release gates.
+
+### Benchmarks (CodSpeed)
+
+`npm run bench` builds `src/bench/` into an ESM bundle (`dist/bench/index.mjs`)
+and runs the tinybench suites: Arrow IPC decoding, Result Table ↔ Result Graph
+cross-linking, Result Graph styling and renderer option resolution, and Plotly
+figure building and validation. All of it is host-side, `vscode`-free code on
+the path of every query result.
+
+CI runs the same suites on every pull request through
+[CodSpeed](https://app.codspeed.io/CurateLabs/graphforge-vscode) in CPU
+simulation mode (`.github/workflows/codspeed.yml`), which reports the change
+against the base commit. To reproduce a CI measurement locally:
+
+```bash
+npm run compile:bench
+codspeed run --mode simulation -- npm run bench:run
+```
 
 ### Runtimes: Node (default) and Python (alternative)
 

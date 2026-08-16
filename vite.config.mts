@@ -7,6 +7,8 @@
  *   vite build                → dist/extension.js (single flat CJS bundle)
  *   vite build --mode tests   → per-test-file CJS bundles in dist/test/,
  *                               plus a copy of src/test/fixtures/
+ *   vite build --mode bench   → dist/bench/index.js, the CodSpeed benchmark
+ *                               entrypoint (see src/bench/)
  *
  * Parity contract with the retired esbuild.mjs: CJS output targeting node20,
  * `vscode` and the optional peer `@curatelabs/graphforge` external, `apache-arrow`
@@ -81,6 +83,35 @@ function testsConfig(): UserConfig {
 }
 
 /**
+ * CodSpeed benchmarks (src/bench). Two deliberate differences from the host and
+ * test builds: dependencies stay external, because @codspeed/tinybench-plugin
+ * loads its instrumentation at runtime and must not be bundled, and the output
+ * is ESM, because tinybench and the plugin are ESM-only and would otherwise be
+ * `require`d from a CJS bundle.
+ */
+function benchConfig(): UserConfig {
+  return {
+    build: {
+      ssr: "src/bench/index.ts",
+      outDir: "dist/bench",
+      emptyOutDir: true,
+      target: "node20",
+      sourcemap: true,
+      minify: false,
+      rollupOptions: {
+        external,
+        output: {
+          format: "es",
+          entryFileNames: "index.mjs",
+          inlineDynamicImports: true,
+          sourcemapExcludeSources: true,
+        },
+      },
+    },
+  };
+}
+
+/**
  * Non-.test.ts assets (e.g. fake subprocess hosts used by pythonBridge tests)
  * aren't followed by the bundler; copy them alongside the compiled test
  * bundles so `__dirname`-relative lookups still resolve.
@@ -99,6 +130,8 @@ function copyTestFixtures(): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) =>
-  mode === "tests" ? testsConfig() : hostConfig(),
-);
+export default defineConfig(({ mode }) => {
+  if (mode === "tests") return testsConfig();
+  if (mode === "bench") return benchConfig();
+  return hostConfig();
+});

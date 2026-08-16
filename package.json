@@ -637,10 +637,13 @@
     "compile:webview": "vite build --config webview-ui/vite.config.mts",
     "watch": "vite build --watch",
     "watch:webview": "vite build --watch --config webview-ui/vite.config.mts",
-    "check": "tsc --noEmit && tsc --noEmit -p webview-ui",
+    "check": "tsc --noEmit && tsc --noEmit -p webview-ui && tsc --noEmit -p tsconfig.bench.json",
     "lint": "npm run check",
     "test": "npm run compile:host && vscode-test",
     "test:unit": "npm run compile && mocha --ui tdd dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/viewContributions.test.js dist/test/quickstartSample.test.js dist/test/projectArtifacts.test.js dist/test/visualizationRegistry.test.js dist/test/visualizationDocumentState.test.js dist/test/visualizationLoadingModel.test.js dist/test/geospatialModel.test.js dist/test/agentContext.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js dist/test/figureFromResult.test.js dist/test/figureSchema.test.js dist/test/resultGraphModel.test.js dist/test/resultTableModel.test.js dist/test/entityMutation.test.js dist/test/resultDocument.test.js dist/test/moduleManifest.test.js dist/test/workspaceScript.test.js dist/test/importData.test.js",
+    "compile:bench": "vite build --mode bench",
+    "bench": "npm run compile:bench && npm run bench:run",
+    "bench:run": "node dist/bench/index.mjs",
     "benchmark:visualizations": "node scripts/benchmark-visualizations.mjs",
     "verify:package": "node scripts/verify-package-contents.mjs",
     "package": "vsce package"
@@ -671,6 +674,7 @@
     }
   },
   "devDependencies": {
+    "@codspeed/tinybench-plugin": "^5.7.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.1.2",
     "@types/vscode": "^1.96.0",
@@ -678,6 +682,7 @@
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.3.2",
     "mocha": "^11.1.0",
+    "tinybench": "^5.1.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.0"
   }
