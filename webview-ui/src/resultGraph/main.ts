@@ -69,6 +69,7 @@ let viewOptions: Omit<ResultGraphViewOptions, "renderer"> = {};
 let renderer: RendererHandle | undefined;
 let runtimeBanner: string | undefined;
 let renderGeneration = 0;
+let hostContext: { instanceId: string; renderGeneration: number } | undefined;
 
 const loading = createVisualizationLoadingController(
   renderStatusElement,
@@ -77,7 +78,7 @@ const loading = createVisualizationLoadingController(
 );
 
 function post(message: WebviewToHost): void {
-  vscode.postMessage(message);
+  vscode.postMessage(hostContext ? { ...message, ...hostContext } : message);
 }
 
 function shiftKeyFromPointerPayload(value: unknown): boolean {
@@ -1233,7 +1234,9 @@ window.addEventListener("message", (event: MessageEvent<HostToWebview>) => {
   if (!message || typeof message !== "object") {
     return;
   }
-  if (message.type === "graphforge/graph") {
+  if (message.type === "graphforge/visualizationContext") {
+    hostContext = { instanceId: message.instanceId, renderGeneration: message.renderGeneration };
+  } else if (message.type === "graphforge/graph") {
     payload = message.payload;
     scheduleRender();
   } else if (message.type === "graphforge/graphRenderer") {

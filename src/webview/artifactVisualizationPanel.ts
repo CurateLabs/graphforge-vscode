@@ -17,6 +17,13 @@ import type {
   ArtifactVisualizationSpec,
   ArtifactVisualizationWebviewToHost,
 } from "./artifactVisualizationProtocol";
+import {
+  visualizationInstanceId,
+  visualizationInstances,
+  VisualizationInstanceLifecycle,
+  type VisualizationController,
+  type VisualizationKind,
+} from "./visualizationInstanceRegistry";
 
 function isRenderableSpec(value: unknown): value is ArtifactVisualizationSpec {
   return (
@@ -42,8 +49,10 @@ function immutableIdentityMatches(
   );
 }
 
-export class ArtifactVisualizationPanel {
-  public static current: ArtifactVisualizationPanel | undefined;
+export class ArtifactVisualizationPanel implements VisualizationController {
+  private readonly lifecycle: VisualizationInstanceLifecycle;
+  public get renderGeneration(): number { return this.lifecycle.renderGeneration; }
+  public readonly coordinationGroup: string | undefined;
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
   private projectRoot: string;
@@ -62,7 +71,12 @@ export class ArtifactVisualizationPanel {
     result: QueryResult,
     onSaved?: () => void,
     onSelectRow?: (rowIndex: number) => void,
+    public readonly instanceId: string = visualizationInstanceId("chart"),
+    coordinationGroup?: string,
   ) {
+    this.lifecycle = new VisualizationInstanceLifecycle(instanceId);
+    this.lifecycle.beginRender();
+    this.coordinationGroup = coordinationGroup;
     this.panel = panel;
     this.projectRoot = projectRoot;
     this.artifactPath = artifactPath;
@@ -72,7 +86,8 @@ export class ArtifactVisualizationPanel {
     this.onSelectRow = onSelectRow;
     trackVizPanel(panel);
     this.panel.onDidDispose(() => {
-      ArtifactVisualizationPanel.current = undefined;
+      visualizationInstances.remove(this.instanceId);
+      this.lifecycle.dispose();
       for (const disposable of this.disposables.splice(0)) disposable.dispose();
     });
     this.panel.webview.onDidReceiveMessage((message: ArtifactVisualizationWebviewToHost) => {
@@ -90,20 +105,23 @@ export class ArtifactVisualizationPanel {
     result: QueryResult,
     onSaved?: () => void,
     onSelectRow?: (rowIndex: number) => void,
+    coordinationGroup?: string,
   ): Promise<{ panel: ArtifactVisualizationPanel; status: "opened" | "updated" | "cancelled" }> {
-    if (ArtifactVisualizationPanel.current) {
-      revealVizPanel(ArtifactVisualizationPanel.current.panel);
-      if (ArtifactVisualizationPanel.current.state.dirty) {
+    const instanceId = visualizationInstanceId(spec.kind, projectRoot, artifactPath);
+    const existing = visualizationInstances.get<ArtifactVisualizationPanel>(instanceId);
+    if (existing) {
+      existing.reveal();
+      if (existing.state.dirty) {
         const choice = await vscode.window.showWarningMessage(
           "This visualization has unsaved artifact changes. Discard them and open the requested visualization?",
           { modal: true },
           "Discard changes",
         );
         if (choice !== "Discard changes") {
-          return { panel: ArtifactVisualizationPanel.current, status: "cancelled" };
+          return { panel: existing, status: "cancelled" };
         }
       }
-      ArtifactVisualizationPanel.current.replace(
+      existing.replace(
         projectRoot,
         artifactPath,
         spec,
@@ -111,7 +129,7 @@ export class ArtifactVisualizationPanel {
         onSaved,
         onSelectRow,
       );
-      return { panel: ArtifactVisualizationPanel.current, status: "updated" };
+      return { panel: existing, status: "updated" };
     }
     const panel = vscode.window.createWebviewPanel(
       "graphforge.artifactVisualization",
@@ -132,9 +150,24 @@ export class ArtifactVisualizationPanel {
       result,
       onSaved,
       onSelectRow,
+      instanceId,
+      coordinationGroup,
     );
-    ArtifactVisualizationPanel.current = created;
+    visualizationInstances.register(created);
     return { panel: created, status: "opened" };
+  }
+
+  get kind(): VisualizationKind {
+    return this.state.draft.kind;
+  }
+
+  reveal(): void {
+    visualizationInstances.activate(this.instanceId);
+    revealVizPanel(this.panel);
+  }
+
+  dispose(): void {
+    this.panel.dispose();
   }
 
   private replace(
@@ -145,6 +178,7 @@ export class ArtifactVisualizationPanel {
     onSaved?: () => void,
     onSelectRow?: (rowIndex: number) => void,
   ): void {
+    this.lifecycle.beginRender();
     this.projectRoot = projectRoot;
     this.artifactPath = artifactPath;
     this.result = result;
@@ -163,6 +197,7 @@ export class ArtifactVisualizationPanel {
 
   private postCurrent(): void {
     const message: ArtifactVisualizationHostToWebview = {
+      ...this.messageContext,
       type: "graphforge/artifactVisualization",
       path: this.artifactPath,
       spec: this.state.draft,
@@ -175,6 +210,9 @@ export class ArtifactVisualizationPanel {
   private async receive(message: ArtifactVisualizationWebviewToHost): Promise<void> {
     if (message.type === "graphforge/ready") {
       this.postCurrent();
+      return;
+    }
+    if (!this.lifecycle.accepts(message)) {
       return;
     }
     if (message.type === "graphforge/renderStarted") {
@@ -201,6 +239,7 @@ export class ArtifactVisualizationPanel {
       const candidate: ProjectVisualizationSpecV2 = message.spec;
       if (!isRenderableSpec(candidate) || !immutableIdentityMatches(this.state.committed, candidate)) {
         const response: ArtifactVisualizationHostToWebview = {
+          ...this.messageContext,
           type: "graphforge/artifactError",
           message: "The visualization proposed an invalid or identity-changing artifact state.",
         };
@@ -209,6 +248,7 @@ export class ArtifactVisualizationPanel {
       }
       this.state.update(candidate);
       const response: ArtifactVisualizationHostToWebview = {
+        ...this.messageContext,
         type: "graphforge/artifactDirty",
         dirty: this.state.dirty,
       };
@@ -218,6 +258,7 @@ export class ArtifactVisualizationPanel {
     if (message.type === "graphforge/revertArtifactState") {
       const spec = this.state.revert();
       const response: ArtifactVisualizationHostToWebview = {
+        ...this.messageContext,
         type: "graphforge/artifactReverted",
         spec,
       };
@@ -232,18 +273,24 @@ export class ArtifactVisualizationPanel {
         this.state.commit();
         this.onSaved?.();
         const response: ArtifactVisualizationHostToWebview = {
+          ...this.messageContext,
           type: "graphforge/artifactCommitted",
           spec,
         };
         void this.panel.webview.postMessage(response);
       } catch (error) {
         const response: ArtifactVisualizationHostToWebview = {
+          ...this.messageContext,
           type: "graphforge/artifactError",
           message: error instanceof Error ? error.message : String(error),
         };
         void this.panel.webview.postMessage(response);
       }
     }
+  }
+
+  private get messageContext(): { instanceId: string; renderGeneration: number } {
+    return { instanceId: this.instanceId, renderGeneration: this.renderGeneration };
   }
 
   private getHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {

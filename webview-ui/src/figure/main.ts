@@ -14,9 +14,10 @@ import "../shared/visualizationLoading.css";
 import "./figure.css";
 
 const vscode = acquireVsCodeApi();
+let hostContext: { instanceId: string; renderGeneration: number } | undefined;
 
 function post(message: FigureWebviewToHost): void {
-  vscode.postMessage(message);
+  vscode.postMessage(hostContext ? { ...message, ...hostContext } : message);
 }
 
 const root = document.getElementById("app");
@@ -82,6 +83,7 @@ window.addEventListener("message", (event: MessageEvent<FigureHostToWebview>) =>
   if (!msg || typeof msg !== "object") {
     return;
   }
+  hostContext = { instanceId: msg.instanceId, renderGeneration: msg.renderGeneration };
   if (msg.type === "graphforge/figureError") {
     showBanner(msg.message);
     loading.update({ renderer: "plotly", phase: "failed", failedAt: "prepare", message: msg.message });

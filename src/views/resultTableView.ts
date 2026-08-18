@@ -113,7 +113,8 @@ export class ResultTableViewProvider
 
   private selectResult(rowIndex: number, column?: string): void {
     if (!this.state) return;
-    const highlight = ResultGraphPanel.current?.highlightFromResult(
+    const graphPanel = ResultGraphPanel.active();
+    const highlight = graphPanel?.highlightFromResult(
       this.state.result,
       rowIndex,
       column,
@@ -123,7 +124,7 @@ export class ResultTableViewProvider
     this.post({
       type: "graphforge/resultSelection",
       linked: count > 0,
-      message: !ResultGraphPanel.current
+      message: !graphPanel
         ? "Open Result Graph to link this selection."
         : count > 0
           ? `Highlighted ${highlight?.nodeIds.length ?? 0} node(s) and ${highlight?.edgeIds.length ?? 0} edge(s).`

@@ -48,6 +48,7 @@ let playbackUpdateInProgress = false;
 let viewportTimer: number | undefined;
 let renderToken = 0;
 let loadingPhase: "prepare" | "layout" | "paint" = "prepare";
+let hostContext: { instanceId: string; renderGeneration: number } | undefined;
 const loading = createVisualizationLoadingController(
   renderStatusElement,
   container,
@@ -77,7 +78,7 @@ const MAP_SCENE_LOAD_TIMEOUT_MS = 15_000;
 const VIEWPORT_SAVE_DEBOUNCE_MS = 200;
 
 function post(message: ArtifactVisualizationWebviewToHost): void {
-  vscode.postMessage(message);
+  vscode.postMessage(hostContext ? { ...message, ...hostContext } : message);
 }
 
 function showBanner(message?: string): void {
@@ -608,6 +609,7 @@ pauseButton?.addEventListener("click", stopPlayback);
 window.addEventListener("message", (event: MessageEvent<ArtifactVisualizationHostToWebview>) => {
   const message = event.data;
   if (!message || typeof message !== "object") return;
+  hostContext = { instanceId: message.instanceId, renderGeneration: message.renderGeneration };
   if (message.type === "graphforge/artifactError") {
     showBanner(message.message);
     return;

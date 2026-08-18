@@ -1,5 +1,6 @@
 import type { ProjectVisualizationSpecV2 } from "../session/visualizationRegistry";
 import type { QueryResult } from "../session/types";
+import type { VisualizationMessageContext } from "./visualizationInstanceRegistry";
 
 export type ArtifactVisualizationSpec = Extract<
   ProjectVisualizationSpecV2,
@@ -8,7 +9,7 @@ export type ArtifactVisualizationSpec = Extract<
 
 export type ArtifactRenderPhase = "initialize" | "render" | "interaction";
 
-export type ArtifactVisualizationHostToWebview =
+export type ArtifactVisualizationHostToWebview = (
   | {
       type: "graphforge/artifactVisualization";
       path: string;
@@ -19,9 +20,10 @@ export type ArtifactVisualizationHostToWebview =
   | { type: "graphforge/artifactCommitted"; spec: ArtifactVisualizationSpec }
   | { type: "graphforge/artifactReverted"; spec: ArtifactVisualizationSpec }
   | { type: "graphforge/artifactDirty"; dirty: boolean }
-  | { type: "graphforge/artifactError"; message: string };
+  | { type: "graphforge/artifactError"; message: string }
+) & VisualizationMessageContext;
 
-export type ArtifactVisualizationWebviewToHost =
+export type ArtifactVisualizationWebviewToHost = (
   | { type: "graphforge/ready" }
   | { type: "graphforge/renderStarted"; kind: ArtifactVisualizationSpec["kind"]; renderer: string }
   | {
@@ -42,4 +44,5 @@ export type ArtifactVisualizationWebviewToHost =
   | { type: "graphforge/artifactStateChanged"; spec: ArtifactVisualizationSpec }
   | { type: "graphforge/saveArtifactState" }
   | { type: "graphforge/revertArtifactState" }
-  | { type: "graphforge/selectResult"; rowIndex: number };
+  | { type: "graphforge/selectResult"; rowIndex: number }
+) & Partial<VisualizationMessageContext>;

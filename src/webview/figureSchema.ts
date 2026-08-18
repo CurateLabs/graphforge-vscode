@@ -19,13 +19,15 @@ export interface PlotlyFigure {
   frames?: unknown[];
 }
 
-export type FigureHostToWebview =
+export type FigureHostToWebview = (
   | { type: "graphforge/figure"; figure: PlotlyFigure }
-  | { type: "graphforge/figureError"; message: string };
+  | { type: "graphforge/figureError"; message: string }
+) & VisualizationMessageContext;
 
-export type FigureWebviewToHost =
+export type FigureWebviewToHost = (
   | { type: "graphforge/ready" }
-  | { type: "graphforge/renderFailed"; message: string };
+  | { type: "graphforge/renderFailed"; message: string }
+) & Partial<VisualizationMessageContext>;
 
 export const FIGURE_LIMIT_DEFAULTS = {
   enabled: false,
@@ -148,3 +150,4 @@ export function validateAndLimitFigure(
   }
   return enforceFigureLimits(validated.figure, limits);
 }
+import type { VisualizationMessageContext } from "./visualizationInstanceRegistry";

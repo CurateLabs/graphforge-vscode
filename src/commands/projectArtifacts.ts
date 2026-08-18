@@ -35,6 +35,7 @@ import {
   type ResultGraphLifecycleMessage,
 } from "../webview/resultGraphPanel";
 import type { ResultGraphViewOptions } from "../webview/resultGraphModel";
+import { visualizationInstanceId } from "../webview/visualizationInstanceRegistry";
 
 function requireResultFields(
   result: { columns: string[] },
@@ -160,6 +161,7 @@ type ArtifactPathInput = string | vscode.Uri | ArtifactPathArgs;
 function waitForResultGraphLifecycle(
   renderer: "g6" | "cytoscape" | "sigma",
   timeoutMs: number,
+  instanceId: string,
 ): { promise: Promise<ResultGraphLifecycleMessage>; dispose: () => void } {
   let disposable: vscode.Disposable | undefined;
   let timer: NodeJS.Timeout | undefined;
@@ -183,6 +185,7 @@ function waitForResultGraphLifecycle(
   disposable = ResultGraphPanel.onDidLifecycle((message) => {
     if (
       message.renderer === renderer &&
+      message.instanceId === instanceId &&
       (message.type === "graphforge/renderReady" ||
         message.type === "graphforge/renderFailed")
     ) {
@@ -668,8 +671,9 @@ export function registerProjectArtifacts(
               throw new Error("Visualization timeoutMs must be an integer from 1000 through 60000.");
             }
             const timeoutMs = requestedTimeout ?? 30_000;
+            const graphInstanceId = visualizationInstanceId("graph", projectRoot, relativePath);
             const lifecycle = waitForReady
-              ? waitForResultGraphLifecycle(renderer, timeoutMs)
+              ? waitForResultGraphLifecycle(renderer, timeoutMs, graphInstanceId)
               : undefined;
             try {
               const outcome = await vscode.commands.executeCommand<Record<string, unknown>>(
@@ -677,6 +681,7 @@ export function registerProjectArtifacts(
                 {
                   title: spec.name,
                   payload: graphPayload,
+                  instanceId: graphInstanceId,
                   ...options,
                 },
               );
@@ -684,7 +689,11 @@ export function registerProjectArtifacts(
                 return { path: relativePath, absolutePath, kind: spec.kind, spec, ...outcome };
               }
               if (spec.format === "graphforge.visualization/v2") {
-                ResultGraphPanel.current?.attachArtifact(
+                const instanceId = typeof outcome?.instanceId === "string" ? outcome.instanceId : undefined;
+                const graphPanel = instanceId
+                  ? ResultGraphPanel.instances().find((candidate) => candidate.instanceId === instanceId)
+                  : undefined;
+                graphPanel?.attachArtifact(
                   projectRoot,
                   relativePath,
                   spec,

@@ -324,3 +324,23 @@ intentionally out of v0 rather than inferred from point order.
 - The Python `graphforge` package's API can move independently of `@curatelabs/graphforge`'s; the host
   script and `EngineBackend` mapping may need updates when it does (defensive coding, not a
   compatibility guarantee).
+
+# Visualization instance lifecycle
+
+Graph, chart, temporal, geospatial, and figure webviews are owned by a shared
+`VisualizationInstanceRegistry`. Saved visualizations derive a privacy-safe,
+stable instance ID from the project root and project-relative visualization
+path; unsaved visualizations receive a UUID. Opening one visualization never
+replaces a different instance.
+
+Each controller owns a monotonically increasing render generation. Host
+messages establish `{ instanceId, renderGeneration }`; every subsequent
+webview event echoes that context. Controllers reject replies from another
+instance or an older generation. Starting a render aborts superseded work, and
+disposing a panel cancels its active work and releases registered resources.
+
+Cross-view selection, time, and spatial updates are opt-in. The registry routes
+coordination events only when source and target declare the same coordination
+group, rejects stale source generations, and never echoes an event to its
+source. Registry identities and lifecycle diagnostics contain no project path,
+result row, property, coordinate, timestamp, vector, or artifact content.

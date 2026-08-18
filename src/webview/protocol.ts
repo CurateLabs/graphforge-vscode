@@ -17,6 +17,7 @@ import type {
   ResultGraphTimebarOptions,
   ResultGraphVisualDensityOptions,
 } from "./resultGraphModel";
+import type { VisualizationMessageContext } from "./visualizationInstanceRegistry";
 
 export type ResultGraphRenderPhase =
   | "initialize"
@@ -35,6 +36,7 @@ export interface ResultEntityLink {
 }
 
 export type HostToWebview =
+  | ({ type: "graphforge/visualizationContext" } & VisualizationMessageContext)
   | { type: "graphforge/graph"; payload: GraphPayload }
   | { type: "graphforge/graphRenderer"; renderer: ResultGraphRenderer; render?: boolean }
   | {
@@ -88,7 +90,7 @@ export type HostToWebview =
     }
   | { type: "graphforge/status"; message: string };
 
-export type WebviewToHost =
+export type WebviewToHost = (
   | { type: "graphforge/ready" }
   | { type: "graphforge/selectNode"; id: string; shiftKey?: boolean }
   | { type: "graphforge/selectEdge"; id: string; shiftKey?: boolean }
@@ -151,7 +153,8 @@ export type WebviewToHost =
   | { type: "graphforge/requestReload" }
   | { type: "graphforge/explainMode" }
   | { type: "graphforge/openOntologyFile" }
-  | { type: "graphforge/runCommand"; command: string; args?: unknown[] };
+  | { type: "graphforge/runCommand"; command: string; args?: unknown[] }
+) & Partial<VisualizationMessageContext>;
 
 /** Extension-owned palette (product has no official colors). */
 export const EPISTEMIC_COLORS: Record<EpistemicStatus, string> = {
