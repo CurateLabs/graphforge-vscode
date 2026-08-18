@@ -24,6 +24,7 @@ import { OntologyTreeProvider } from "./views/ontologyTree";
 import { ProjectExplorerProvider } from "./views/projectExplorer";
 import { EntityInspectPanel } from "./webview/entityInspectPanel";
 import { ModuleManagerPanel } from "./webview/moduleManagerPanel";
+import { visualizationInstances } from "./webview/visualizationInstanceRegistry";
 import {
   RESULTS_VIEW_ID,
   ResultTableViewProvider,
@@ -33,7 +34,7 @@ export async function activate(
   context: vscode.ExtensionContext,
 ): Promise<void> {
   const session = new GraphForgeSession();
-  context.subscriptions.push(session);
+  context.subscriptions.push(session, { dispose: () => visualizationInstances.dispose() });
 
   const projects = new ProjectExplorerProvider(session);
   const ontology = new OntologyTreeProvider(session);

@@ -7,6 +7,8 @@ import type { ResultGraphViewOptions } from "../webview/resultGraphModel";
 export interface ShowResultGraphArgs extends ResultGraphViewOptions {
   title?: string;
   payload?: GraphPayload;
+  instanceId?: string;
+  coordinationGroup?: string;
 }
 
 export function registerVisualizationCommands(
@@ -30,9 +32,13 @@ export function registerVisualizationCommands(
           visualDensity: args?.visualDensity,
           labels: args?.labels,
           timebar: args?.timebar,
+        }, {
+          instanceId: args?.instanceId,
+          coordinationGroup: args?.coordinationGroup,
         });
         return {
           panel: shown.status,
+          instanceId: shown.panel.instanceId,
           nodes: payload.nodes.length,
           edges: payload.edges.length,
           styleMode: payload.styleMode,

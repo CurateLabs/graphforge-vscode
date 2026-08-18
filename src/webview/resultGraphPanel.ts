@@ -21,6 +21,17 @@ import {
   resolveResultGraphHighlight,
   type GraphElementHighlight,
 } from "./resultTableModel";
+import {
+  visualizationInstanceId,
+  visualizationInstances,
+  VisualizationInstanceLifecycle,
+  type VisualizationController,
+} from "./visualizationInstanceRegistry";
+
+export interface ResultGraphInstanceOptions {
+  instanceId?: string;
+  coordinationGroup?: string;
+}
 
 export type ResultGraphLifecycleMessage = Extract<
   WebviewToHost,
@@ -34,8 +45,10 @@ export type ResultGraphLifecycleMessage = Extract<
   }
 >;
 
-export class ResultGraphPanel {
-  public static current: ResultGraphPanel | undefined;
+export class ResultGraphPanel implements VisualizationController {
+  public readonly kind = "graph" as const;
+  private readonly lifecycle: VisualizationInstanceLifecycle;
+  public get renderGeneration(): number { return this.lifecycle.renderGeneration; }
   private static readonly selectionEmitter =
     new vscode.EventEmitter<GraphSelection>();
   public static readonly onDidSelect = ResultGraphPanel.selectionEmitter.event;
@@ -64,11 +77,15 @@ export class ResultGraphPanel {
   private constructor(
     panel: vscode.WebviewPanel,
     private readonly extensionUri: vscode.Uri,
+    public readonly instanceId: string,
+    public readonly coordinationGroup?: string,
   ) {
+    this.lifecycle = new VisualizationInstanceLifecycle(instanceId);
     this.panel = panel;
     trackVizPanel(panel);
     this.panel.onDidDispose(() => {
-      ResultGraphPanel.current = undefined;
+      visualizationInstances.remove(this.instanceId);
+      this.lifecycle.dispose();
       for (const disposable of this.disposables.splice(0)) {
         disposable.dispose();
       }
@@ -76,12 +93,16 @@ export class ResultGraphPanel {
     this.panel.webview.onDidReceiveMessage((msg: WebviewToHost) => {
       if (msg.type === "graphforge/ready") {
         this.webviewReady = true;
+        this.postContext();
         this.postRenderer(false);
         this.postOptions(false);
         if (this.payload) {
           this.postGraph(this.payload);
         }
         this.postArtifactState();
+        return;
+      }
+      if (!this.lifecycle.accepts(msg)) {
         return;
       }
       if (msg.type === "graphforge/renderFailed") {
@@ -213,25 +234,28 @@ export class ResultGraphPanel {
     extensionUri: vscode.Uri,
     payload?: GraphPayload,
     options: ResultGraphViewOptions = {},
+    instance: ResultGraphInstanceOptions = {},
   ): Promise<{ panel: ResultGraphPanel; status: "opened" | "updated" | "cancelled" }> {
-    if (ResultGraphPanel.current) {
-      revealVizPanel(ResultGraphPanel.current.panel);
-      if (ResultGraphPanel.current.artifact?.state.dirty) {
+    const instanceId = instance.instanceId ?? visualizationInstanceId("graph");
+    const existing = visualizationInstances.get<ResultGraphPanel>(instanceId);
+    if (existing) {
+      existing.reveal();
+      if (existing.artifact?.state.dirty) {
         const choice = await vscode.window.showWarningMessage(
           "This result graph has unsaved artifact changes. Discard them and open the requested graph?",
           { modal: true },
           "Discard changes",
         );
         if (choice !== "Discard changes") {
-          return { panel: ResultGraphPanel.current, status: "cancelled" };
+          return { panel: existing, status: "cancelled" };
         }
       }
-      ResultGraphPanel.current.detachArtifact();
-      ResultGraphPanel.current.setViewOptions(options);
+      existing.detachArtifact();
+      existing.setViewOptions(options);
       if (payload) {
-        ResultGraphPanel.current.update(payload);
+        existing.update(payload);
       }
-      return { panel: ResultGraphPanel.current, status: "updated" };
+      return { panel: existing, status: "updated" };
     }
 
     const showOptions = graphForgeVizShowOptions();
@@ -245,15 +269,35 @@ export class ResultGraphPanel {
         localResourceRoots: [vscode.Uri.joinPath(extensionUri, "dist", "webview-ui")],
       },
     );
-    ResultGraphPanel.current = new ResultGraphPanel(panel, extensionUri);
-    ResultGraphPanel.current.setViewOptions(options);
+    const created = visualizationInstances.register(
+      new ResultGraphPanel(panel, extensionUri, instanceId, instance.coordinationGroup),
+    );
+    created.setViewOptions(options);
     if (payload) {
-      ResultGraphPanel.current.update(payload);
+      created.update(payload);
     }
-    return { panel: ResultGraphPanel.current, status: "opened" };
+    return { panel: created, status: "opened" };
+  }
+
+  static active(): ResultGraphPanel | undefined {
+    return visualizationInstances.active<ResultGraphPanel>("graph");
+  }
+
+  static instances(): ResultGraphPanel[] {
+    return visualizationInstances.values<ResultGraphPanel>("graph");
+  }
+
+  reveal(): void {
+    visualizationInstances.activate(this.instanceId);
+    revealVizPanel(this.panel);
+  }
+
+  dispose(): void {
+    this.panel.dispose();
   }
 
   update(payload: GraphPayload): void {
+    this.lifecycle.beginRender();
     this.payload = payload;
     this.panel.title = payload.title
       ? `GraphForge: ${payload.title}`
@@ -327,6 +371,15 @@ export class ResultGraphPanel {
     void this.panel.webview.postMessage(msg);
   }
 
+  private postContext(): void {
+    const msg: HostToWebview = {
+      type: "graphforge/visualizationContext",
+      instanceId: this.instanceId,
+      renderGeneration: this.renderGeneration,
+    };
+    void this.panel.webview.postMessage(msg);
+  }
+
   private postOptions(render = true): void {
     if (!this.webviewReady) return;
     const msg: HostToWebview = {
@@ -354,6 +407,7 @@ export class ResultGraphPanel {
 
   private postGraph(payload: GraphPayload): void {
     if (!this.webviewReady) return;
+    this.postContext();
     const msg: HostToWebview = { type: "graphforge/graph", payload };
     void this.panel.webview.postMessage(msg);
   }

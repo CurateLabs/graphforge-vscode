@@ -368,6 +368,26 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     assert.ok(result.panel === "opened" || result.panel === "updated");
   });
 
+  test("keeps independently opened unsaved figures alive (#81)", async () => {
+    const countFigures = () => vscode.window.tabGroups.all.flatMap((group) => group.tabs)
+      .filter((tab) => tab.input instanceof vscode.TabInputWebview)
+      .filter((tab) => (tab.input as vscode.TabInputWebview).viewType.replace(/^mainThreadWebview-/, "") === "graphforge.figure")
+      .length;
+    const before = countFigures();
+    const first = await vscode.commands.executeCommand<{ panel?: string }>("graphforge.showFigure", {
+      figure: { data: [{ type: "bar", x: ["a"], y: [1] }], layout: { title: "Independent A" } },
+    });
+    const second = await vscode.commands.executeCommand<{ panel?: string }>("graphforge.showFigure", {
+      figure: { data: [{ type: "bar", x: ["b"], y: [2] }], layout: { title: "Independent B" } },
+    });
+    assert.equal(first?.panel, "opened");
+    assert.equal(second?.panel, "opened");
+    for (let attempt = 0; attempt < 50 && countFigures() < before + 2; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.ok(countFigures() >= before + 2);
+  });
+
   test("showFigure without figure returns FIGURE_REQUIRED (#62)", async () => {
     const result = await vscode.commands.executeCommand<{
       error?: string;

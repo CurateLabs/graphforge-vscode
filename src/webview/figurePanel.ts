@@ -10,26 +10,43 @@ import {
   revealVizPanel,
   trackVizPanel,
 } from "./panelColumn";
+import {
+  visualizationInstanceId,
+  visualizationInstances,
+  VisualizationInstanceLifecycle,
+  type VisualizationController,
+} from "./visualizationInstanceRegistry";
 
 /**
  * GraphForge Figure panel (#62): Vite-built plotly.js surface.
  * Host only serves shell HTML and posts figure JSON — never eval.
  */
-export class FigurePanel {
-  public static current: FigurePanel | undefined;
+export class FigurePanel implements VisualizationController {
+  public readonly kind = "figure" as const;
+  public readonly coordinationGroup = undefined;
+  private readonly lifecycle: VisualizationInstanceLifecycle;
+  public get renderGeneration(): number { return this.lifecycle.renderGeneration; }
   private readonly panel: vscode.WebviewPanel;
   private figure: PlotlyFigure | undefined;
   private errorMessage: string | undefined;
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+  private constructor(
+    panel: vscode.WebviewPanel,
+    extensionUri: vscode.Uri,
+    public readonly instanceId: string,
+  ) {
+    this.lifecycle = new VisualizationInstanceLifecycle(instanceId);
     this.panel = panel;
     trackVizPanel(panel);
     this.panel.onDidDispose(() => {
-      FigurePanel.current = undefined;
+      visualizationInstances.remove(this.instanceId);
+      this.lifecycle.dispose();
     });
     this.panel.webview.onDidReceiveMessage((msg: FigureWebviewToHost) => {
       if (msg.type === "graphforge/ready") {
         this.repost();
+      } else if (!this.lifecycle.accepts(msg)) {
+        return;
       } else if (msg.type === "graphforge/renderFailed") {
         this.errorMessage = msg.message;
       }
@@ -40,13 +57,15 @@ export class FigurePanel {
   static show(
     extensionUri: vscode.Uri,
     figure?: PlotlyFigure,
+    instanceId = visualizationInstanceId("figure"),
   ): { panel: FigurePanel; status: "opened" | "updated" } {
-    if (FigurePanel.current) {
-      revealVizPanel(FigurePanel.current.panel);
+    const existing = visualizationInstances.get<FigurePanel>(instanceId);
+    if (existing) {
+      existing.reveal();
       if (figure) {
-        FigurePanel.current.update(figure);
+        existing.update(figure);
       }
-      return { panel: FigurePanel.current, status: "updated" };
+      return { panel: existing, status: "updated" };
     }
     const showOptions = graphForgeVizShowOptions();
     const panel = vscode.window.createWebviewPanel(
@@ -59,14 +78,24 @@ export class FigurePanel {
         localResourceRoots: [vscode.Uri.joinPath(extensionUri, "dist", "webview-ui")],
       },
     );
-    FigurePanel.current = new FigurePanel(panel, extensionUri);
+    const created = visualizationInstances.register(new FigurePanel(panel, extensionUri, instanceId));
     if (figure) {
-      FigurePanel.current.update(figure);
+      created.update(figure);
     }
-    return { panel: FigurePanel.current, status: "opened" };
+    return { panel: created, status: "opened" };
+  }
+
+  reveal(): void {
+    visualizationInstances.activate(this.instanceId);
+    revealVizPanel(this.panel);
+  }
+
+  dispose(): void {
+    this.panel.dispose();
   }
 
   update(figure: PlotlyFigure): void {
+    this.lifecycle.beginRender();
     this.figure = figure;
     this.errorMessage = undefined;
     this.panel.title = figureTitle(figure);
@@ -74,6 +103,7 @@ export class FigurePanel {
   }
 
   showError(message: string): void {
+    this.lifecycle.beginRender();
     this.errorMessage = message;
     this.figure = undefined;
     this.repost();
@@ -82,6 +112,7 @@ export class FigurePanel {
   private repost(): void {
     if (this.errorMessage) {
       const msg: FigureHostToWebview = {
+        ...this.messageContext,
         type: "graphforge/figureError",
         message: this.errorMessage,
       };
@@ -89,9 +120,13 @@ export class FigurePanel {
       return;
     }
     if (this.figure) {
-      const msg: FigureHostToWebview = { type: "graphforge/figure", figure: this.figure };
+      const msg: FigureHostToWebview = { ...this.messageContext, type: "graphforge/figure", figure: this.figure };
       void this.panel.webview.postMessage(msg);
     }
+  }
+
+  private get messageContext(): { instanceId: string; renderGeneration: number } {
+    return { instanceId: this.instanceId, renderGeneration: this.renderGeneration };
   }
 
   private getHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {

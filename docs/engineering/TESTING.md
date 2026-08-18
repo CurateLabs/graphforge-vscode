@@ -227,3 +227,11 @@ npm run check && npm run compile && npm run test:unit
 xvfb-run -a npm test   # Linux only; on macOS/Windows just `npm test`
 npx vsce package --no-dependencies
 ```
+
+# Visualization lifecycle
+
+`visualizationInstanceRegistry.test.ts` is the fast contract gate for
+multi-instance ownership, stable private saved identities, explicit
+coordination groups, stale-generation rejection, superseded-work cancellation,
+and deterministic disposal. Webview typechecking additionally verifies that
+graph, artifact, and figure messages carry the instance/revision context.
