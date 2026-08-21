@@ -655,7 +655,7 @@
     "@antv/l7-maps": "^2.29.1",
     "@antv/layout": "^2.0.0",
     "apache-arrow": "^21.2.0",
-    "cytoscape": "^3.34.0",
+    "cytoscape": "^3.34.1",
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",
     "plotly.js": "^3.7.0",
