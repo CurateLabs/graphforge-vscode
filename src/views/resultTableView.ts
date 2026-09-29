@@ -6,6 +6,7 @@ import type { ResultDocumentPaths } from "../session/resultDocument";
 import type { HostToWebview, WebviewToHost } from "../webview/protocol";
 import { EntityInspectPanel } from "../webview/entityInspectPanel";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import { sourceMismatch } from "../session/resultProjection";
 import {
   jsonSafeQueryResult,
   resolveResultEntitySelection,
@@ -35,9 +36,15 @@ export class ResultTableViewProvider
     private readonly extensionUri: vscode.Uri,
     private readonly session: GraphForgeSession,
   ) {
-    this.graphSelectionDisposable = ResultGraphPanel.onDidSelect((selection) => {
+    this.graphSelectionDisposable = ResultGraphPanel.onDidSelect(({ selection, source }) => {
       if (!this.state) return;
-      const rowIndices = resultRowsForGraphSelection(this.state.result, selection);
+      // Only a graph projected from this exact result/generation may drive rows.
+      if (sourceMismatch(source, this.state.result) !== undefined) return;
+      const rowIndices = resultRowsForGraphSelection(
+        this.state.result,
+        selection,
+        this.state.graphPayload,
+      );
       if (rowIndices.length === 0) return;
       void this.reveal();
       this.post({ type: "graphforge/highlightResultRows", rowIndices });
@@ -113,7 +120,7 @@ export class ResultTableViewProvider
 
   private selectResult(rowIndex: number, column?: string): void {
     if (!this.state) return;
-    const graphPanel = ResultGraphPanel.active();
+    const graphPanel = ResultGraphPanel.forResult(this.state.result);
     const highlight = graphPanel?.highlightFromResult(
       this.state.result,
       rowIndex,
@@ -125,7 +132,9 @@ export class ResultTableViewProvider
       type: "graphforge/resultSelection",
       linked: count > 0,
       message: !graphPanel
-        ? "Open Result Graph to link this selection."
+        ? ResultGraphPanel.active()
+          ? "The open Result Graph shows a different result. Open the graph from this result to link selections."
+          : "Open Result Graph to link this selection."
         : count > 0
           ? `Highlighted ${highlight?.nodeIds.length ?? 0} node(s) and ${highlight?.edgeIds.length ?? 0} edge(s).`
           : "No graph entity matched this value or row.",

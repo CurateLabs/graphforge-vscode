@@ -29,6 +29,7 @@ Requires `@vscode/test-electron` ≥ 3.1.0 on macOS (VS Code 1.110+ ships `Code`
 | Result Graph | `src/test/resultGraphModel.test.ts`, `settingsSchema.test.ts`, `extension.test.ts` | Renderer default/options, styling helpers, selection-message resolution, live setting-switch host smoke |
 | Module activation | `src/test/extension.test.ts` | First-party module commands, exported registration API, and Module Bay command/panel activation |
 | Results ↔ graph linking | `src/test/resultTableModel.test.ts`, `quickstart.e2e.test.ts` | Identity/endpoint matching plus the air-routes-scale integration path |
+| Result schemas and projection (#80) | `src/test/resultProjection.test.ts`, `graphForgeSession.test.ts` | Engine-produced Arrow fixtures for all 94 algorithms plus Cypher/find/schema; ledger coverage, typed decode, identity-preserving projection, explicit table-only/composition failures, schema mismatch/version negatives, UUID selection round-trips, stale-source rejection, saved-result round-trip. See [RESULT_SCHEMAS.md](RESULT_SCHEMAS.md) to regenerate fixtures |
 | Visualization artifacts (#67) | `src/test/projectArtifacts.test.ts`, `settingsSchema.test.ts`, `quickstartSample.test.ts` | v1 read compatibility; strict v2 validation; Cytoscape/Plotly graph/chart defaults; explicit G6/G2/L7 alternatives, bindings, coordinates, and time configuration; project-owned sample artifacts |
 
 ### Python runtime testing notes (#12)

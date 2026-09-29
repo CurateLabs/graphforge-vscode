@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { isGraphProjectable } from "../session/resultProjection";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import {
   persistQueryResultDocuments,
@@ -164,7 +165,9 @@ async function executeAndShowResult(
     const openGraph = vscode.workspace
       .getConfiguration("graphforge")
       .get<boolean>("openResultGraphOnQuery", false);
-    if (openGraph) {
+    // Table-only results stay in the table; auto-open never reports a
+    // successful query as failed because its result has no graph identity.
+    if (openGraph && isGraphProjectable(result)) {
       const commands = await vscode.commands.getCommands(true);
       if (commands.includes("graphforge.showResultGraph")) {
         await vscode.commands.executeCommand("graphforge.showResultGraph", {

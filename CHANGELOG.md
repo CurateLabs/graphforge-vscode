@@ -2,6 +2,15 @@
 
 All notable changes to the GraphForge VS Code extension are documented here.
 
+## Unreleased
+
+### Changed
+
+- Results keep their GraphForge Arrow schema (field types and `graphforge.*` metadata) and are bound to a result id and graph generation, including when saved.
+- Result Graph projects GraphForge results by schema: Cypher node/relationship/path values, canonical `node_uuid`/`edge_uuid`/`source_uuid`/`target_uuid` fields, ordered paths, and analytical pairs (drawn as derived edges). Every GraphForge algorithm has a documented, tested disposition.
+- Embeddings, scalar metrics, and tables without graph identity no longer open a demo graph; they report why and what to do instead.
+- Table and graph selections link by UUID, and only between views of the same result.
+
 ## 0.1.3
 
 ### Added

@@ -43,6 +43,7 @@ export function registerVisualizationCommands(
           edges: payload.edges.length,
           styleMode: payload.styleMode,
           title: payload.title,
+          projection: payload.diagnostic,
         };
       },
     ),

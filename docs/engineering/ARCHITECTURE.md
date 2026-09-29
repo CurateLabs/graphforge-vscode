@@ -49,7 +49,8 @@ flowchart LR
 | `pythonLoader` / `pythonProbe` | Detect a Python interpreter and probe `import graphforge` | vscode config/extensions API, `execFile` |
 | `nodeEngineBackend` / `pythonBridge` | `EngineBackend` implementations over Node / Python | `types.EngineBackend` |
 | `runtime` / `runtimeSelection` | Choose Node vs. Python per `graphforge.runtime`; open the backend | nativeLoader, pythonLoader, both backends |
-| `GraphForgeSession` | Open project, execute/verbs, IPC→rows, graph payload | `EngineBackend` + arrow |
+| `GraphForgeSession` | Open project, execute/verbs, typed Arrow decode, result provenance, graph payload | `EngineBackend` + arrow |
+| `resultSchemas` / `resultProjection` | GraphForge result-schema coverage ledger; identity-based graph projection ([RESULT_SCHEMAS.md](RESULT_SCHEMAS.md)) | Pure; no vscode |
 | `projectArtifacts` / `visualizationRegistry` | Read v1 compatibility specs; validate/write strict v2 project-owned specs; materialize centralized renderer defaults | Node fs + project root |
 | Tree providers | Projects, Ontology, Knowledge sidebars | Session |
 | Commands | Run Query, verbs, open panels, load ontology, Setup (Native/Python) | Session, webviews |
@@ -160,8 +161,12 @@ any breaking wire change, and document it here.
 ## Data model
 
 - **DetectedProject** — root path, CURRENT generation pointer
-- **QueryResult** — columns/rows from Arrow tables
-- **GraphPayload** — nodes/edges with `epistemicStatus`, `ontologyType`, legend
+- **QueryResult** — columns/rows from Arrow tables, plus the preserved `ResultSchema`
+  (field kinds + `graphforge.*` metadata) and `ResultProvenance` (result id,
+  graph generation, query id)
+- **GraphPayload** — nodes/edges with `epistemicStatus`, `ontologyType`, legend;
+  the projection `source` (result id, generation, schema id/version, disposition),
+  per-row UUID `rowEntities`, and derived-edge flags
 - **OntologyDoc** — entity_types, relation_types, properties (from workspace participant)
 - **ProjectVisualizationSpecV1** — compatibility reader for existing
   `graphforge.visualization/v1` Cytoscape/Sigma result graphs and Plotly charts;
@@ -204,7 +209,7 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 1. User invokes Run Query — command
 2. Session ensures project open — GraphForgeSession
 3. `forge.execute` → IPC buffer — `@curatelabs/graphforge`
-4. Decode to rows — apache-arrow
+4. Decode to rows plus typed schema; stamp result id and current generation — apache-arrow
 5. Persist canonical JSON + Markdown and timestamped history under `results/`;
    reveal the Results `WebviewView` in the bottom Panel.
 6. When enabled, build `GraphPayload` and open Result Graph in the shared visualization editor group.
@@ -212,11 +217,15 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 ### Link table and graph selections
 
 1. A Results row/cell click posts its row index and optional column.
-2. The host resolves exact node/edge IDs and identity-like values first; metric cells fall back
-   to the row's identities and `source`/`target` endpoints.
-3. If Result Graph is open, the host posts validated node/edge IDs for renderer highlighting.
-4. A Result Graph selection is resolved back to matching result rows and scrolls the bottom
-   table to the first match.
+2. The host picks the Result Graph whose projection source names the same result id and
+   generation. A graph showing another result is never joined.
+3. Schema-projected results resolve the row through `rowEntities` (the UUIDs that row
+   contributed), narrowed to the clicked cell's UUIDs when it holds any. Untyped saved
+   results fall back to identity-like values and `source`/`target` endpoints.
+4. The host posts validated node/edge IDs for renderer highlighting.
+5. A Result Graph selection carries its projection source. Only a table showing that source
+   resolves it back to rows, by UUID membership rather than row position, and scrolls to the
+   first match.
 
 Figure traces do not currently retain source-row provenance, so Figure selection linking is
 intentionally out of v0 rather than inferred from point order.

@@ -7,6 +7,14 @@ GraphForge for VS Code ships no product telemetry. Its current signals are local
 - **Visualization panel status** — render and layout progress or an actionable
   failure, without changing the saved artifact.
 
+## Result projection (#80)
+
+`graphforge.showResultGraph` returns a `projection` diagnostic: schema id and
+version, disposition, row/node/edge counts, and projection duration. A failed
+projection reports a stable `GF_RESULT_*` code and next action (see
+[RESULT_SCHEMAS.md](RESULT_SCHEMAS.md)). Neither includes result values, UUIDs,
+vectors, coordinates, or paths.
+
 ## Visualization lifecycle (#67)
 
 Visualization adapters report the same phases to the extension host:

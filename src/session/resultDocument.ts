@@ -21,7 +21,13 @@ function jsonReplacer(_key: string, value: unknown): unknown {
 /** Canonical, agent-copyable result document required by FR-2. */
 export function formatQueryResultJson(result: QueryResult): string {
   return `${JSON.stringify(
-    { columns: result.columns, rows: result.rows, rowCount: result.rowCount },
+    {
+      columns: result.columns,
+      rows: result.rows,
+      rowCount: result.rowCount,
+      ...(result.schema ? { schema: result.schema } : {}),
+      ...(result.provenance ? { provenance: result.provenance } : {}),
+    },
     jsonReplacer,
     2,
   )}\n`;

@@ -20,7 +20,11 @@ import {
   runtimePreference,
 } from "./runtime";
 import { randomOperationId, uuidv7 } from "./uuid";
+import { readCurrentPointer } from "./projectFormat";
+import { projectResultGraph } from "./resultProjection";
 import {
+  ALL_EPISTEMIC_STATUSES,
+  isEpistemicStatus,
   AlgorithmDescriptorContract,
   AlgorithmDescriptorContractNative,
   AnalystVerb,
@@ -48,6 +52,7 @@ import {
   ProjectCapabilities,
   PythonRuntimeStatus,
   QueryResult,
+  ResultProvenance,
   RecordAssertionStatusInput,
   RuntimeKind,
   RuntimePreference,
@@ -70,20 +75,6 @@ export interface RuntimeEnvironmentSnapshot {
   projectKind: ProjectKind;
   /** Runtime actually backing the open session, if any. */
   active: RuntimeKind | undefined;
-}
-
-const ALL_EPISTEMIC_STATUSES: EpistemicStatus[] = [
-  "hypothesis",
-  "supported",
-  "refuted",
-  "disputed",
-  "retracted",
-  "superseded",
-  "statusless",
-];
-
-function isEpistemicStatus(value: unknown): value is EpistemicStatus {
-  return typeof value === "string" && (ALL_EPISTEMIC_STATUSES as string[]).includes(value);
 }
 
 // Defined in `errors.ts` (vscode-free) so error-presentation logic can be
@@ -277,6 +268,27 @@ export class GraphForgeSession implements vscode.Disposable {
    * Node-only features. Throws {@link NodeOnlyFeatureError} when the active
    * backend is not Node (e.g. the Python runtime is active, #12).
    */
+  /**
+   * Bind a fresh engine result to a new result id and the committed graph
+   * generation it was read from (re-read from CURRENT so writes since open
+   * are reflected). Projections and selection links check this identity.
+   */
+  private withProvenance(result: QueryResult): QueryResult {
+    let generationUuid: string | undefined;
+    if (this.activeProject) {
+      try {
+        generationUuid = readCurrentPointer(this.activeProject.rootPath)?.generation_uuid;
+      } catch {
+        generationUuid = this.activeProject.current?.generation_uuid;
+      }
+    }
+    const provenance: ResultProvenance = { resultId: uuidv7() };
+    if (generationUuid) provenance.generationUuid = generationUuid;
+    const queryId = result.schema?.metadata["graphforge.query_id"];
+    if (queryId) provenance.queryId = queryId;
+    return { ...result, provenance };
+  }
+
   private requireNodeForge(methodName: string): GraphForgeNative {
     const backend = this.requireBackend();
     if (!(backend instanceof NodeEngineBackend)) {
@@ -288,7 +300,7 @@ export class GraphForgeSession implements vscode.Disposable {
   async execute(cypher: string, params?: Record<string, unknown>): Promise<QueryResult> {
     const backend = this.requireBackend();
     const buf = await backend.execute(cypher, params);
-    const result = decodeTable(buf);
+    const result = this.withProvenance(decodeTable(buf));
     this.rememberResult(result, "Cypher result");
     return result;
   }
@@ -379,7 +391,7 @@ export class GraphForgeSession implements vscode.Disposable {
       default:
         throw new Error(`Unknown verb: ${verb}`);
     }
-    const result = decodeTable(buf);
+    const result = this.withProvenance(decodeTable(buf));
     this.rememberResult(result, verb);
     return result;
   }
@@ -1195,81 +1207,14 @@ export class GraphForgeSession implements vscode.Disposable {
   async toGraphPayload(result: QueryResult, title?: string): Promise<GraphPayload> {
     this.rememberResult(result, title);
 
-    const nodes = new Map<string, GraphNode>();
-    const edges: GraphEdge[] = [];
-    const ontology = this.workspaceOntology();
-    const entityNames = new Set(
-      (ontology?.entity_types ?? []).map((e) => e.name),
-    );
-
-    for (const row of result.rows) {
-      const uuid =
-        stringField(row, "node_uuid") ??
-        stringField(row, "id") ??
-        stringField(row, "node1_uuid");
-      const uuid2 = stringField(row, "node2_uuid");
-      const labels = labelsFromRow(row);
-
-      if (uuid) {
-        const primary = labels[0];
-        nodes.set(uuid, {
-          id: uuid,
-          labels: labels.length ? labels : ["Node"],
-          properties: row,
-          epistemicStatus: statusFromRow(row),
-          ontologyType:
-            primary && entityNames.has(primary) ? primary : primary,
-        });
-      }
-      if (uuid2) {
-        const labels2 = labelsFromRow(row, "node2");
-        nodes.set(uuid2, {
-          id: uuid2,
-          labels: labels2.length ? labels2 : ["Node"],
-          properties: { ...row, _side: "node2" },
-          epistemicStatus: statusFromRow(row),
-        });
-        edges.push({
-          id: `${uuid}-${uuid2}`,
-          type: stringField(row, "rel_type") ?? "RELATED",
-          source: uuid!,
-          target: uuid2,
-          epistemicStatus: statusFromRow(row),
-        });
-      }
-
-      const source = stringField(row, "source") ?? stringField(row, "start_uuid");
-      const target = stringField(row, "target") ?? stringField(row, "end_uuid");
-      if (source && target) {
-        if (!nodes.has(source)) {
-          nodes.set(source, {
-            id: source,
-            labels: ["Node"],
-            properties: {},
-          });
-        }
-        if (!nodes.has(target)) {
-          nodes.set(target, {
-            id: target,
-            labels: ["Node"],
-            properties: {},
-          });
-        }
-        edges.push({
-          id: stringField(row, "edge_uuid") ?? `${source}->${target}`,
-          type: stringField(row, "type") ?? stringField(row, "rel_type") ?? "RELATED",
-          source,
-          target,
-          epistemicStatus: statusFromRow(row),
-          properties: row,
-        });
-      }
-    }
-
-    // Scaffold demo graph when result has no graph-shaped columns
-    if (nodes.size === 0) {
+    // An empty result (nothing run yet) still opens the scaffold demo graph;
+    // any real result is projected strictly by its schema.
+    if (result.columns.length === 0 && result.rows.length === 0 && !result.schema) {
       return demoGraphPayload(title ?? "Result (demo)", result);
     }
+    const projection = projectResultGraph(result);
+    const nodes = new Map(projection.nodes.map((node) => [node.id, node]));
+    const edges = projection.edges;
 
     const resolution = await this.resolveEpistemicStatuses([...nodes.keys()]);
     let styleMode: GraphStyleMode = "class-only";
@@ -1310,6 +1255,9 @@ export class GraphForgeSession implements vscode.Disposable {
       title,
       styleMode,
       banner: resolution.note,
+      source: projection.source,
+      rowEntities: projection.rowEntities,
+      diagnostic: projection.diagnostic,
     };
   }
 
@@ -1489,35 +1437,6 @@ function rowsToAssertions(result: QueryResult): AssertionRow[] {
     claim: stringField(row, "claim") ?? "",
     ...row,
   }));
-}
-
-function labelsFromRow(row: TableRow, prefix = ""): string[] {
-  const key = prefix ? `${prefix}_label` : "label";
-  const labelsKey = prefix ? `${prefix}_labels` : "labels";
-  const label = stringField(row, key);
-  if (label) {
-    return [label];
-  }
-  const labels = row[labelsKey];
-  if (Array.isArray(labels)) {
-    return labels.map(String);
-  }
-  if (typeof labels === "string") {
-    return [labels];
-  }
-  return [];
-}
-
-/**
- * Optional per-row status hint from the query/verb result itself (e.g. a
- * Cypher query that projects `n.epistemic_status`). Returns `undefined` —
- * never a default "statusless" — so `toGraphPayload` can tell a real hint
- * apart from "no data": defaulting here would fabricate a status when the
- * knowledge capability is absent.
- */
-function statusFromRow(row: TableRow): EpistemicStatus | undefined {
-  const raw = stringField(row, "epistemic_status") ?? stringField(row, "status");
-  return isEpistemicStatus(raw) ? raw : undefined;
 }
 
 function demoGraphPayload(title: string, result: QueryResult): GraphPayload {
