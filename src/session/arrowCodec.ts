@@ -28,13 +28,14 @@ export function decodeTable(buf: Buffer): QueryResult {
   const fields = table.schema.fields;
   const columns = fields.map((f) => f.name);
   const children = fields.map((f) => table.getChild(f.name));
-  const rows: TableRow[] = [];
+  const converters = fields.map((f) => cellConverter(f.type));
+  const rows: TableRow[] = new Array(table.numRows);
   for (let i = 0; i < table.numRows; i++) {
     const row: TableRow = {};
     for (let c = 0; c < fields.length; c++) {
-      row[columns[c]] = normalizeTypedCell(children[c]?.get(i), fields[c].type);
+      row[columns[c]] = converters[c](children[c]?.get(i));
     }
-    rows.push(row);
+    rows[i] = row;
   }
   const schema = describeSchema(fields, table.schema.metadata);
   return {
@@ -131,30 +132,58 @@ function boundedMetadata(
   return out;
 }
 
-/** Normalize an Arrow cell using its declared type (nested structs/lists included). */
-export function normalizeTypedCell(value: unknown, type: DataType): unknown {
-  if (value == null) {
-    return value;
+type CellConverter = (value: unknown) => unknown;
+
+const HEX = Array.from({ length: 256 }, (_, byte) => byte.toString(16).padStart(2, "0"));
+
+/** Hyphenated UUID text straight from 16 bytes (no Buffer copy). */
+function uuidText(bytes: Uint8Array): string {
+  return (
+    HEX[bytes[0]] + HEX[bytes[1]] + HEX[bytes[2]] + HEX[bytes[3]] + "-" +
+    HEX[bytes[4]] + HEX[bytes[5]] + "-" +
+    HEX[bytes[6]] + HEX[bytes[7]] + "-" +
+    HEX[bytes[8]] + HEX[bytes[9]] + "-" +
+    HEX[bytes[10]] + HEX[bytes[11]] + HEX[bytes[12]] + HEX[bytes[13]] + HEX[bytes[14]] + HEX[bytes[15]]
+  );
+}
+
+/**
+ * Pick one converter per column from its declared type, so decoding does not
+ * re-inspect the type for every cell. Nested structs/lists get converters for
+ * their children up front.
+ */
+export function cellConverter(type: DataType, depth = 0): CellConverter {
+  if (depth > MAX_SCHEMA_DEPTH) return normalizeCell;
+  if (DataType.isFixedSizeBinary(type) && type.byteWidth === 16) {
+    return (value) => (value instanceof Uint8Array ? uuidText(value) : normalizeCell(value));
   }
   if (DataType.isStruct(type)) {
-    const record = value as Record<string, unknown>;
-    const out: TableRow = {};
-    for (const child of type.children) {
-      out[child.name] = normalizeTypedCell(record[child.name], child.type);
-    }
-    return out;
+    const children = type.children.map((child) => [child.name, cellConverter(child.type, depth + 1)] as const);
+    return (value) => {
+      if (value == null) return value;
+      const record = value as Record<string, unknown>;
+      const out: TableRow = {};
+      for (const [name, convert] of children) out[name] = convert(record[name]);
+      return out;
+    };
   }
   if (DataType.isList(type) || DataType.isFixedSizeList(type)) {
     const itemType = type.children[0]?.type;
-    const vector = value as { length: number; get(i: number): unknown };
-    const items: unknown[] = [];
-    for (let i = 0; i < vector.length; i++) {
-      const item = vector.get(i);
-      items.push(itemType ? normalizeTypedCell(item, itemType) : normalizeCell(item));
-    }
-    return items;
+    const convertItem = itemType ? cellConverter(itemType, depth + 1) : normalizeCell;
+    return (value) => {
+      if (value == null) return value;
+      const vector = value as { length: number; get(i: number): unknown };
+      const items = new Array<unknown>(vector.length);
+      for (let i = 0; i < vector.length; i++) items[i] = convertItem(vector.get(i));
+      return items;
+    };
   }
-  return normalizeCell(value);
+  return normalizeCell;
+}
+
+/** Normalize an Arrow cell using its declared type (nested structs/lists included). */
+export function normalizeTypedCell(value: unknown, type: DataType): unknown {
+  return cellConverter(type)(value);
 }
 
 export function normalizeCell(value: unknown): unknown {
