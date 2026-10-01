@@ -50,7 +50,9 @@ flowchart LR
 | `nodeEngineBackend` / `pythonBridge` | `EngineBackend` implementations over Node / Python | `types.EngineBackend` |
 | `runtime` / `runtimeSelection` | Choose Node vs. Python per `graphforge.runtime`; open the backend | nativeLoader, pythonLoader, both backends |
 | `GraphForgeSession` | Open project, execute/verbs, typed Arrow decode, result provenance, graph payload | `EngineBackend` + arrow |
-| `resultSchemas` / `resultProjection` | GraphForge result-schema coverage ledger; identity-based graph projection ([RESULT_SCHEMAS.md](RESULT_SCHEMAS.md)) | Pure; no vscode |
+| `resultSchemas` / `resultProjection` | Route results to XYG or the Result Graph; Cypher identity projection ([RESULT_SCHEMAS.md](RESULT_SCHEMAS.md)) | Pure; no vscode |
+| `xygAdapter` | Load the XYG native host, read intents from XYG's ledger, build the shared compose input, and map rows ↔ identities from Rust's row planes. No joins, layout, or encoding | `@curatelabs/xyg-node` (staged in `dist/node_modules`) |
+| `XygVisualizationPanel` + `webview-ui/src/xygVisualization` | One XYG view per result: native payload via `renderStandalone`, or direct-browser WASM in a Blob-URL Worker; coded failures | `@curatelabs/xyg` |
 | `projectArtifacts` / `visualizationRegistry` | Read v1 compatibility specs; validate/write strict v2 project-owned specs; materialize centralized renderer defaults | Node fs + project root |
 | Tree providers | Projects, Ontology, Knowledge sidebars | Session |
 | Commands | Run Query, verbs, open panels, load ontology, Setup (Native/Python) | Session, webviews |
@@ -229,6 +231,23 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 
 Figure traces do not currently retain source-row provenance, so Figure selection linking is
 intentionally out of v0 rather than inferred from point order.
+
+### Visualize a GraphForge algorithm result with XYG (#80)
+
+1. A verb (or a saved result whose `.arrow` SHA-256 matches) leaves the engine's exact IPC
+   bytes in the session, bound to a `resultId` and generation.
+2. Visualize Result reads the allowed intents from XYG's ledger and prompts when there is more
+   than one. Auto-open draws only `graph`.
+3. For `graph`, the session reads the base graph (`MATCH (n) RETURN n`, `MATCH ()-[r]->()
+   RETURN r`) at one verified generation.
+4. Native host: `composeGraphForge` runs in the extension host, then the webview paints
+   `graphforgeWebviewPayload` with `renderStandalone`. WASM host: the webview composes the same
+   request bytes in a Blob-URL Worker and paints the Rust Scene.
+5. A pick resolves to `{uuid, layers: [{resultId, row}]}`, so the Results table highlights only
+   its own result's rows. A table row maps to UUIDs from Rust's row planes, and the view
+   recomposes with `select`, reusing positions.
+6. Every failure is a stable XYG or extension code with a next action. No renderer or host
+   fallback runs.
 
 ### Render and inspect a result graph
 

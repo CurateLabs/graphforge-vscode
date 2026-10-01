@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { projectArtifactFileName } from "./projectArtifacts";
@@ -6,10 +7,13 @@ import type { QueryResult } from "./types";
 export const RESULT_DOCUMENTS_DIR = "results";
 export const QUERY_RESULT_JSON = "query-result.json";
 export const QUERY_RESULT_MARKDOWN = "query-result.md";
+export const QUERY_RESULT_ARROW = "query-result.arrow";
 
 export interface ResultDocumentPaths {
   jsonPath: string;
   markdownPath: string;
+  /** Exact engine Arrow IPC bytes, when the engine result was available. */
+  arrowPath?: string;
   historyJsonPath?: string;
   historyMarkdownPath?: string;
 }
@@ -122,13 +126,32 @@ export function formatQueryResultMarkdown(result: QueryResult): string {
   return lines.join("\n");
 }
 
-/** Write both durable and readable result documents inside the GraphForge project. */
+/** SHA-256 (hex) binding a JSON result document to its `.arrow` bytes. */
+export function ipcSha256(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** The `.arrow` document that sits beside a result JSON document. */
+export function arrowPathFor(jsonPath: string): string {
+  return jsonPath.replace(/\.json$/i, ".arrow");
+}
+
+/**
+ * Write the durable and readable result documents inside the GraphForge
+ * project. With the engine's Arrow IPC bytes, a `.arrow` document is written
+ * beside each JSON document and its SHA-256 recorded in the JSON provenance,
+ * so a reopened result can be composed by XYG from the exact engine bytes.
+ */
 export async function persistQueryResultDocuments(
   projectRoot: string,
   result: QueryResult,
   name?: string,
   date = new Date(),
+  ipc?: Uint8Array,
 ): Promise<ResultDocumentPaths> {
+  if (ipc && result.provenance) {
+    result = { ...result, provenance: { ...result.provenance, ipcSha256: ipcSha256(ipc) } };
+  }
   const resultDir = path.join(projectRoot, RESULT_DOCUMENTS_DIR);
   const jsonPath = path.join(resultDir, QUERY_RESULT_JSON);
   const markdownPath = path.join(resultDir, QUERY_RESULT_MARKDOWN);
@@ -141,12 +164,22 @@ export async function persistQueryResultDocuments(
   const markdown = formatQueryResultMarkdown(result);
 
   await fs.mkdir(resultDir, { recursive: true });
-  await Promise.all([
+  const writes = [
     fs.writeFile(jsonPath, json, "utf8"),
     fs.writeFile(markdownPath, markdown, "utf8"),
     fs.writeFile(historyJsonPath, json, "utf8"),
     fs.writeFile(historyMarkdownPath, markdown, "utf8"),
-  ]);
+  ];
+  const arrowPath = ipc && result.provenance ? arrowPathFor(jsonPath) : undefined;
+  if (arrowPath && ipc) {
+    writes.push(fs.writeFile(arrowPath, ipc), fs.writeFile(arrowPathFor(historyJsonPath), ipc));
+  } else {
+    // A JSON-only result must not pair with a previous run's bytes.
+    writes.push(fs.rm(arrowPathFor(jsonPath), { force: true }));
+  }
+  await Promise.all(writes);
 
-  return { jsonPath, markdownPath, historyJsonPath, historyMarkdownPath };
+  return arrowPath
+    ? { jsonPath, markdownPath, arrowPath, historyJsonPath, historyMarkdownPath }
+    : { jsonPath, markdownPath, historyJsonPath, historyMarkdownPath };
 }

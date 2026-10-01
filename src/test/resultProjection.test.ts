@@ -10,12 +10,9 @@ import {
   sourceMismatch,
 } from "../session/resultProjection";
 import {
-  ALGORITHM_RESULT_SCHEMAS,
   classifyResult,
   parseResultProvenance,
   parseResultSchema,
-  resultSchemaForAlgorithm,
-  type ResultDisposition,
 } from "../session/resultSchemas";
 import type { GraphPayload, QueryResult } from "../session/types";
 import {
@@ -33,7 +30,7 @@ const FIXTURES = path.resolve(__dirname, "fixtures", "graphforge-results");
 interface Manifest {
   graphforgeVersion: string;
   contracts: { verb: string; algorithm: string; resultSchemaVersion: number }[];
-  fixtures: Record<string, { verb: string; algorithm?: string }>;
+  fixtures: Record<string, { verb: string; algorithm?: string; base?: string }>;
   failures: Record<string, string>;
 }
 
@@ -68,64 +65,27 @@ function payloadFor(result: QueryResult): GraphPayload {
   };
 }
 
-const PROJECTABLE: ReadonlySet<ResultDisposition> = new Set([
-  "entity-graph",
-  "node-layer",
-  "edge-layer",
-  "derived-edges",
-  "ordered-paths",
-]);
-
-suite("GraphForge result-schema coverage ledger (#80)", () => {
+suite("Result routing (#80)", () => {
   test("fixtures were produced by a real engine run with no skipped algorithms", () => {
     assert.match(manifest.graphforgeVersion, /^\d+\.\d+\.\d+/);
     assert.deepEqual(manifest.failures, {});
     assert.equal(manifest.contracts.length, 94);
   });
 
-  test("every registered algorithm contract has exactly one ledger disposition", () => {
-    for (const contract of manifest.contracts) {
-      const entry = resultSchemaForAlgorithm(contract.algorithm);
-      assert.ok(entry, `no ledger entry for ${contract.verb}.${contract.algorithm}`);
-      assert.equal(entry.version, contract.resultSchemaVersion, contract.algorithm);
-    }
-    const seen = new Map<string, string>();
-    for (const entry of ALGORITHM_RESULT_SCHEMAS) {
-      for (const algorithm of entry.algorithms) {
-        assert.equal(seen.get(algorithm), undefined, `${algorithm} registered twice`);
-        seen.set(algorithm, entry.id);
-      }
-    }
-    const contracted = new Set(manifest.contracts.map((c) => c.algorithm));
-    const extras = [...seen.keys()].filter((a) => !contracted.has(a));
-    // Engine alias accepted by `rank` but reported under its canonical name.
-    assert.deepEqual(extras, ["local_clustering_coefficient"]);
-  });
-
-  test("every engine-produced algorithm result matches its ledger schema and disposition", () => {
-    for (const contract of manifest.contracts) {
-      const result = fixture(contract.algorithm);
+  test("every algorithm and find result routes to XYG from engine metadata, never to the Result Graph", () => {
+    for (const name of [...manifest.contracts.map((c) => c.algorithm), "find"]) {
+      const result = fixture(name);
       const classification = classifyResult(result.columns, result.schema);
-      assert.equal(classification.algorithm, contract.algorithm);
-      assert.equal(classification.verb, contract.verb);
-      assert.equal(classification.entry, resultSchemaForAlgorithm(contract.algorithm));
-      const { disposition } = classification.entry;
-      const code = projectionCode(result);
-      if (PROJECTABLE.has(disposition)) {
-        assert.equal(code, undefined, `${contract.algorithm} should project`);
-      } else if (disposition === "table-only") {
-        assert.equal(code, "GF_RESULT_TABLE_ONLY", contract.algorithm);
-      } else {
-        assert.equal(code, "GF_RESULT_COMPOSITION_REQUIRED", contract.algorithm);
-      }
+      assert.equal(classification.entry.id, "xyg-layer", name);
+      assert.equal(projectionCode(result), "GF_RESULT_XYG_LAYER", name);
     }
   });
 
-  test("Cypher, find, and schema() fixtures have explicit dispositions", () => {
+  test("Cypher and schema() fixtures have explicit Result Graph dispositions", () => {
     assert.equal(classifyResult(fixture("cypher-nodes").columns, fixture("cypher-nodes").schema).entry.id, "cypher-entities");
     assert.equal(projectionCode(fixture("cypher-edges")), undefined);
     assert.equal(projectionCode(fixture("cypher-paths")), undefined);
-    assert.equal(projectionCode(fixture("find")), undefined);
+    assert.equal(projectionCode(fixture("base-cyclic-nodes")), undefined);
     assert.equal(projectionCode(fixture("cypher-scalars")), "GF_RESULT_NO_IDENTITY");
     assert.equal(projectionCode(fixture("schema")), "GF_RESULT_NO_IDENTITY");
   });
@@ -204,98 +164,6 @@ suite("Schema-aware graph projection (#80)", () => {
     assert.ok(projection.edges.every((edge) => edge.derived === undefined));
   });
 
-  test("ordered paths preserve order, rank, and cost as result-scoped steps", () => {
-    const result = fixture("yens");
-    const projection = projectResultGraph(result);
-    for (const [index, row] of result.rows.entries()) {
-      const path = row.path as string[];
-      const steps = projection.edges
-        .filter((edge) => edge.properties?.result_row === index)
-        .sort((a, b) => Number(a.properties?.step) - Number(b.properties?.step));
-      assert.equal(steps.length, path.length - 1);
-      steps.forEach((step, i) => {
-        assert.equal(step.source, path[i]);
-        assert.equal(step.target, path[i + 1]);
-        assert.equal(step.derived, true);
-        assert.equal(step.properties?.rank, row.rank);
-        assert.equal(step.properties?.cost, row.cost);
-      });
-      assert.deepEqual(projection.rowEntities[index].nodeIds, [...new Set(path)]);
-    }
-  });
-
-  test("Euler trails draw persisted edge UUIDs rather than derived steps", () => {
-    const result = fixture("euler_circuit");
-    const projection = projectResultGraph(result);
-    const edgePath = result.rows[0].edge_path as string[];
-    assert.deepEqual(projection.rowEntities[0].edgeIds, [...new Set(edgePath)]);
-    assert.ok(projection.edges.every((edge) => edge.derived === false));
-  });
-
-  test("similarity pairs are derived edges distinct from persisted relationships", () => {
-    const projection = projectResultGraph(fixture("node_similarity"));
-    assert.ok(projection.edges.length > 0);
-    for (const edge of projection.edges) {
-      assert.equal(edge.derived, true);
-      assert.equal(edge.type, "SIMILAR");
-      assert.equal(typeof edge.properties?.similarity, "number");
-    }
-  });
-
-  test("edge-layer results are keyed by edge_uuid with canonical endpoints", () => {
-    const result = fixture("minimum_spanning_tree");
-    const projection = projectResultGraph(result);
-    assert.deepEqual(
-      projection.edges.map((e) => e.id).sort(),
-      result.rows.map((r) => String(r.edge_uuid)).sort(),
-    );
-    const byId = new Map(projection.edges.map((e) => [e.id, e]));
-    for (const row of result.rows) {
-      assert.equal(byId.get(String(row.edge_uuid))?.source, row.source_uuid);
-      assert.equal(byId.get(String(row.edge_uuid))?.target, row.target_uuid);
-    }
-  });
-
-  test("node layers keep metrics and community ids on UUID-keyed nodes", () => {
-    const result = fixture("louvain");
-    const projection = projectResultGraph(result);
-    assert.equal(projection.nodes.length, result.rowCount);
-    for (const node of projection.nodes) {
-      assert.notEqual(node.properties.community_id, undefined);
-    }
-    assert.equal(projection.edges.length, 0);
-  });
-
-  test("embeddings and scalar results are never forced into coordinates or graphs", () => {
-    for (const name of ["node2vec", "graphsage", "hashgnn"]) {
-      assert.equal(projectionCode(fixture(name)), "GF_RESULT_COMPOSITION_REQUIRED");
-    }
-    for (const name of ["is_dag", "triad_census", "modularity", "conductance"]) {
-      assert.equal(projectionCode(fixture(name)), "GF_RESULT_TABLE_ONLY");
-    }
-    assert.equal(projectionCode(fixture("edge_coloring")), "GF_RESULT_COMPOSITION_REQUIRED");
-  });
-
-  test("unregistered, versioned, and malformed algorithm schemas fail explicitly", () => {
-    const base = fixture("pagerank");
-    const withMetadata = (patch: Record<string, string>): QueryResult => ({
-      ...base,
-      schema: { ...base.schema!, metadata: { ...base.schema!.metadata, ...patch } },
-    });
-    assert.equal(projectionCode(withMetadata({ "graphforge.algorithm": "future_rank" })), "GF_RESULT_SCHEMA_UNREGISTERED");
-    assert.equal(projectionCode(withMetadata({ "graphforge.algorithm_schema_version": "2" })), "GF_RESULT_SCHEMA_VERSION");
-    const retyped: QueryResult = {
-      ...base,
-      schema: {
-        ...base.schema!,
-        fields: base.schema!.fields.map((f) =>
-          f.name === "node_uuid" ? { ...f, type: { kind: "utf8" as const } } : f,
-        ),
-      },
-    };
-    assert.equal(projectionCode(retyped), "GF_RESULT_SCHEMA_MISMATCH");
-  });
-
   test("projection is bounded", () => {
     assert.ok(MAX_PROJECTED_ENTITIES > 0);
     assert.throws(
@@ -305,7 +173,7 @@ suite("Schema-aware graph projection (#80)", () => {
   });
 
   test("a saved result projects identically after its JSON document round-trips", () => {
-    const result = fixture("yens");
+    const result = fixture("cypher-paths");
     const saved = JSON.parse(formatQueryResultJson(result)) as Record<string, unknown>;
     const restored: QueryResult = {
       columns: saved.columns as string[],

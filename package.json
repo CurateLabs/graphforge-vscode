@@ -366,6 +366,11 @@
         "enablement": "graphforge.module.visualize.enabled"
       },
       {
+        "command": "graphforge.visualizeResult",
+        "title": "GraphForge: Visualize Result with XYG…",
+        "enablement": "graphforge.module.visualize.enabled"
+      },
+      {
         "command": "graphforge.showResultGraphAdvanced",
         "title": "GraphForge: Result Graph (Advanced)…",
         "enablement": "graphforge.module.visualize.enabled"
@@ -560,6 +565,19 @@
           "default": "cytoscape",
           "description": "Renderer template for newly created Result Graph artifacts. Saved artifacts keep their recorded renderer."
         },
+        "graphforge.visualization.xygHost": {
+          "type": "string",
+          "enum": [
+            "native",
+            "wasm"
+          ],
+          "enumDescriptions": [
+            "Compose and lay out in the extension host with the bundled XYG native core (any graph size).",
+            "Compose and lay out in the webview with the bundled XYG WebAssembly module (graphs and tables up to 1,024 nodes plus edges)."
+          ],
+          "default": "native",
+          "markdownDescription": "Which XYG host composes GraphForge algorithm and search results. There is no automatic fallback: if the chosen host is unavailable the view reports a stable error code."
+        },
         "graphforge.chart.renderer": {
           "type": "string",
           "enum": [
@@ -633,14 +651,14 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "npm run compile:host && npm run compile:webview",
-    "compile:host": "vite build && vite build --mode tests",
+    "compile:host": "vite build && vite build --mode tests && node scripts/stage-xyg-runtime.mjs",
     "compile:webview": "vite build --config webview-ui/vite.config.mts",
     "watch": "vite build --watch",
     "watch:webview": "vite build --watch --config webview-ui/vite.config.mts",
     "check": "tsc --noEmit && tsc --noEmit -p webview-ui && tsc --noEmit -p tsconfig.bench.json",
     "lint": "npm run check",
     "test": "npm run compile:host && vscode-test",
-    "test:unit": "npm run compile && mocha --ui tdd dist/test/visualizationInstanceRegistry.test.js dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/resultProjection.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/viewContributions.test.js dist/test/quickstartSample.test.js dist/test/projectArtifacts.test.js dist/test/visualizationRegistry.test.js dist/test/visualizationDocumentState.test.js dist/test/visualizationLoadingModel.test.js dist/test/geospatialModel.test.js dist/test/agentContext.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js dist/test/figureFromResult.test.js dist/test/figureSchema.test.js dist/test/resultGraphModel.test.js dist/test/resultTableModel.test.js dist/test/entityMutation.test.js dist/test/resultDocument.test.js dist/test/moduleManifest.test.js dist/test/workspaceScript.test.js dist/test/importData.test.js",
+    "test:unit": "npm run compile && mocha --ui tdd dist/test/visualizationInstanceRegistry.test.js dist/test/projectDetector.test.js dist/test/environmentReport.test.js dist/test/uuid.test.js dist/test/arrowCodec.test.js dist/test/resultProjection.test.js dist/test/xygAdapter.test.js dist/test/runtimeSelection.test.js dist/test/errorPresentation.test.js dist/test/projectKind.test.js dist/test/pythonInstallCommand.test.js dist/test/engineVersion.test.js dist/test/versionDiscovery.test.js dist/test/pythonProbe.test.js dist/test/pythonBridge.test.js dist/test/settingsSchema.test.js dist/test/getStartedContent.test.js dist/test/viewContributions.test.js dist/test/quickstartSample.test.js dist/test/projectArtifacts.test.js dist/test/visualizationRegistry.test.js dist/test/visualizationDocumentState.test.js dist/test/visualizationLoadingModel.test.js dist/test/geospatialModel.test.js dist/test/agentContext.test.js dist/test/knowledgeStatus.test.js dist/test/pickerCopy.test.js dist/test/paletteTitles.test.js dist/test/figureFromResult.test.js dist/test/figureSchema.test.js dist/test/resultGraphModel.test.js dist/test/resultTableModel.test.js dist/test/entityMutation.test.js dist/test/resultDocument.test.js dist/test/moduleManifest.test.js dist/test/workspaceScript.test.js dist/test/importData.test.js",
     "compile:bench": "vite build --mode bench",
     "bench": "npm run compile:bench && npm run bench:run",
     "bench:run": "node dist/bench/index.mjs",
@@ -654,6 +672,8 @@
     "@antv/l7": "^2.29.1",
     "@antv/l7-maps": "^2.29.1",
     "@antv/layout": "^2.0.0",
+    "@curatelabs/xyg": "file:vendor/xyg/curatelabs-xyg-0.0.0-dryrun.11.tgz",
+    "@curatelabs/xyg-node": "file:vendor/xyg/curatelabs-xyg-node-0.0.0-dryrun.11.tgz",
     "apache-arrow": "^21.2.0",
     "cytoscape": "^3.34.0",
     "graphology": "^0.26.0",
@@ -685,5 +705,12 @@
     "tinybench": "^5.1.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.1"
+  },
+  "optionalDependencies": {
+    "@curatelabs/xyg-node-darwin-arm64": "file:vendor/xyg/curatelabs-xyg-node-darwin-arm64-0.0.0-dryrun.11.tgz",
+    "@curatelabs/xyg-node-darwin-x64": "file:vendor/xyg/curatelabs-xyg-node-darwin-x64-0.0.0-dryrun.11.tgz",
+    "@curatelabs/xyg-node-linux-arm64": "file:vendor/xyg/curatelabs-xyg-node-linux-arm64-0.0.0-dryrun.11.tgz",
+    "@curatelabs/xyg-node-linux-x64": "file:vendor/xyg/curatelabs-xyg-node-linux-x64-0.0.0-dryrun.11.tgz",
+    "@curatelabs/xyg-node-win32-x64": "file:vendor/xyg/curatelabs-xyg-node-win32-x64-0.0.0-dryrun.11.tgz"
   }
 }

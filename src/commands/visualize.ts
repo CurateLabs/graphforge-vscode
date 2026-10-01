@@ -3,12 +3,15 @@ import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { GraphPayload } from "../session/types";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
 import type { ResultGraphViewOptions } from "../webview/resultGraphModel";
+import { isXygResultLayer } from "../session/xygAdapter";
 
 export interface ShowResultGraphArgs extends ResultGraphViewOptions {
   title?: string;
   payload?: GraphPayload;
   instanceId?: string;
   coordinationGroup?: string;
+  /** Automatic open after a query/verb: never prompt for an intent. */
+  auto?: boolean;
 }
 
 export function registerVisualizationCommands(
@@ -20,6 +23,14 @@ export function registerVisualizationCommands(
       "graphforge.showResultGraph",
       async (args?: ShowResultGraphArgs) => {
         const result = session.getLastResult();
+        // Algorithm and find results are composed by XYG (#80); they never
+        // fall back to the Result Graph renderer.
+        if (!args?.payload && result && isXygResultLayer(result.schema?.metadata)) {
+          return vscode.commands.executeCommand("graphforge.visualizeResult", {
+            title: args?.title,
+            auto: args?.auto,
+          });
+        }
         const payload = args?.payload ??
           (args?.title && result
             ? await session.toGraphPayload(result, args.title)

@@ -157,7 +157,13 @@ async function executeAndShowResult(
     if (!projectRoot) {
       throw new Error("Query completed without an open GraphForge project.");
     }
-    const documents = await persistQueryResultDocuments(projectRoot, result, resultName);
+    const documents = await persistQueryResultDocuments(
+      projectRoot,
+      result,
+      resultName,
+      undefined,
+      session.resultIpcBytes(result),
+    );
     // Refresh project-backed query/result lists after files are durable.
     session.notifyChanged();
     await results.show(result, "Cypher result", documents);
@@ -171,6 +177,7 @@ async function executeAndShowResult(
       const commands = await vscode.commands.getCommands(true);
       if (commands.includes("graphforge.showResultGraph")) {
         await vscode.commands.executeCommand("graphforge.showResultGraph", {
+          auto: true,
           title: "Cypher result",
         });
       }

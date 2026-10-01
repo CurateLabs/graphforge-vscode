@@ -2,7 +2,6 @@ import { stringField } from "./arrowCodec";
 import {
   classifyResult,
   type ResultClassification,
-  type ResultFieldRole,
   type ResultSchemaErrorCode,
 } from "./resultSchemas";
 import {
@@ -103,9 +102,6 @@ function uuidOf(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
 }
 
-function uuidList(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v !== "") : [];
-}
 
 function labelsOf(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((v) => v != null).map(String);
@@ -219,81 +215,6 @@ function projectColumns(builder: GraphBuilder, result: QueryResult): ResultRowEn
   });
 }
 
-// Registered algorithm/search results ----------------------------------------
-
-function roleField(classification: ResultClassification, role: ResultFieldRole): string | undefined {
-  return classification.entry.fields.find((f) => f.role === role)?.name;
-}
-
-function edgeTypeFor(classification: ResultClassification): string {
-  return (
-    classification.entry.derivedEdgeType ??
-    (classification.algorithm ?? classification.entry.id).toUpperCase()
-  );
-}
-
-function projectRegistered(
-  builder: GraphBuilder,
-  result: QueryResult,
-  classification: ResultClassification,
-): ResultRowEntities[] {
-  const { disposition } = classification.entry;
-  const nodeKey = roleField(classification, "node");
-  const edgeKey = roleField(classification, "edge");
-  const sourceKey = roleField(classification, "source");
-  const targetKey = roleField(classification, "target");
-  const nodePathKey = roleField(classification, "node-path");
-  const edgePathKey = roleField(classification, "edge-path");
-  const edgeType = edgeTypeFor(classification);
-
-  return result.rows.map((row, rowIndex) => {
-    if (disposition === "node-layer" && nodeKey) {
-      const id = uuidOf(row[nodeKey]);
-      if (id) builder.node(id, undefined, row);
-    } else if (disposition === "edge-layer" && edgeKey && sourceKey && targetKey) {
-      const id = uuidOf(row[edgeKey]);
-      const source = uuidOf(row[sourceKey]);
-      const target = uuidOf(row[targetKey]);
-      if (id && source && target) {
-        builder.edge({ id, type: edgeType, source, target, properties: row });
-      }
-    } else if (disposition === "derived-edges" && sourceKey && targetKey) {
-      const source = uuidOf(row[sourceKey]);
-      const target = uuidOf(row[targetKey]);
-      if (source && target) {
-        builder.edge({
-          id: `${classification.entry.id}:${source}:${target}`,
-          type: edgeType,
-          source,
-          target,
-          properties: row,
-          derived: true,
-        });
-      }
-    } else if (disposition === "ordered-paths" && nodePathKey) {
-      const path = uuidList(row[nodePathKey]);
-      const edgePath = edgePathKey ? uuidList(row[edgePathKey]) : [];
-      const persistedSteps = edgePath.length === path.length - 1;
-      path.forEach((id) => builder.node(id));
-      for (let step = 0; step + 1 < path.length; step++) {
-        const properties: TableRow = { result_row: rowIndex, step };
-        for (const f of classification.entry.fields) {
-          if (f.role === "rank" || f.role === "cost") properties[f.name] = row[f.name];
-        }
-        builder.edge({
-          id: persistedSteps ? edgePath[step] : `${classification.entry.id}:${rowIndex}:${step}`,
-          type: edgeType,
-          source: path[step],
-          target: path[step + 1],
-          properties,
-          derived: !persistedSteps,
-        });
-      }
-    }
-    return builder.takeRow();
-  });
-}
-
 /**
  * Project a result into graph geometry inputs by schema, not by guessing.
  * Every node/edge id is a GraphForge UUID (or, for derived path steps, a
@@ -318,9 +239,7 @@ export function projectResultGraph(
   const rowEntities =
     entry.id === "cypher-entities"
       ? projectEntities(builder, result)
-      : entry.id === "cypher-columns"
-        ? projectColumns(builder, result)
-        : projectRegistered(builder, result, classification);
+      : projectColumns(builder, result);
 
   const source: GraphProjectionSource = {
     schemaId: entry.id,
@@ -351,9 +270,13 @@ export function projectResultGraph(
   };
 }
 
-/** Whether `result` has a graph disposition (used to gate automatic graph opening). */
+/**
+ * Whether `result` can open a view automatically: Cypher graphs, or XYG
+ * layers (XYG then draws only a `graph` intent and skips the rest).
+ */
 export function isGraphProjectable(result: QueryResult): boolean {
-  return classifyResult(result.columns, result.schema).error === undefined;
+  const classification = classifyResult(result.columns, result.schema);
+  return classification.error === undefined || classification.entry.id === "xyg-layer";
 }
 
 /**

@@ -7,13 +7,20 @@ GraphForge for VS Code ships no product telemetry. Its current signals are local
 - **Visualization panel status** — render and layout progress or an actionable
   failure, without changing the saved artifact.
 
-## Result projection (#80)
+## XYG visualization (#80)
 
-`graphforge.showResultGraph` returns a `projection` diagnostic: schema id and
-version, disposition, row/node/edge counts, and projection duration. A failed
-projection reports a stable `GF_RESULT_*` code and next action (see
-[RESULT_SCHEMAS.md](RESULT_SCHEMAS.md)). Neither includes result values, UUIDs,
-vectors, coordinates, or paths.
+`graphforge.visualizeResult` (and `showResultGraph` for algorithm results)
+returns a value-free outcome: instance id, host, intent, and XYG's composition
+diagnostics. The diagnostics cover kind, composition/ledger versions, per-layer
+schema id/version/disposition/intent/counts, node/edge/row counts, and decision
+codes such as `GF_COMPOSE_MISSING_DIMMED`. The panel status line shows the same
+counts and codes. Failures report XYG's stable code (`GF_COMPOSE_*`,
+`GF_RESULT_*`, `GF_BASE_*`, `XYG_NATIVE_*`, `XYG_WASM_*`, `XYG_PAINT_FAILED`)
+and a next action. None of these include result values, UUIDs, vectors,
+coordinates, paths, or project paths (see [RESULT_SCHEMAS.md](RESULT_SCHEMAS.md)).
+
+`graphforge.showResultGraph` for Cypher results still returns a `projection`
+diagnostic (schema id/version, disposition, counts, duration).
 
 ## Visualization lifecycle (#67)
 

@@ -79,6 +79,7 @@ async function runFind(
     const commands = await vscode.commands.getCommands(true);
     if (commands.includes("graphforge.showResultGraph")) {
       await vscode.commands.executeCommand("graphforge.showResultGraph", {
+          auto: true,
         title: `find: ${query ?? "(all)"}`,
       });
     }

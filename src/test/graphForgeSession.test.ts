@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { GraphForgeSession } from "../session/graphForgeSession";
@@ -333,6 +334,39 @@ suite("GraphForgeSession result provenance (#80)", () => {
     const r = first.rows[0].r as Record<string, unknown>;
     assert.ok(payload.edges.some((edge) => edge.id === r.edge_uuid));
     assert.equal(payload.diagnostic?.rows, first.rowCount);
+    session.dispose();
+  });
+
+  test("retains engine IPC bytes per result for XYG, bounded", async () => {
+    const session = new GraphForgeSession();
+    injectForge(session, makeStubForge({ execute: () => cypherEdges }));
+    const first = await session.execute("RETURN 1");
+    assert.deepEqual(session.resultIpcBytes(first), cypherEdges);
+    for (let i = 0; i < 20; i++) await session.execute("RETURN 1");
+    assert.equal(session.resultIpcBytes(first), undefined, "oldest bytes evicted");
+    session.dispose();
+  });
+
+  test("reads the base graph for XYG at one verified generation", async () => {
+    const session = new GraphForgeSession();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-base-"));
+    const generations = ["01890000-0000-7000-8000-000000000001"];
+    const writeCurrent = (uuid: string) =>
+      fs.writeFileSync(path.join(root, "CURRENT"), JSON.stringify({ format: "graphforge-project", format_version: 1, generation_uuid: uuid }));
+    writeCurrent(generations[0]);
+    const queries: string[] = [];
+    injectForge(session, makeStubForge({ execute: (cypher: string) => { queries.push(cypher); return cypherEdges; } }));
+    (session as unknown as { activeProject: unknown }).activeProject = { rootPath: root, name: "base" };
+    const base = await session.readBaseGraph();
+    assert.equal(base.generation, generations[0]);
+    assert.deepEqual(queries, ["MATCH (n) RETURN n", "MATCH ()-[r]->() RETURN r"]);
+
+    // A write that keeps committing during the read is refused, never mixed.
+    let tick = 2;
+    injectForge(session, makeStubForge({
+      execute: () => { writeCurrent(`01890000-0000-7000-8000-00000000000${tick++}`); return cypherEdges; },
+    }));
+    await assert.rejects(session.readBaseGraph(), (err: unknown) => (err as { code?: string }).code === "GF_BASE_GENERATION_CHANGED");
     session.dispose();
   });
 

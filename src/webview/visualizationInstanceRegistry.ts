@@ -1,6 +1,6 @@
 import * as crypto from "node:crypto";
 
-export type VisualizationKind = "graph" | "chart" | "temporal" | "geospatial" | "figure";
+export type VisualizationKind = "graph" | "chart" | "temporal" | "geospatial" | "figure" | "xyg";
 export type VisualizationLifecyclePhase = "prepare" | "layout" | "paint" | "ready" | "failed" | "disposed";
 
 export interface VisualizationController {

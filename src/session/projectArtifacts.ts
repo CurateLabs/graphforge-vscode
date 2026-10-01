@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { FigureChartType } from "./figureFromResult";
 import type { QueryResult, TableRow } from "./types";
 import { parseResultProvenance, parseResultSchema } from "./resultSchemas";
@@ -181,6 +181,23 @@ function parseQueryResult(value: unknown, source: string): QueryResult {
     result.provenance = parseResultProvenance(record.provenance, source);
   }
   return result;
+}
+
+/**
+ * The exact engine Arrow IPC bytes saved beside a result document, only when
+ * they match the SHA-256 recorded in that document's provenance.
+ */
+export function readProjectResultIpc(
+  projectRoot: string,
+  resultPath: string,
+  result: QueryResult,
+): Buffer | undefined {
+  const expected = result.provenance?.ipcSha256;
+  if (!expected) return undefined;
+  const absolute = resolveProjectArtifactPath(projectRoot, resultPath).replace(/\.json$/i, ".arrow");
+  if (!fs.existsSync(absolute)) return undefined;
+  const bytes = fs.readFileSync(absolute);
+  return createHash("sha256").update(bytes).digest("hex") === expected ? bytes : undefined;
 }
 
 export function readProjectResult(projectRoot: string, resultPath: string): QueryResult {

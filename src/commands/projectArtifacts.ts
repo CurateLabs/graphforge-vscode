@@ -6,6 +6,7 @@ import {
   filterQueryResultMany,
   readProjectQuery,
   readProjectResult,
+  readProjectResultIpc,
   readProjectVisualization,
   relativeProjectPath,
   resolveArtifactName,
@@ -601,6 +602,8 @@ export function registerProjectArtifacts(
           const absolutePath = resolveProjectArtifactPath(projectRoot, resultPath);
           const relativePath = relativeProjectPath(projectRoot, absolutePath);
           const result = readProjectResult(projectRoot, resultPath);
+          const ipc = readProjectResultIpc(projectRoot, resultPath, result);
+          if (ipc) session.retainResultIpc(result, ipc);
           session.restoreResult(result, path.basename(resultPath));
           await results.show(
             result,

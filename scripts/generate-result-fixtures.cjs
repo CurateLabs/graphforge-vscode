@@ -122,17 +122,19 @@ const FLOW = new Set(["max_flow", "max_flow_edges", "min_cut", "min_cut_edges", 
 const RING = new Set(["max_bipartite_matching", "euler_circuit"]);
 
 function graphFor(algorithm) {
-  if (DAG_ONLY.has(algorithm)) return { ...dag, label: "Task" };
-  if (FLOW.has(algorithm)) return { ...flow, label: "Hub" };
-  if (RING.has(algorithm)) return { ...ring, label: "Stop" };
-  if (algorithm === "k_means") return { ...points, label: "Point" };
-  return { ...cyclic, label: "Person" };
+  if (DAG_ONLY.has(algorithm)) return { ...dag, label: "Task", base: "dag" };
+  if (FLOW.has(algorithm)) return { ...flow, label: "Hub", base: "flow" };
+  if (RING.has(algorithm)) return { ...ring, label: "Stop", base: "ring" };
+  if (algorithm === "k_means") return { ...points, label: "Point", base: "points" };
+  return { ...cyclic, label: "Person", base: "cyclic" };
 }
 
 for (const { verb, algorithm } of manifest.contracts) {
-  const { g, nodes, label } = graphFor(algorithm);
+  const { g, nodes, label, base } = graphFor(algorithm);
   const [a, , c, d] = nodes;
-  const kind = { verb, algorithm };
+  // `base` names the graph whose base tables (base-<name>-nodes/-edges) the
+  // result joins onto for XYG `graph` compositions.
+  const kind = { verb, algorithm, base };
   write(algorithm, kind, () => {
     switch (verb) {
       case "rank":
@@ -198,6 +200,13 @@ for (const { verb, algorithm } of manifest.contracts) {
   });
 }
 
+// Base graphs as GraphForge Cypher entity structs, read at the same state the
+// algorithms ran against (XYG joins result layers onto these by UUID).
+for (const [name, graph] of Object.entries({ cyclic, dag, flow, ring, points })) {
+  write(`base-${name}-nodes`, { verb: "execute", baseOf: name }, () => graph.g.execute("MATCH (n) RETURN n"));
+  write(`base-${name}-edges`, { verb: "execute", baseOf: name }, () => graph.g.execute("MATCH ()-[r]->() RETURN r"));
+}
+
 const q = cyclic.g;
 write("cypher-nodes", { verb: "execute" }, () => q.execute("MATCH (n:Person) RETURN n ORDER BY n.name"));
 write("cypher-edges", { verb: "execute" }, () =>
@@ -209,7 +218,7 @@ write("cypher-paths", { verb: "execute" }, () =>
 write("cypher-scalars", { verb: "execute" }, () =>
   q.execute("MATCH (n:Person) RETURN n.name AS name, n.prize AS prize ORDER BY name"),
 );
-write("find", { verb: "find" }, () => q.find("ada", "Person"));
+write("find", { verb: "find", base: "cyclic" }, () => q.find("ada", "Person"));
 write("schema", { verb: "schema" }, () => q.schema());
 
 fs.writeFileSync(path.join(outDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

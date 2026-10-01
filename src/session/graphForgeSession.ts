@@ -77,6 +77,10 @@ export interface RuntimeEnvironmentSnapshot {
   active: RuntimeKind | undefined;
 }
 
+/** Bounds for retained engine IPC bytes (see `resultIpc`). */
+const MAX_RETAINED_RESULTS = 16;
+const MAX_RETAINED_RESULT_BYTES = 256 * 1024 * 1024;
+
 // Defined in `errors.ts` (vscode-free) so error-presentation logic can be
 // unit tested under plain mocha; re-exported here for existing import sites.
 export { NodeOnlyFeatureError, UnsupportedByBindingError } from "./errors";
@@ -88,6 +92,12 @@ export class GraphForgeSession implements vscode.Disposable {
   private algorithmContractsCache: AlgorithmDescriptorContract[] | undefined;
   private lastResult: QueryResult | undefined;
   private lastResultTitle: string | undefined;
+  /**
+   * Raw engine Arrow IPC bytes per result id, exactly as GraphForge returned
+   * them. XYG decodes these in Rust; they never cross into a webview as rows.
+   * Bounded LRU (insertion order) so long sessions do not retain every table.
+   */
+  private readonly resultIpc = new Map<string, Buffer>();
   private beliefPolicy: BeliefPolicySettings = { ...DEFAULT_BELIEF_POLICY };
   private readonly statusBar: vscode.StatusBarItem;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
@@ -274,14 +284,7 @@ export class GraphForgeSession implements vscode.Disposable {
    * are reflected). Projections and selection links check this identity.
    */
   private withProvenance(result: QueryResult): QueryResult {
-    let generationUuid: string | undefined;
-    if (this.activeProject) {
-      try {
-        generationUuid = readCurrentPointer(this.activeProject.rootPath)?.generation_uuid;
-      } catch {
-        generationUuid = this.activeProject.current?.generation_uuid;
-      }
-    }
+    const generationUuid = this.currentGenerationUuid();
     const provenance: ResultProvenance = { resultId: uuidv7() };
     if (generationUuid) provenance.generationUuid = generationUuid;
     const queryId = result.schema?.metadata["graphforge.query_id"];
@@ -301,6 +304,7 @@ export class GraphForgeSession implements vscode.Disposable {
     const backend = this.requireBackend();
     const buf = await backend.execute(cypher, params);
     const result = this.withProvenance(decodeTable(buf));
+    this.retainResultIpc(result, buf);
     this.rememberResult(result, "Cypher result");
     return result;
   }
@@ -392,6 +396,7 @@ export class GraphForgeSession implements vscode.Disposable {
         throw new Error(`Unknown verb: ${verb}`);
     }
     const result = this.withProvenance(decodeTable(buf));
+    this.retainResultIpc(result, buf);
     this.rememberResult(result, verb);
     return result;
   }
@@ -1279,6 +1284,62 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   /** Restore a durable project result as the active table/graph/figure source. */
+  /** The engine's Arrow IPC bytes for a result, when this session still holds them. */
+  resultIpcBytes(result: QueryResult): Buffer | undefined {
+    const id = result.provenance?.resultId;
+    return id ? this.resultIpc.get(id) : undefined;
+  }
+
+  /** Register bytes read back from a saved result's `.arrow` document. */
+  retainResultIpc(result: QueryResult, bytes: Buffer): void {
+    const id = result.provenance?.resultId;
+    if (!id) return;
+    this.resultIpc.delete(id);
+    this.resultIpc.set(id, bytes);
+    let total = 0;
+    for (const value of this.resultIpc.values()) total += value.byteLength;
+    for (const [key, value] of this.resultIpc) {
+      if (this.resultIpc.size <= MAX_RETAINED_RESULTS && total <= MAX_RETAINED_RESULT_BYTES) break;
+      if (key === id) continue;
+      this.resultIpc.delete(key);
+      total -= value.byteLength;
+    }
+  }
+
+  /** The committed generation `CURRENT` names now, if a project is open. */
+  currentGenerationUuid(): string | undefined {
+    if (!this.activeProject) return undefined;
+    try {
+      return readCurrentPointer(this.activeProject.rootPath)?.generation_uuid;
+    } catch {
+      return this.activeProject.current?.generation_uuid;
+    }
+  }
+
+  /**
+   * Read the base graph an XYG `graph` composition joins onto: every node and
+   * every relationship as GraphForge Cypher entity structs, at one verified
+   * generation. Not remembered as the user's result. If a write commits a new
+   * generation during the read, it is retried once and then refused rather
+   * than mixing generations.
+   */
+  async readBaseGraph(): Promise<{ tables: Buffer[]; generation?: string }> {
+    const backend = this.requireBackend();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const before = this.currentGenerationUuid();
+      const nodes = await backend.execute("MATCH (n) RETURN n");
+      const edges = await backend.execute("MATCH ()-[r]->() RETURN r");
+      const after = this.currentGenerationUuid();
+      if (before === after) {
+        return after ? { tables: [nodes, edges], generation: after } : { tables: [nodes, edges] };
+      }
+    }
+    throw Object.assign(
+      new Error("The graph kept changing while its base tables were read. Try again once writes settle."),
+      { code: "GF_BASE_GENERATION_CHANGED" },
+    );
+  }
+
   restoreResult(result: QueryResult, title = "Saved result"): void {
     this.rememberResult(result, title);
   }

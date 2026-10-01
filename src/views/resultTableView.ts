@@ -6,6 +6,7 @@ import type { ResultDocumentPaths } from "../session/resultDocument";
 import type { HostToWebview, WebviewToHost } from "../webview/protocol";
 import { EntityInspectPanel } from "../webview/entityInspectPanel";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import { XygVisualizationPanel } from "../webview/xygVisualizationPanel";
 import { sourceMismatch } from "../session/resultProjection";
 import {
   jsonSafeQueryResult,
@@ -31,6 +32,7 @@ export class ResultTableViewProvider
   private view: vscode.WebviewView | undefined;
   private state: ResultTableState | undefined;
   private readonly graphSelectionDisposable: vscode.Disposable;
+  private readonly xygSelectionDisposable: vscode.Disposable;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -49,10 +51,22 @@ export class ResultTableViewProvider
       void this.reveal();
       this.post({ type: "graphforge/highlightResultRows", rowIndices });
     });
+    // XYG picks name result rows through the caller's result id (#80); a pick
+    // from a view of another result or generation never selects rows here.
+    this.xygSelectionDisposable = XygVisualizationPanel.onDidSelectRows((event) => {
+      const provenance = this.state?.result.provenance;
+      if (!provenance || event.resultId !== provenance.resultId) return;
+      if (event.generationUuid !== provenance.generationUuid) return;
+      const rowIndices = event.rows.filter((row) => row < (this.state?.result.rows.length ?? 0));
+      if (rowIndices.length === 0) return;
+      void this.reveal();
+      this.post({ type: "graphforge/highlightResultRows", rowIndices });
+    });
   }
 
   dispose(): void {
     this.graphSelectionDisposable.dispose();
+    this.xygSelectionDisposable.dispose();
   }
 
   resolveWebviewView(
@@ -120,6 +134,19 @@ export class ResultTableViewProvider
 
   private selectResult(rowIndex: number, column?: string): void {
     if (!this.state) return;
+    const xygPanel = XygVisualizationPanel.forResult(this.state.result.provenance?.resultId);
+    if (xygPanel) {
+      void xygPanel.selectRows([rowIndex]).then((count) => {
+        this.post({
+          type: "graphforge/resultSelection",
+          linked: count > 0,
+          message: count > 0
+            ? `Selected ${count} element(s) in the XYG view.`
+            : "This row has no element in the XYG view.",
+        });
+      });
+      return;
+    }
     const graphPanel = ResultGraphPanel.forResult(this.state.result);
     const highlight = graphPanel?.highlightFromResult(
       this.state.result,

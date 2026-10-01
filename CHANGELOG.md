@@ -4,12 +4,23 @@ All notable changes to the GraphForge VS Code extension are documented here.
 
 ## Unreleased
 
+### Added
+
+- **GraphForge: Visualize Result with XYG…** draws algorithm and search results with XYG. Rust composes them over the current graph:
+  - scores and communities;
+  - paths, walks, and cycles in order;
+  - similarity and flow as dashed derived edges;
+  - trees and matchings on the real relationships.
+- Scalar and category results open as tables or bar charts, and embeddings as parallel coordinates. You choose the view; nothing is guessed.
+- `graphforge.visualization.xygHost` chooses where XYG runs: the native core in the extension host (default, any size) or WebAssembly in the view. Neither falls back to the other.
+
 ### Changed
 
-- Results keep their GraphForge Arrow schema (field types and `graphforge.*` metadata) and are bound to a result id and graph generation, including when saved.
-- Result Graph projects GraphForge results by schema: Cypher node/relationship/path values, canonical `node_uuid`/`edge_uuid`/`source_uuid`/`target_uuid` fields, ordered paths, and analytical pairs (drawn as derived edges). Every GraphForge algorithm has a documented, tested disposition.
-- Embeddings, scalar metrics, and tables without graph identity no longer open a demo graph; they report why and what to do instead.
-- Table and graph selections link by UUID, and only between views of the same result.
+- Results keep their GraphForge Arrow schema and are bound to a result id and graph generation. Run Query also saves the exact engine bytes as `results/*.arrow`.
+- Show Result Graph and the open-after-query setting send algorithm results to XYG. Cypher results keep the Result Graph renderer.
+- A result computed before the graph changed is refused as stale instead of being drawn over the newer graph.
+- Table and view selections link by UUID and result row, and only between views of the same result.
+- Tables without graph identity no longer open a demo graph; they report why and what to do instead.
 
 ## 0.1.3
 

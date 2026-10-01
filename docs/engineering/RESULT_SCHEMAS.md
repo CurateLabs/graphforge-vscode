@@ -1,72 +1,105 @@
-# GraphForge result schemas and projection (#80)
+# GraphForge result schemas and XYG visualization (#80)
 
-GraphForge Core owns computation and canonical Arrow result schemas. This
-extension owns *result-to-visualization intent*: for every registered result
-schema it records how a result may be presented and which fields carry identity.
-Geometry, layout, LOD, encoding, joins onto a base graph, and embedding
-reductions belong to XYG and are never reconstructed here.
+GraphForge Core computes and owns the canonical Arrow result schemas. XYG
+(Rust) owns recognition, dispositions, joins, identity policy, composition,
+layout, and the Scene, on both the native Node host and the direct-browser
+WASM host. The extension supplies the engine's Arrow IPC bytes, a base graph,
+generation identity, and the caller's explicit intent. It keeps no algorithm
+registry and never joins, lays out, encodes, or reduces result data.
 
-Code: `src/session/arrowCodec.ts` (typed decode), `src/session/resultSchemas.ts`
-(ledger + classification), `src/session/resultProjection.ts` (identity-based
-graph projection). Tests: `src/test/resultProjection.test.ts`.
+The ledger table below is the contract between the two repositories. XYG
+vendors this file and a Rust test fails if its ledger disagrees. This
+repository's `src/test/xygAdapter.test.ts` fails if XYG's runtime ledger
+(`graphforgeLedger()`) disagrees with it, or if any GraphForge contract
+(`algorithmDescriptorContracts()`) has no entry.
 
-## Typed decode
+Code:
+
+- `src/session/arrowCodec.ts`: typed decode for the Results table.
+- `src/session/xygAdapter.ts`: host loading, intents from XYG's ledger, the
+  shared compose input, and row ↔ identity mapping from Rust's row planes.
+- `src/webview/xygVisualizationPanel.ts` and `webview-ui/src/xygVisualization/`:
+  the XYG view.
+- `src/session/resultSchemas.ts` / `resultProjection.ts`: routing, plus the
+  Result Graph projection that Cypher graphs still use.
+
+## Routing
+
+| Result | Recognized by | Drawn by |
+|---|---|---|
+| Algorithm results (`rank`, `cluster`, `similar`, `paths`, `analyze`) and `find` | `graphforge.verb` metadata | XYG (`GraphForge: Visualize Result with XYG…`; `Show Result Graph` and auto-open route here) |
+| Cypher node/relationship/path values | entity struct fields (`node_uuid`, `edge_uuid` + `src_uuid`/`dst_uuid`, `nodes` + `relationships`) | Result Graph renderer |
+| Cypher scalar identity columns | `node_uuid`/`id`, `source`/`target` and canonical UUID columns | Result Graph renderer |
+| Anything else, including `schema()` | — | Results table only (`GF_RESULT_NO_IDENTITY`) |
+
+Cypher graphs stay on the Result Graph renderer for two reasons. First, XYG's
+compose request requires at least one result layer, so it has no base-only
+composition yet. Second, #82 is what retires the previous renderers.
+
+## Typed decode and provenance
 
 `decodeTable` keeps a JSON-safe `ResultSchema` next to the rows:
 
-- Field kinds: `uuid` (`FixedSizeBinary(16)`), `uuid-list`
-  (`List<FixedSizeBinary(16)>`), `float-vector` (`List`/`FixedSizeList` of floats,
-  with `dimensions`), `int` (bits/signedness), `float`, `utf8`, `bool`,
-  `timestamp` (timezone), `date`, `binary`, nested `list`/`struct`, `other`.
-- Schema metadata: bounded to 64 entries and 1,024-character values. The
-  `graphforge.algorithm`, `graphforge.verb`, `graphforge.algorithm_schema_version`,
-  `graphforge.search_schema_version`, `graphforge.query_id`, and embedding
-  keys are preserved.
-- Values: UUIDs become hyphenated strings; UUID lists stay ordered string arrays;
-  Cypher entity/path structs become plain objects; vectors stay numeric arrays;
-  64-bit integers become decimal strings (no precision loss).
+- field kinds: `uuid`, `uuid-list`, `float-vector`, `int`, `float`, `utf8`,
+  `bool`, `timestamp`, `date`, `binary`, nested `list`/`struct`;
+- bounded `graphforge.*` metadata.
 
-The schema is persisted with the result document (`results/*.json`) and
-validated when read back, so saved results classify and project identically.
-
-## Provenance
+The Results table uses it. XYG receives the raw IPC bytes, never these rows.
 
 Every engine result from Run Query and the analyst verbs gets a
 `ResultProvenance`:
 
-- `resultId`: a UUIDv7 minted by the extension.
-- `generationUuid`: the committed generation that `CURRENT` names at read time.
+- `resultId`: a UUIDv7;
+- `generationUuid`: the generation `CURRENT` names at read time;
 - `queryId`: the Cypher `graphforge.query_id`, when present.
 
-A graph payload records its projection `source` (result id, generation, schema
-id/version, disposition). The table and the graph are linked only when both
-name the same result and generation. A graph showing a different result, or
-one from another generation, never receives or sends selections.
+The session retains each result's raw IPC bytes, bounded to 16 results and
+256 MiB. Run Query also saves them as `results/*.arrow` beside the JSON
+document, whose provenance records their SHA-256. A reopened result is bound
+to its bytes only when the hash matches.
 
-## Dispositions
+## Composition
 
-| Disposition | Meaning |
-|---|---|
-| `entity-graph` | Cypher node/relationship/path values with persisted UUIDs |
-| `node-layer` | UUID-keyed node values (scores, communities, order, colors, search hits) |
-| `edge-layer` | Persisted edges keyed by `edge_uuid` with `source_uuid`/`target_uuid` |
-| `derived-edges` | Analytical pairs; edges are flagged `derived: true` |
-| `ordered-paths` | Ordered UUID lists; steps are `derived` unless an `edge_path` names persisted edges |
-| `table-only` | Scalar/global/category results; `GF_RESULT_TABLE_ONLY` |
-| `composition-required` | Needs a base graph or explicit coordinates; `GF_RESULT_COMPOSITION_REQUIRED` |
+`graph` intents join the result onto a base graph read at a verified
+generation: `MATCH (n) RETURN n` and `MATCH ()-[r]->() RETURN r`. The read is
+retried once if a write commits in between. Both generations go to XYG:
 
-## Coverage ledger (algorithm schema v1, GraphForge 0.5.2: 94 algorithms)
+- different generations fail with `GF_COMPOSE_GENERATION_STALE`;
+- a generation on only one side fails with `GF_COMPOSE_GENERATION_MISSING`.
 
-| Schema id | Disposition | Canonical fields | Algorithms |
+Intents come from XYG's ledger. The user picks when several apply; automatic
+opening draws only `graph`. `embedding-coordinates` is never offered, because
+it needs caller 2D coordinates and this extension does not produce them;
+parallel coordinates show the full vectors.
+
+Hosts (`graphforge.visualization.xygHost`) have no automatic fallback:
+
+- `native` (default): `@curatelabs/xyg-node` composes in the extension host
+  and the webview paints with `renderStandalone`. Any size; Rust LOD applies.
+- `wasm`: the webview composes the same request bytes in a Blob-URL module
+  Worker. Graphs and tables only, up to 1,024 nodes plus edges
+  (`GF_COMPOSE_SCENE_TOO_LARGE`).
+
+Selection links by identity, never row position:
+
+- An XYG pick resolves to `{uuid, layers: [{resultId, row}]}`. The Results
+  table accepts rows only for its own `resultId` and generation.
+- A table row maps to UUIDs through Rust's per-layer row planes. Derived edges
+  map to their endpoints. The view recomposes with `select`, so Rust paints the
+  selected state, reusing positions.
+
+## Ledger (XYG ledger v1, GraphForge algorithm schema v1, GraphForge 0.5.2: 94 algorithms)
+
+| Schema | Disposition | Canonical fields | Algorithms |
 |---|---|---|---|
 | `node-score` | node-layer | `node_uuid`, `score` (+ node properties) | pagerank, betweenness, closeness, harmonic_closeness, degree, eigenvector, article_rank, hits_hub, hits_authority, celf, clustering_coefficient (alias local_clustering_coefficient), triangles, k_core, preferential_attachment, adamic_adar, common_neighbors, resource_allocation, total_neighbors |
 | `node-community` | node-layer | `node_uuid`, `community_id` (+ node properties) | louvain, leiden, label_propagation, speaker_listener, girvan_newman, modularity_optimization, fastgreedy, infomap, leading_eigenvector, walktrap, spinglass, hdbscan, k_means, approximate_max_k_cut, components, strongly_connected, biconnected, k_core_decomposition |
-| `similarity` | derived-edges (`SIMILAR`) | `node1_uuid`, `node2_uuid`, `similarity` | node_similarity, knn, filtered_knn, filtered_node_similarity, cosine |
+| `similarity` | derived-edges | `node1_uuid`, `node2_uuid`, `similarity` | node_similarity, knn, filtered_knn, filtered_node_similarity, cosine |
 | `path` | ordered-paths | `source_uuid`, `target_uuid`, `cost`, `path` | bfs, dijkstra, dijkstra_all_pairs, astar, bellman_ford, floyd_warshall, delta_stepping |
 | `ranked-path` | ordered-paths | + `rank` | yens |
 | `traversal` | node-layer | `node_uuid`, `depth`, `order` | dfs |
 | `walk` | ordered-paths | `start_uuid`, `walk` | random_walk |
-| `pair` | derived-edges (`REACHES`) | `source_uuid`, `target_uuid` | transitive_closure |
+| `pair` | derived-edges | `source_uuid`, `target_uuid` | transitive_closure |
 | `flow` | derived-edges | `source_uuid`, `sink_uuid`, `flow` | max_flow |
 | `costed-flow` | derived-edges | + `cost` | min_cost_max_flow |
 | `min-cut` | derived-edges | `source_uuid`, `sink_uuid`, `cut_value` | min_cut |
@@ -82,47 +115,98 @@ one from another generation, never receives or sends selections.
 | `node` | node-layer | `node_uuid` | articulation_points |
 | `node-color` | node-layer | `node_uuid`, `color` | node_coloring, k1_coloring |
 | `edge-color` | composition-required | `edge_uuid`, `color` (no endpoints) | edge_coloring |
-| `euler-trail` | ordered-paths (persisted edges) | `node_path`, `edge_path` | euler_circuit, euler_path |
+| `euler-trail` | ordered-paths | `node_path`, `edge_path` | euler_circuit, euler_path |
 | `cycle` | ordered-paths | `cycle` | find_cycles |
 | `cost-path` | ordered-paths | `cost`, `path` | dag_longest_path, dag_longest_path_weighted |
-| scalar ids | table-only | one Boolean/UInt64/Float64 column | is_dag, has_euler_circuit, has_euler_path, is_planar, chromatic_number, triangle_count, count_automorphisms, modularity, transitivity |
-| `conductance`, `triad-census`, `dyad-census` | table-only | category + value | conductance, triad_census, dyad_census |
+| `is-dag` | table-only | `is_dag` | is_dag |
+| `has-euler-circuit` | table-only | `has_euler_circuit` | has_euler_circuit |
+| `has-euler-path` | table-only | `has_euler_path` | has_euler_path |
+| `is-planar` | table-only | `is_planar` | is_planar |
+| `chromatic-number` | table-only | `chromatic_number` | chromatic_number |
+| `triangle-count` | table-only | `triangle_count` | triangle_count |
+| `automorphism-count` | table-only | `count` | count_automorphisms |
+| `modularity` | table-only | `modularity` | modularity |
+| `transitivity` | table-only | `transitivity` | transitivity |
+| `conductance` | table-only | `partition_id`, `conductance` | conductance |
+| `triad-census` | table-only | `triad_type`, `count` | triad_census |
+| `dyad-census` | table-only | `dyad_type`, `count` | dyad_census |
 | `embedding` | composition-required | `node_uuid`, `embedding` (float vector) | node2vec, graphsage, fast_random_projection, hashgnn |
+| `search` | node-layer | `node_uuid`, `score`, `matched_on` (+ node properties) | (find) |
 
-Non-algorithm results:
+XYG renders these dispositions as follows:
 
-| Schema id | Disposition | Recognized by |
-|---|---|---|
-| `search` | node-layer | `graphforge.verb=find`, search schema v1 |
-| `cypher-entities` | entity-graph | node structs (`node_uuid`, `labels`), relationship structs (`edge_uuid`, `src_uuid`, `dst_uuid`, `rel_type`), path structs (`nodes`, `relationships`), including lists of them |
-| `cypher-columns` | entity-graph | scalar columns written by the query author: `node_uuid`/`id`, and `source_uuid`/`src_uuid`/`source`/`start_uuid` + matching targets, with optional `edge_uuid` |
-| `tabular` | table-only (`GF_RESULT_NO_IDENTITY`) | anything else, including `schema()` |
+- **Node layers and edge overlays** join onto the base graph. Uncovered base
+  elements are dimmed.
+- **Derived edges** (similarity, reachability, flow, cut, cut-tree) are dashed
+  with a halo.
+- **Ordered paths** draw steps with arrows. Euler trails use their persisted
+  `edge_path`.
+- **`edge-color`** joins onto base relationships.
+- **Scalar results** render as tables. **Category results** render as tables
+  or bar charts.
+- **Embeddings** render as parallel coordinates.
 
 ## Failure codes
 
-| Code | When | Next action |
-|---|---|---|
-| `GF_RESULT_SCHEMA_UNREGISTERED` | `graphforge.algorithm` is not in the ledger | Update the extension or use the table |
-| `GF_RESULT_SCHEMA_VERSION` | Algorithm/search schema version is not 1 | Align engine and extension releases |
-| `GF_RESULT_SCHEMA_MISMATCH` | A canonical field is missing or has the wrong Arrow type | Re-run with a matching engine |
-| `GF_RESULT_NO_IDENTITY` | No node/relationship identity | Return entities or identity columns, or chart it |
-| `GF_RESULT_TABLE_ONLY` | Ledger says table-only | Use the table or a chart |
-| `GF_RESULT_COMPOSITION_REQUIRED` | Embeddings / edge colors | Keep in the table until an explicit composition exists |
-| `GF_RESULT_TOO_LARGE` | More than 250,000 projected nodes + edges | Filter or LIMIT the result |
+XYG's codes are surfaced as-is with a next action (`toXygError`):
 
-`graphforge.showResultGraph` returns a `projection` diagnostic with the schema
-id and version, disposition, row/node/edge counts, and duration. It never
-includes values.
+- **Arrow bytes:** `GF_ARROW_*`.
+- **Result schema:** `GF_RESULT_SCHEMA_UNREGISTERED`, `_VERSION`, `_MISMATCH`,
+  `GF_RESULT_NOT_ALGORITHM`, and so on.
+- **Base graph:** `GF_BASE_*`.
+- **Composition:** `GF_COMPOSE_*`, including `GENERATION_STALE`/`_MISSING`,
+  `INTENT_UNSUPPORTED`, `COORDINATES_REQUIRED`, `TOO_LARGE`, `SCENE_TOO_LARGE`,
+  and `SCENE_EMPTY`.
+- **Native loading:** `XYG_NATIVE_UNSUPPORTED_PLATFORM`, `_LIBRARY_MISSING`,
+  `_LIBRARY_PATH_INVALID`, `_LOAD_FAILED`, `_ABI_MISMATCH`,
+  `XYG_NODE_DEPENDENCY_MISSING`, `XYG_NODE_IMPORT_FAILED`.
+- **WASM initialization:** `XYG_WASM_*`.
+
+The extension adds:
+
+| Code | When |
+|---|---|
+| `GF_RESULT_MISSING` | Nothing has run yet |
+| `GF_RESULT_BYTES_UNAVAILABLE` | The engine bytes were evicted, or a saved result has no matching `.arrow` |
+| `GF_BASE_GENERATION_CHANGED` | Writes kept committing while the base graph was read |
+| `GF_RESULT_XYG_LAYER` | An algorithm/find result was handed to the Result Graph projection |
+| `GF_RESULT_NO_IDENTITY` | A Cypher result has no graph identity |
+| `GF_RESULT_TOO_LARGE` | A Cypher graph projects to more than 250,000 nodes + edges |
+
+`graphforge.visualizeResult` returns the composition's value-free
+diagnostics: kind, schema ids and versions, dispositions, intents, row/node/edge
+counts, and decision codes such as `GF_COMPOSE_MISSING_DIMMED`. It never
+includes values, UUIDs, vectors, or coordinates.
+
+## Packaging
+
+XYG is consumed from the exact-version candidate packages
+(`0.0.0-dryrun.11`, CurateLabs/xyg Release run 36830463595), vendored under
+`vendor/xyg/`, until npm publication in the 0.6.0-rc.1 cohort
+(CurateLabs/xyg#108).
+
+- `@curatelabs/xyg` (browser) is bundled into `dist/webview-ui/xygVisualization.js`.
+  Its `wasm-worker.js`, `xyg-wasm.wasm`, NOTICE, and LICENSE are copied to
+  `dist/webview-ui/xyg/`.
+- `@curatelabs/xyg-node`, this platform's `@curatelabs/xyg-node-<platform>`
+  core, koffi, and koffi's `@koromix/koffi-<platform>` prebuild are staged
+  unbundled into `dist/node_modules/` by `scripts/stage-xyg-runtime.mjs`,
+  because they locate their native files relative to themselves.
+- A VSIX therefore carries the native core of the platform it was built on.
+  Per-target VSIX builds are part of the #82 release matrix.
 
 ## Fixtures
 
-`src/test/fixtures/graphforge-results/*.arrow` are raw IPC bytes produced by a
-real `@curatelabs/graphforge` run: every registered algorithm plus Cypher
-node/edge/path/scalar queries, `find`, and `schema()`. `manifest.json` records
-the engine version, its `algorithmDescriptorContracts()`, and any failures.
-The tests require zero failures and every contract to be present in the ledger.
+`src/test/fixtures/graphforge-results/*.arrow` are raw IPC bytes from a real
+`@curatelabs/graphforge` run:
 
-Regenerate them when GraphForge adds or changes a result schema:
+- every registered algorithm;
+- Cypher node/edge/path/scalar queries, `find`, and `schema()`;
+- the base graph (`base-<graph>-nodes`/`-edges`) each result joins onto.
+
+`manifest.json` records the engine version, its contracts, each result's base
+graph, and any failures. Regenerate the fixtures when GraphForge adds or
+changes a result schema:
 
 ```sh
 node scripts/generate-result-fixtures.cjs path/to/node_modules/@curatelabs/graphforge
@@ -131,11 +215,3 @@ node scripts/generate-result-fixtures.cjs path/to/node_modules/@curatelabs/graph
 GraphForge 0.5.2 min-cost max-flow exceeds its iteration limit when a
 downstream edge is the bottleneck, so the flow fixture network uses balanced
 capacities.
-
-## Not yet in scope (blocked on XYG)
-
-- Typed/columnar transfer into XYG, and the XYG-rendered node/edge layers,
-  joins, and analytical compositions (CurateLabs/xyg#31, #37, plus the typed
-  scene contract and host bindings). Today's projection feeds the existing
-  Result Graph as JSON.
-- Removing the previous renderers (#82).

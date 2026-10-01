@@ -89,6 +89,8 @@ export interface ResultProvenance {
   generationUuid?: string;
   /** Cypher `graphforge.query_id` when the engine supplied one. */
   queryId?: string;
+  /** SHA-256 of the saved `.arrow` engine bytes this result document pairs with. */
+  ipcSha256?: string;
 }
 
 export interface QueryResult {
