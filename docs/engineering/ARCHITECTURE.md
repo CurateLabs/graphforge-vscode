@@ -13,9 +13,10 @@ path for externally developed modules. See
 lifecycle decision.
 
 How the extension fits with GraphForge Core, XYG, and the Hub (graphforge.sh) is decided in
-[ADR-0005](./adrs/0005-hub-extension-core-xyg-interplay.md). That ADR covers which component owns
-each contract, the direction of dependencies, and the rollout order. Where this document
-describes the current state differently, ADR-0005 states the target.
+GraphForge ADR 0054, published verbatim as [`PRODUCT_BOUNDARIES.md`](PRODUCT_BOUNDARIES.md).
+[ADR-0005](./adrs/0005-hub-extension-core-xyg-interplay.md) records what that decision means
+for this extension, along with its rollout. Where this document describes the current state
+differently, those two documents state the target.
 
 ## Context diagram
 
