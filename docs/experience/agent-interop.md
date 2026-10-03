@@ -80,7 +80,7 @@ Then the call resolves immediately (it does not wait for a human to dismiss the 
 
 ## Command ID table (agent-facing contract)
 
-Source of truth: `package.json#contributes.commands` (85 contributed commands on this branch). All IDs are invoked as `vscode.commands.executeCommand("<id>", ...)`. The table groups the operational/agent-relevant surface; view-navigation variants such as `graphforge.getStarted.showQuery` remain discoverable in the manifest.
+Source of truth: `package.json#contributes.commands` (87 contributed commands on this branch). All IDs are invoked as `vscode.commands.executeCommand("<id>", ...)`. The table groups the operational/agent-relevant surface; view-navigation variants such as `graphforge.getStarted.showQuery` remain discoverable in the manifest.
 
 **Shared outcome union.** Every command that does engine work returns `CommandOutcome<T>` (`src/commands/shared.ts`): the success payload `T` listed below, or `SetupRecovery` (`{ error, code?, nextAction }`) when no runtime/project is usable, or `{ cancelled: true }` when a human dismisses an interactive prompt, or `{ error, code? }` when the engine call fails. No handler resolves `undefined` on those paths.
 
@@ -95,6 +95,7 @@ Source of truth: `package.json#contributes.commands` (85 contributed commands on
 | `graphforge.initializeProjectHere` | none | `void` | 1 QuickPick (workspace folder vs. browse), plus confirmation dialogs for non-empty/missing targets | Needs a usable runtime first (fails closed with "Setup Native Binding" / "Setup Python Binding" action buttons otherwise) |
 | `graphforge.openProject` | `pathArg?: string` | `void` | Folder picker only when `pathArg` omitted | Needs the target to already be a valid `FORMAT` project |
 | `graphforge.openSampleProject` | `{ path?, force? }` | `{ path, project, seeded }` or `{ error, code, nextAction? }` / `{ cancelled: true }` | Interactive replacement of a non-empty target confirms; a new target does not | Needs a usable runtime; materializes project-owned air-routes data/query/notebook/Streamlit app/result/viz/mutation files |
+| `graphforge.cloneFromHub` | `{ repository, destination, ref?, versionUuid?, open? }` | `{ repository, destination, immutableVersion, packageDigest, generationUuid, researchVersionUuid?, opened }` or `{ error, code, nextAction }` / `{ cancelled: true }` | None when `destination` is passed; palette and `vscode://` link calls prompt (the link confirms first) | Node binding with `gf clone` (v0.6.0+); runs Core in-process and never calls a Hub API (ADR-0005). Core's `hub.*` semantic codes pass through |
 | `graphforge.openSampleNotebook` | none | `{ path, projectPath, relativePath }` or `{ error, code, nextAction? }` | No | Opens the project-owned Python/Jupyter path for the active air-routes sample; absolute paths make the location explicit and it never installs packages or selects a kernel |
 | `graphforge.openSampleStreamlit` | none | `{ path, projectPath, relativePath, command }` or `{ error, code, nextAction? }` | No | Opens the portable Python/Streamlit dashboard source for the active air-routes sample; run the returned command to serve it outside VS Code |
 | `graphforge.closeProject` | none | `{ closed: true }` | None | No |

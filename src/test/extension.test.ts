@@ -22,6 +22,7 @@ import {
 const ALL_COMMAND_IDS = [
   "graphforge.openProject",
   "graphforge.openSampleProject",
+  "graphforge.cloneFromHub",
   "graphforge.openSampleNotebook",
   "graphforge.openSampleStreamlit",
   "graphforge.closeProject",
@@ -607,6 +608,15 @@ const NO_PROJECT_STRUCTURED_RESULTS: ReadonlyArray<readonly [string, unknown]> =
   ],
   // CLI adoption (Part F) — no binding ⇒ CLI unavailable, fails closed with nextAction.
   ["graphforge.runCli", { args: ["status"] }],
+  // Clone from Hub (#88) — agent call with a destination never prompts. No binding
+  // ⇒ CLI_UNAVAILABLE; a binding without `gf clone` ⇒ CLONE_UNSUPPORTED.
+  [
+    "graphforge.cloneFromHub",
+    {
+      repository: "openalex/openalex",
+      destination: `${os.tmpdir()}/gf-clone-ci-${process.pid}-does-not-exist`,
+    },
+  ],
   // Knowledge ledger (#13)
   ["graphforge.listAssertions", { limit: 5 }],
   [
