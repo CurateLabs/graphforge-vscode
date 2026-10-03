@@ -12,6 +12,11 @@ path for externally developed modules. See
 [ADR-0002](./adrs/0002-unified-module-lifecycle.md) for the catalog-first
 lifecycle decision.
 
+How the extension fits with GraphForge Core, XYG, and the Hub (graphforge.sh) is decided in
+[ADR-0005](./adrs/0005-hub-extension-core-xyg-interplay.md). That ADR covers which component owns
+each contract, the direction of dependencies, and the rollout order. Where this document
+describes the current state differently, ADR-0005 states the target.
+
 ## Context diagram
 
 ```mermaid
