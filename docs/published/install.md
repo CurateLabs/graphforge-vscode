@@ -31,7 +31,7 @@
       than hidden. Result Graph stays closed until you ask unless you opt into
       auto-open.
 4. The journey remains visible after completion and names the project files that
-   prove each step. Use the Hub, Query, and Visualize icons in the Get Started view title. Query
+   prove each step. Use the Home, Query, and Visualize icons in the Get Started view title. Query
    saves reusable templates under `queries/templates/` and reopens timestamped
    `results/` history. Visualize saves strict v2 graph, chart, geospatial, or
    temporal settings under `visualizations/`; existing v1 artifacts remain

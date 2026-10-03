@@ -85,7 +85,7 @@ const ZERO_PROMPT_COMMAND_IDS = [
   "graphforge.explainOntologyMode",
   "graphforge.openSettings",
   "graphforge.getStarted",
-  "graphforge.getStarted.showHub",
+  "graphforge.getStarted.showHome",
   "graphforge.getStarted.showQuery",
   "graphforge.getStarted.showVisualize",
   "graphforge.openSampleProject",
@@ -161,7 +161,7 @@ suite("palette titles ↔ package.json contributes.commands (#41)", () => {
 
   test("Get Started uses three ordered VS Code title actions", () => {
     const expected = [
-      ["graphforge.getStarted.showHub", "$(home)", "navigation@1"],
+      ["graphforge.getStarted.showHome", "$(home)", "navigation@1"],
       ["graphforge.getStarted.showQuery", "$(search)", "navigation@2"],
       ["graphforge.getStarted.showVisualize", "$(graph)", "navigation@3"],
     ] as const;
@@ -177,7 +177,7 @@ suite("palette titles ↔ package.json contributes.commands (#41)", () => {
     }
     assert.ok(
       !getStartedItems.some((item) => item.command === "graphforge.getStarted"),
-      "the old rocket action must not duplicate the Hub title action",
+      "the old rocket action must not duplicate the Home title action",
     );
   });
 });

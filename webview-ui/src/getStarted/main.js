@@ -9,16 +9,16 @@ document.body.innerHTML = `
 <h1 id="headline">Build your first graph view</h1>
 <p class="subhead" id="subhead"></p>
   </div>
-  <div id="hub-page" class="page">
+  <div id="home-page" class="page">
 <section id="ready-summary" class="ready-summary" hidden>
   <p class="ready-kicker">Project ready</p>
   <p class="ready-copy">Open any saved view. The map leads because it explains this dataset fastest; the force-directed graphs remain available.</p>
-  <label>Saved view<select id="hub-visualization"></select></label>
-  <button class="primary full" type="button" id="open-hub-visualization">Open selected view</button>
+  <label>Saved view<select id="home-visualization"></select></label>
+  <button class="primary full" type="button" id="open-home-visualization">Open selected view</button>
   <div class="actions compact-actions">
-    <button class="secondary" type="button" id="open-hub-result">Inspect result</button>
-    <button class="secondary" type="button" id="open-hub-notebook">Open Python notebook</button>
-    <button class="secondary" type="button" id="open-hub-streamlit">Open Streamlit app</button>
+    <button class="secondary" type="button" id="open-home-result">Inspect result</button>
+    <button class="secondary" type="button" id="open-home-notebook">Open Python notebook</button>
+    <button class="secondary" type="button" id="open-home-streamlit">Open Streamlit app</button>
   </div>
 </section>
 <details id="journey-details" class="journey-details" open>
@@ -157,22 +157,22 @@ function renderArtifacts(artifacts) {
       visualizationPriority(left) - visualizationPriority(right) ||
       left.name.localeCompare(right.name)
     );
-  const hubVisualization = byId('hub-visualization');
-  const previousHubPath = hubVisualization.value;
-  hubVisualization.innerHTML = readyVisualizations.map((item) =>
+  const homeVisualization = byId('home-visualization');
+  const previousHomePath = homeVisualization.value;
+  homeVisualization.innerHTML = readyVisualizations.map((item) =>
     '<option value="' + escapeHtml(item.path) + '">' +
       escapeHtml(item.name + ' — ' + item.kind + ' · ' + item.renderer) +
     '</option>'
   ).join('');
-  if (readyVisualizations.some((item) => item.path === previousHubPath)) {
-    hubVisualization.value = previousHubPath;
+  if (readyVisualizations.some((item) => item.path === previousHomePath)) {
+    homeVisualization.value = previousHomePath;
   }
-  byId('open-hub-visualization').disabled = readyVisualizations.length === 0;
+  byId('open-home-visualization').disabled = readyVisualizations.length === 0;
   const notebookAvailable = (artifacts?.notebooks || []).length > 0;
-  byId('open-hub-notebook').hidden = !notebookAvailable;
+  byId('open-home-notebook').hidden = !notebookAvailable;
   const streamlitAvailable = (artifacts?.apps || []).some((item) => item.path === 'apps/air_routes_dashboard.py');
-  byId('open-hub-streamlit').hidden = !streamlitAvailable;
-  byId('open-hub-result').disabled = results.length === 0;
+  byId('open-home-streamlit').hidden = !streamlitAvailable;
+  byId('open-home-result').disabled = results.length === 0;
   byId('template-list').innerHTML = templates.length
     ? templates.map((item) => artifactRow(item, [
         { label: 'Run', command: 'graphforge.runProjectQuery', primary: true },
@@ -317,9 +317,9 @@ byId('visualization-form').addEventListener('submit', (event) => {
   });
 });
 
-byId('open-hub-visualization').addEventListener('click', () => {
+byId('open-home-visualization').addEventListener('click', () => {
   const selected = currentState?.artifacts?.visualizations?.find(
-    (item) => item.path === byId('hub-visualization').value,
+    (item) => item.path === byId('home-visualization').value,
   );
   if (!selected) return;
   runCommand('graphforge.openProjectVisualization', {
@@ -327,15 +327,15 @@ byId('open-hub-visualization').addEventListener('click', () => {
     ...(selected.kind === 'result-graph' ? { waitForReady: true, timeoutMs: 60000 } : {}),
   });
 });
-byId('open-hub-result').addEventListener('click', () => {
+byId('open-home-result').addEventListener('click', () => {
   const results = currentState?.artifacts?.results || [];
   const result = results.find((item) => item.path === 'results/query-result.json') || results[0];
   if (result) runCommand('graphforge.openProjectResult', { path: result.path });
 });
-byId('open-hub-notebook').addEventListener('click', () =>
+byId('open-home-notebook').addEventListener('click', () =>
   runCommand('graphforge.openSampleNotebook')
 );
-byId('open-hub-streamlit').addEventListener('click', () =>
+byId('open-home-streamlit').addEventListener('click', () =>
   runCommand('graphforge.openSampleStreamlit')
 );
 
@@ -421,8 +421,8 @@ function render(state) {
   currentState = state;
   document.getElementById('headline').textContent = state.headline;
   document.getElementById('subhead').textContent = state.subhead;
-  const page = state.page || 'hub';
-  ['hub', 'query', 'visualize'].forEach((name) => {
+  const page = state.page || 'home';
+  ['home', 'query', 'visualize'].forEach((name) => {
     byId(name + '-page').hidden = name !== page;
   });
   renderArtifacts(state.artifacts);

@@ -74,7 +74,7 @@ First-run, missing-runtime, and no-project states share one **Get Started** side
   artifacts.
 - The journey remains visible after completion. Its final node reopens the saved
   visualization rather than replacing the map with a feature dashboard.
-- **Hub / Query / Visualize** title actions remain available. Query authors save
+- **Home / Query / Visualize** title actions remain available. Query authors save
   `.cypher` files and reopen durable result history; visualization settings are
   saved as `.gfviz.json` files referencing a project result. Renderer/backend,
   layout, bindings, filters, chart encodings, geospatial coordinates/projection,
