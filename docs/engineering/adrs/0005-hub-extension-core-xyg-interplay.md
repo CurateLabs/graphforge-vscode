@@ -266,3 +266,18 @@ The Get Started "Hub" page becomes "Home", matching its existing title action.
 8. Core settles workbench packaging (Q1) and Hub M3 ships publish. Then add
    extension publish with explicit selection, and finally the Hub shows static
    exports on Project pages.
+
+## Tracking
+
+| Step / question | Issue |
+|---|---|
+| 1. Rename Hub page to Home | #87 |
+| 2. Clone from Hub (tracer bullet) | #88; Hub "Open" tab CurateLabs/graphforge-nextjs#38 |
+| 3. Runtime handshake | #89; CurateLabs/xyg#936 |
+| 4. Base-only composition | CurateLabs/xyg#934, then #80 |
+| 5. Ledger authority to XYG | #90; CurateLabs/xyg#936 |
+| 6. Intent-document format (Q2) and renderer removal | CurateLabs/xyg#935, #82 |
+| 7. Per-platform VSIX | #82 |
+| 8. Workbench packaging (Q1), publish, Hub exports | CurateLabs/graphforge#1768, #91, CurateLabs/graphforge-nextjs#55 |
+| Q3 handshake signal | CurateLabs/xyg#936 |
+| Q6 older published packages | CurateLabs/graphforge#1769 |
