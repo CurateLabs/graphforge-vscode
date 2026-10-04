@@ -181,6 +181,42 @@ suite("Hub clone (#88)", () => {
       assert.match(outcome.nextAction, /repository name/);
     });
 
+    test("prefers a Hub identity hint when the message says the repository does not exist", () => {
+      const stderr = `${JSON.stringify({
+        error: {
+          code: "GF_VALIDATION",
+          message: "hub.invalid_identity: repository does not exist",
+          details: {
+            source: "core",
+            kind: "validation",
+            semantic_code: "hub.invalid_identity",
+          },
+        },
+      })}\n`;
+      const outcome = interpretHubCloneResult(cli(1, "", stderr));
+      assert.ok(isHubCloneFailure(outcome));
+      assert.equal(outcome.code, "hub.invalid_identity");
+      assert.match(outcome.nextAction, /repository name/);
+    });
+
+    test("uses destination-specific advice for destination errors", () => {
+      const stderr = `${JSON.stringify({
+        error: {
+          code: "GF_VALIDATION",
+          message: "destination already exists",
+          details: {
+            source: "core",
+            kind: "validation",
+            semantic_code: "hub.destination_exists",
+          },
+        },
+      })}\n`;
+      const outcome = interpretHubCloneResult(cli(1, "", stderr));
+      assert.ok(isHubCloneFailure(outcome));
+      assert.equal(outcome.code, "hub.destination_exists");
+      assert.match(outcome.nextAction, /destination folder/);
+    });
+
     test("falls back to raw output for unstructured failures", () => {
       const outcome = interpretHubCloneResult(cli(1, "", "network unreachable"));
       assert.ok(isHubCloneFailure(outcome));

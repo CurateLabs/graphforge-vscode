@@ -280,11 +280,11 @@ export function cloneUnsupported(): HubCloneFailure {
 }
 
 function nextActionForCoreCode(code: string, message: string): string {
-  if (/destination|exists/i.test(message)) {
-    return "Choose a destination folder that does not exist yet.";
-  }
   if (/hub\.(missing_ref|invalid_identity)|not.found|404/i.test(`${code} ${message}`)) {
     return "Check the repository name (and ref or version) on graphforge.sh.";
+  }
+  if (/destination/i.test(`${code} ${message}`)) {
+    return "Choose a destination folder that does not exist yet.";
   }
   return "Check your network connection and retry; report the code if it persists.";
 }
