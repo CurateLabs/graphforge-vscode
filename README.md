@@ -209,7 +209,7 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 - **Result views** — `Show Result Graph` (+ `Show Result Graph (Advanced)…`), `Show Project Capabilities`
 - **Visualization artifacts** — `Create Project Visualization` (`graphforge.createProjectVisualization`) creates a complete v2 graph, chart, geospatial, or temporal artifact from explicit bindings; `Save Project Visualization` and `Open Saved Visualization` return the saved `path` and `spec` (plus panel status when opened)
 
-Get Started's **Hub / Query / Visualize** pages are an editor over durable
+Get Started's **Home / Query / Visualize** pages are an editor over durable
 project files: `queries/*.cypher`, `notebooks/*.ipynb`, `apps/*.py`, `results/*`,
 `visualizations/*.gfviz.json`, and `mutations/*.cypher`. New visualizations use the strict
 `graphforge.visualization/v2` contract; existing v1 Cytoscape/Sigma/Plotly files

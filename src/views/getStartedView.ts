@@ -14,7 +14,7 @@ import {
 } from "../session/projectArtifacts";
 
 export type GetStartedStepStatus = "pending" | "done" | "current";
-export type GetStartedPage = "hub" | "query" | "visualize";
+export type GetStartedPage = "home" | "query" | "visualize";
 
 export type GetStartedStep = GetStartedStepModel;
 
@@ -28,7 +28,7 @@ export interface GetStartedState {
 
 /** Focus the GraphForge activity bar and refresh Get Started state. */
 export async function revealGetStarted(provider: GetStartedViewProvider): Promise<void> {
-  provider.showPage("hub");
+  provider.showPage("home");
   await vscode.commands.executeCommand("workbench.view.extension.graphforge");
   await vscode.commands.executeCommand("graphforge.getStarted.focus");
   await provider.refresh();
@@ -49,7 +49,7 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
   static instance: GetStartedViewProvider | undefined;
 
   private view: vscode.WebviewView | undefined;
-  private page: GetStartedPage = "hub";
+  private page: GetStartedPage = "home";
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -167,7 +167,7 @@ export class GetStartedViewProvider implements vscode.WebviewViewProvider {
 
 export async function buildGetStartedState(
   session: GraphForgeSession,
-  page: GetStartedPage = "hub",
+  page: GetStartedPage = "home",
 ): Promise<GetStartedState> {
   const snapshot = await session.environmentSnapshot();
   const project = session.project;
@@ -229,7 +229,7 @@ export async function buildGetStartedState(
   let headline = "Build your first graph view";
   let subhead =
     "Follow one visible path from environment to saved query, result, and visualization.";
-  if (page === "hub" && steps.length > 0 && steps.every((step) => step.status === "done")) {
+  if (page === "home" && steps.length > 0 && steps.every((step) => step.status === "done")) {
     headline = "Your GraphForge project is ready";
     subhead = "Open a saved view, inspect the durable result, or continue in Python.";
   } else if (page === "query") {

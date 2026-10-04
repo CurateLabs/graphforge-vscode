@@ -20,7 +20,7 @@ graph.
 
 | Surface | What it does |
 |---|---|
-| **Setup / journey map** | **Get Started** keeps Environment → Project → Query → Result → Visualize visible and highlights the simplest next action. **Hub / Query / Visualize** pages remain available, while queries, notebooks, results, bindings, filters, renderer/layout, map, and time settings stay as files in the open project. |
+| **Setup / journey map** | **Get Started** keeps Environment → Project → Query → Result → Visualize visible and highlights the simplest next action. **Home / Query / Visualize** pages remain available, while queries, notebooks, results, bindings, filters, renderer/layout, map, and time settings stay as files in the open project. |
 | **Cypher** | `.cypher` / `.cql` language support with syntax highlighting, plus **Run Query** (and **Run Query with Parameters…**). |
 | **Analyst verbs** | Rank, Cluster, Paths, Analyze, Similar, Find — QuickPick-driven, each with an **Advanced…** variant for optional parameters. |
 | **Projects** | An Activity Bar explorer that lists folders containing a valid GraphForge `FORMAT` marker. |

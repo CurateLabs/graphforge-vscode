@@ -22,7 +22,7 @@ Every command below is a stable ID, invokable from the Command Palette or progra
 | GraphForge: Agent: Get Context | `graphforge.agent.getContext` | Returns `graphforge.agent-context/v1` runtime, settings, marker, artifact, last-result, schema, and command JSON; optional `{ projectPath }`. |
 | GraphForge: Agent: List Project Artifacts | `graphforge.agent.listArtifacts` | Returns `graphforge.artifact-index/v1` with project-relative and absolute paths; optional `{ projectPath }`. |
 | GraphForge: Get Started | `graphforge.getStarted` | Opens the persistent Environment → Project → Query → Result → Visualize journey map. |
-| GraphForge: Show Hub | `graphforge.getStarted.showHub` | Opens Get Started's Hub surface; contributed as its Home title action. |
+| GraphForge: Show Home | `graphforge.getStarted.showHome` | Opens Get Started's Home surface; contributed as its Home title action. The earlier `graphforge.getStarted.showHub` ID remains a callable alias (ADR-0005). |
 | GraphForge: Show Query | `graphforge.getStarted.showQuery` | Opens Get Started's Query surface; contributed as its Search title action. |
 | GraphForge: Show Visualize | `graphforge.getStarted.showVisualize` | Opens Get Started's Visualize surface; contributed as its Graph title action. |
 | GraphForge: Settings | `graphforge.openSettings` | Opens the GraphForge Settings panel — left-nav categories (Runtime / Visualizations / Advanced) over the same `graphforge.*` settings as the VS Code Settings UI. |

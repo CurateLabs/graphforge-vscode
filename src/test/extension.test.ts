@@ -43,7 +43,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.checkEnvironment",
   "graphforge.copyEnvironmentReport",
   "graphforge.getStarted",
-  "graphforge.getStarted.showHub",
+  "graphforge.getStarted.showHome",
   "graphforge.getStarted.showQuery",
   "graphforge.getStarted.showVisualize",
   "graphforge.openSettings",
@@ -119,6 +119,10 @@ suite("GraphForge extension", () => {
     for (const id of ALL_COMMAND_IDS) {
       assert.ok(commands.includes(id), `missing command ${id}`);
     }
+    assert.ok(
+      commands.includes("graphforge.getStarted.showHub"),
+      "the pre-ADR-0005 Show Hub alias must stay callable",
+    );
     const modules = await vscode.commands.executeCommand<
       Array<{ id: string; source: string; installed: boolean; removable: boolean }>
     >("graphforge.refreshModules");

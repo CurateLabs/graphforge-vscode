@@ -25,7 +25,8 @@
   ],
   "activationEvents": [
     "onLanguage:cypher",
-    "workspaceContains:FORMAT"
+    "workspaceContains:FORMAT",
+    "onCommand:graphforge.getStarted.showHub"
   ],
   "main": "./dist/extension.js",
   "repository": {
@@ -158,8 +159,8 @@
         "icon": "$(rocket)"
       },
       {
-        "command": "graphforge.getStarted.showHub",
-        "title": "GraphForge: Show Hub",
+        "command": "graphforge.getStarted.showHome",
+        "title": "GraphForge: Show Home",
         "icon": "$(home)"
       },
       {
@@ -442,7 +443,7 @@
       ],
       "view/title": [
         {
-          "command": "graphforge.getStarted.showHub",
+          "command": "graphforge.getStarted.showHome",
           "when": "view == graphforge.getStarted",
           "group": "navigation@1"
         },
