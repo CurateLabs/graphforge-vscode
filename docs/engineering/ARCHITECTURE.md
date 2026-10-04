@@ -253,6 +253,23 @@ intentionally out of v0 rather than inferred from point order.
 5. Viewport or temporal-range changes create a host-validated draft and visible
    dirty state. Save atomically replaces the artifact; Revert restores committed JSON.
 
+### Clone from the Hub
+
+1. The Hub's Open tab links to `vscode://curatelabsai.graphforge/clone?repository=owner/repo`,
+   or a user or agent calls `graphforge.cloneFromHub`.
+2. `hubClone.ts` (vscode-free) validates the identity, branch ref, and Version UUID locally, so
+   a malformed link never reaches Core. A clicked link always confirms before any disk or
+   network work.
+3. The binding's in-process `runCli(["clone", repo, destination, "--json", ...])` does
+   discovery, download, verification, and import (`graphforge-hub-clone/1`). The extension
+   never speaks the Hub protocol ([ADR-0005](./adrs/0005-hub-extension-core-xyg-interplay.md)).
+4. The receipt maps to `{ repository, destination, immutableVersion, packageDigest,
+   generationUuid }`. Core's structured errors pass through with their `hub.*` semantic code.
+5. `graphforge.openProject` opens the destination, so project detection stays in one place.
+
+`runCli` is synchronous, so a long download blocks the extension host until Core finishes.
+An asynchronous Core entry point would remove that limit.
+
 ### Open ontology
 
 1. User opens Ontology view or Show Ontology — command/tree
