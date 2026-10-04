@@ -1,0 +1,57 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.status {
+  margin: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--vscode-panel-border, transparent);
+  color: var(--vscode-descriptionForeground);
+}
+
+.error {
+  margin: 12px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--vscode-errorForeground);
+  background: var(--vscode-inputValidation-errorBackground, transparent);
+}
+
+.error p {
+  margin: 4px 0 0;
+}
+
+.view {
+  flex: 1;
+  min-height: 240px;
+  position: relative;
+}
+
+.table {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 12px;
+}
+
+.table table {
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 4px 8px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  text-align: left;
+}

@@ -3,7 +3,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+  arrowPathFor,
   formatQueryResultJson,
+  ipcSha256,
   formatQueryResultMarkdown,
   persistQueryResultDocuments,
   QUERY_RESULT_JSON,
@@ -11,6 +13,8 @@ import {
   RESULT_DOCUMENTS_DIR,
 } from "../session/resultDocument";
 import type { QueryResult } from "../session/types";
+import { decodeTable } from "../session/arrowCodec";
+import { readProjectResult, readProjectResultIpc } from "../session/projectArtifacts";
 
 suite("query result documents", () => {
   test("formats homogeneous scalar rows as a Markdown table", () => {
@@ -117,5 +121,31 @@ suite("query result documents", () => {
     );
     assert.equal(path.basename(documents.historyJsonPath!), "regional-routes.json");
     assert.equal(path.basename(documents.historyMarkdownPath!), "regional-routes.md");
+  });
+
+  test("saves the exact engine bytes beside the JSON and binds them by SHA-256 (#80)", async () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-result-arrow-"));
+    const ipc = fs.readFileSync(path.join(__dirname, "fixtures", "graphforge-results", "pagerank.arrow"));
+    const result: QueryResult = {
+      ...decodeTable(ipc),
+      provenance: { resultId: "01890000-0000-7000-8000-0000000000b1", generationUuid: "01890000-0000-7000-8000-000000000001" },
+    };
+    const documents = await persistQueryResultDocuments(projectRoot, result, "pagerank", undefined, ipc);
+    assert.ok(documents.arrowPath);
+    assert.deepEqual(fs.readFileSync(documents.arrowPath), ipc);
+    assert.deepEqual(fs.readFileSync(arrowPathFor(documents.historyJsonPath!)), ipc);
+
+    const saved = readProjectResult(projectRoot, "results/query-result.json");
+    assert.equal(saved.provenance?.ipcSha256, ipcSha256(ipc));
+    assert.equal(saved.algorithm, "pagerank");
+    assert.deepEqual(readProjectResultIpc(projectRoot, "results/query-result.json", saved), ipc);
+
+    // Bytes that no longer match the recorded hash are never paired.
+    fs.writeFileSync(documents.arrowPath, Buffer.concat([ipc, Buffer.from([0])]));
+    assert.equal(readProjectResultIpc(projectRoot, "results/query-result.json", saved), undefined);
+
+    // A later JSON-only result removes the stale latest .arrow.
+    await persistQueryResultDocuments(projectRoot, { columns: ["n"], rows: [{ n: 1 }], rowCount: 1 });
+    assert.equal(fs.existsSync(documents.arrowPath), false);
   });
 });

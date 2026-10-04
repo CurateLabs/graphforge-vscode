@@ -4,7 +4,14 @@
  * converts to plain rows before anything else can touch it, so this is on the
  * critical path of every result.
  */
-import { tableFromArrays, tableToIPC } from "apache-arrow";
+import {
+  FixedSizeBinary,
+  Table,
+  tableFromArrays,
+  tableToIPC,
+  Utf8,
+  vectorFromArray,
+} from "apache-arrow";
 import type { Bench } from "tinybench";
 import { bufferToUuid, decodeTable, normalizeCell } from "../session/arrowCodec";
 
@@ -23,6 +30,11 @@ function scalarIpcBuffer(rowCount: number): Buffer {
   return Buffer.from(tableToIPC(table, "file"));
 }
 
+/**
+ * UUIDs as GraphForge encodes them: `FixedSizeBinary(16)`. (`tableFromArrays`
+ * would infer a Struct of 16 Float64 fields from `Uint8Array` values, which is
+ * not what the engine emits.)
+ */
 function uuidIpcBuffer(rowCount: number): Buffer {
   const uuids = new Array<Uint8Array>(rowCount);
   const labels = new Array<string>(rowCount);
@@ -34,7 +46,10 @@ function uuidIpcBuffer(rowCount: number): Buffer {
     uuids[index] = bytes;
     labels[index] = `Entity ${index}`;
   }
-  const table = tableFromArrays({ uuid: uuids, label: labels });
+  const table = new Table({
+    uuid: vectorFromArray(uuids, new FixedSizeBinary(16)),
+    label: vectorFromArray(labels, new Utf8()),
+  });
   return Buffer.from(tableToIPC(table, "file"));
 }
 

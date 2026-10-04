@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { isGraphProjectable } from "../session/resultProjection";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { QueryResult } from "../session/types";
 import type { ResultTableViewProvider } from "../views/resultTableView";
@@ -71,14 +72,14 @@ async function runFind(
 
   await results.show(result, `Find · ${query || "(all)"}`);
 
-  const hasUuids = result.columns.some((c) => /uuid/i.test(c));
   const openGraph = vscode.workspace
     .getConfiguration("graphforge")
     .get<boolean>("openResultGraphOnQuery", false);
-  if (hasUuids && openGraph && result.rowCount > 0) {
+  if (openGraph && result.rowCount > 0 && isGraphProjectable(result)) {
     const commands = await vscode.commands.getCommands(true);
     if (commands.includes("graphforge.showResultGraph")) {
       await vscode.commands.executeCommand("graphforge.showResultGraph", {
+          auto: true,
         title: `find: ${query ?? "(all)"}`,
       });
     }

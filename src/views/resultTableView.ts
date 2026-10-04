@@ -6,6 +6,8 @@ import type { ResultDocumentPaths } from "../session/resultDocument";
 import type { HostToWebview, WebviewToHost } from "../webview/protocol";
 import { EntityInspectPanel } from "../webview/entityInspectPanel";
 import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import { XygVisualizationPanel } from "../webview/xygVisualizationPanel";
+import { sourceMismatch } from "../session/resultProjection";
 import {
   jsonSafeQueryResult,
   resolveResultEntitySelection,
@@ -30,14 +32,32 @@ export class ResultTableViewProvider
   private view: vscode.WebviewView | undefined;
   private state: ResultTableState | undefined;
   private readonly graphSelectionDisposable: vscode.Disposable;
+  private readonly xygSelectionDisposable: vscode.Disposable;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly session: GraphForgeSession,
   ) {
-    this.graphSelectionDisposable = ResultGraphPanel.onDidSelect((selection) => {
+    this.graphSelectionDisposable = ResultGraphPanel.onDidSelect(({ selection, source }) => {
       if (!this.state) return;
-      const rowIndices = resultRowsForGraphSelection(this.state.result, selection);
+      // Only a graph projected from this exact result/generation may drive rows.
+      if (sourceMismatch(source, this.state.result) !== undefined) return;
+      const rowIndices = resultRowsForGraphSelection(
+        this.state.result,
+        selection,
+        this.state.graphPayload,
+      );
+      if (rowIndices.length === 0) return;
+      void this.reveal();
+      this.post({ type: "graphforge/highlightResultRows", rowIndices });
+    });
+    // XYG picks name result rows through the caller's result id (#80); a pick
+    // from a view of another result or generation never selects rows here.
+    this.xygSelectionDisposable = XygVisualizationPanel.onDidSelectRows((event) => {
+      const provenance = this.state?.result.provenance;
+      if (!provenance || event.resultId !== provenance.resultId) return;
+      if (event.generationUuid !== provenance.generationUuid) return;
+      const rowIndices = event.rows.filter((row) => row < (this.state?.result.rows.length ?? 0));
       if (rowIndices.length === 0) return;
       void this.reveal();
       this.post({ type: "graphforge/highlightResultRows", rowIndices });
@@ -46,6 +66,7 @@ export class ResultTableViewProvider
 
   dispose(): void {
     this.graphSelectionDisposable.dispose();
+    this.xygSelectionDisposable.dispose();
   }
 
   resolveWebviewView(
@@ -113,7 +134,20 @@ export class ResultTableViewProvider
 
   private selectResult(rowIndex: number, column?: string): void {
     if (!this.state) return;
-    const graphPanel = ResultGraphPanel.active();
+    const xygPanel = XygVisualizationPanel.forResult(this.state.result.provenance?.resultId);
+    if (xygPanel) {
+      void xygPanel.selectRows([rowIndex]).then((count) => {
+        this.post({
+          type: "graphforge/resultSelection",
+          linked: count > 0,
+          message: count > 0
+            ? `Selected ${count} element(s) in the XYG view.`
+            : "This row has no element in the XYG view.",
+        });
+      });
+      return;
+    }
+    const graphPanel = ResultGraphPanel.forResult(this.state.result);
     const highlight = graphPanel?.highlightFromResult(
       this.state.result,
       rowIndex,
@@ -125,7 +159,9 @@ export class ResultTableViewProvider
       type: "graphforge/resultSelection",
       linked: count > 0,
       message: !graphPanel
-        ? "Open Result Graph to link this selection."
+        ? ResultGraphPanel.active()
+          ? "The open Result Graph shows a different result. Open the graph from this result to link selections."
+          : "Open Result Graph to link this selection."
         : count > 0
           ? `Highlighted ${highlight?.nodeIds.length ?? 0} node(s) and ${highlight?.edgeIds.length ?? 0} edge(s).`
           : "No graph entity matched this value or row.",

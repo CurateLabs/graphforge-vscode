@@ -20,7 +20,11 @@ import {
   runtimePreference,
 } from "./runtime";
 import { randomOperationId, uuidv7 } from "./uuid";
+import { readCurrentPointer } from "./projectFormat";
+import { projectResultGraph } from "./resultProjection";
 import {
+  ALL_EPISTEMIC_STATUSES,
+  isEpistemicStatus,
   AlgorithmDescriptorContract,
   AlgorithmDescriptorContractNative,
   AnalystVerb,
@@ -48,6 +52,7 @@ import {
   ProjectCapabilities,
   PythonRuntimeStatus,
   QueryResult,
+  ResultProvenance,
   RecordAssertionStatusInput,
   RuntimeKind,
   RuntimePreference,
@@ -72,19 +77,9 @@ export interface RuntimeEnvironmentSnapshot {
   active: RuntimeKind | undefined;
 }
 
-const ALL_EPISTEMIC_STATUSES: EpistemicStatus[] = [
-  "hypothesis",
-  "supported",
-  "refuted",
-  "disputed",
-  "retracted",
-  "superseded",
-  "statusless",
-];
-
-function isEpistemicStatus(value: unknown): value is EpistemicStatus {
-  return typeof value === "string" && (ALL_EPISTEMIC_STATUSES as string[]).includes(value);
-}
+/** Bounds for retained engine IPC bytes (see `resultIpc`). */
+const MAX_RETAINED_RESULTS = 16;
+const MAX_RETAINED_RESULT_BYTES = 256 * 1024 * 1024;
 
 // Defined in `errors.ts` (vscode-free) so error-presentation logic can be
 // unit tested under plain mocha; re-exported here for existing import sites.
@@ -97,6 +92,12 @@ export class GraphForgeSession implements vscode.Disposable {
   private algorithmContractsCache: AlgorithmDescriptorContract[] | undefined;
   private lastResult: QueryResult | undefined;
   private lastResultTitle: string | undefined;
+  /**
+   * Raw engine Arrow IPC bytes per result id, exactly as GraphForge returned
+   * them. XYG decodes these in Rust; they never cross into a webview as rows.
+   * Bounded LRU (insertion order) so long sessions do not retain every table.
+   */
+  private readonly resultIpc = new Map<string, Buffer>();
   private beliefPolicy: BeliefPolicySettings = { ...DEFAULT_BELIEF_POLICY };
   private readonly statusBar: vscode.StatusBarItem;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
@@ -277,6 +278,20 @@ export class GraphForgeSession implements vscode.Disposable {
    * Node-only features. Throws {@link NodeOnlyFeatureError} when the active
    * backend is not Node (e.g. the Python runtime is active, #12).
    */
+  /**
+   * Bind a fresh engine result to a new result id and the committed graph
+   * generation it was read from (re-read from CURRENT so writes since open
+   * are reflected). Projections and selection links check this identity.
+   */
+  private withProvenance(result: QueryResult): QueryResult {
+    const generationUuid = this.currentGenerationUuid();
+    const provenance: ResultProvenance = { resultId: uuidv7() };
+    if (generationUuid) provenance.generationUuid = generationUuid;
+    const queryId = result.schema?.metadata["graphforge.query_id"];
+    if (queryId) provenance.queryId = queryId;
+    return { ...result, provenance };
+  }
+
   private requireNodeForge(methodName: string): GraphForgeNative {
     const backend = this.requireBackend();
     if (!(backend instanceof NodeEngineBackend)) {
@@ -288,7 +303,8 @@ export class GraphForgeSession implements vscode.Disposable {
   async execute(cypher: string, params?: Record<string, unknown>): Promise<QueryResult> {
     const backend = this.requireBackend();
     const buf = await backend.execute(cypher, params);
-    const result = decodeTable(buf);
+    const result = this.withProvenance(decodeTable(buf));
+    this.retainResultIpc(result, buf);
     this.rememberResult(result, "Cypher result");
     return result;
   }
@@ -379,7 +395,8 @@ export class GraphForgeSession implements vscode.Disposable {
       default:
         throw new Error(`Unknown verb: ${verb}`);
     }
-    const result = decodeTable(buf);
+    const result = this.withProvenance(decodeTable(buf));
+    this.retainResultIpc(result, buf);
     this.rememberResult(result, verb);
     return result;
   }
@@ -1195,81 +1212,14 @@ export class GraphForgeSession implements vscode.Disposable {
   async toGraphPayload(result: QueryResult, title?: string): Promise<GraphPayload> {
     this.rememberResult(result, title);
 
-    const nodes = new Map<string, GraphNode>();
-    const edges: GraphEdge[] = [];
-    const ontology = this.workspaceOntology();
-    const entityNames = new Set(
-      (ontology?.entity_types ?? []).map((e) => e.name),
-    );
-
-    for (const row of result.rows) {
-      const uuid =
-        stringField(row, "node_uuid") ??
-        stringField(row, "id") ??
-        stringField(row, "node1_uuid");
-      const uuid2 = stringField(row, "node2_uuid");
-      const labels = labelsFromRow(row);
-
-      if (uuid) {
-        const primary = labels[0];
-        nodes.set(uuid, {
-          id: uuid,
-          labels: labels.length ? labels : ["Node"],
-          properties: row,
-          epistemicStatus: statusFromRow(row),
-          ontologyType:
-            primary && entityNames.has(primary) ? primary : primary,
-        });
-      }
-      if (uuid2) {
-        const labels2 = labelsFromRow(row, "node2");
-        nodes.set(uuid2, {
-          id: uuid2,
-          labels: labels2.length ? labels2 : ["Node"],
-          properties: { ...row, _side: "node2" },
-          epistemicStatus: statusFromRow(row),
-        });
-        edges.push({
-          id: `${uuid}-${uuid2}`,
-          type: stringField(row, "rel_type") ?? "RELATED",
-          source: uuid!,
-          target: uuid2,
-          epistemicStatus: statusFromRow(row),
-        });
-      }
-
-      const source = stringField(row, "source") ?? stringField(row, "start_uuid");
-      const target = stringField(row, "target") ?? stringField(row, "end_uuid");
-      if (source && target) {
-        if (!nodes.has(source)) {
-          nodes.set(source, {
-            id: source,
-            labels: ["Node"],
-            properties: {},
-          });
-        }
-        if (!nodes.has(target)) {
-          nodes.set(target, {
-            id: target,
-            labels: ["Node"],
-            properties: {},
-          });
-        }
-        edges.push({
-          id: stringField(row, "edge_uuid") ?? `${source}->${target}`,
-          type: stringField(row, "type") ?? stringField(row, "rel_type") ?? "RELATED",
-          source,
-          target,
-          epistemicStatus: statusFromRow(row),
-          properties: row,
-        });
-      }
-    }
-
-    // Scaffold demo graph when result has no graph-shaped columns
-    if (nodes.size === 0) {
+    // An empty result (nothing run yet) still opens the scaffold demo graph;
+    // any real result is projected strictly by its schema.
+    if (result.columns.length === 0 && result.rows.length === 0 && !result.schema) {
       return demoGraphPayload(title ?? "Result (demo)", result);
     }
+    const projection = projectResultGraph(result);
+    const nodes = new Map(projection.nodes.map((node) => [node.id, node]));
+    const edges = projection.edges;
 
     const resolution = await this.resolveEpistemicStatuses([...nodes.keys()]);
     let styleMode: GraphStyleMode = "class-only";
@@ -1310,6 +1260,9 @@ export class GraphForgeSession implements vscode.Disposable {
       title,
       styleMode,
       banner: resolution.note,
+      source: projection.source,
+      rowEntities: projection.rowEntities,
+      diagnostic: projection.diagnostic,
     };
   }
 
@@ -1331,6 +1284,62 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   /** Restore a durable project result as the active table/graph/figure source. */
+  /** The engine's Arrow IPC bytes for a result, when this session still holds them. */
+  resultIpcBytes(result: QueryResult): Buffer | undefined {
+    const id = result.provenance?.resultId;
+    return id ? this.resultIpc.get(id) : undefined;
+  }
+
+  /** Register bytes read back from a saved result's `.arrow` document. */
+  retainResultIpc(result: QueryResult, bytes: Buffer): void {
+    const id = result.provenance?.resultId;
+    if (!id) return;
+    this.resultIpc.delete(id);
+    this.resultIpc.set(id, bytes);
+    let total = 0;
+    for (const value of this.resultIpc.values()) total += value.byteLength;
+    for (const [key, value] of this.resultIpc) {
+      if (this.resultIpc.size <= MAX_RETAINED_RESULTS && total <= MAX_RETAINED_RESULT_BYTES) break;
+      if (key === id) continue;
+      this.resultIpc.delete(key);
+      total -= value.byteLength;
+    }
+  }
+
+  /** The committed generation `CURRENT` names now, if a project is open. */
+  currentGenerationUuid(): string | undefined {
+    if (!this.activeProject) return undefined;
+    try {
+      return readCurrentPointer(this.activeProject.rootPath)?.generation_uuid;
+    } catch {
+      return this.activeProject.current?.generation_uuid;
+    }
+  }
+
+  /**
+   * Read the base graph an XYG `graph` composition joins onto: every node and
+   * every relationship as GraphForge Cypher entity structs, at one verified
+   * generation. Not remembered as the user's result. If a write commits a new
+   * generation during the read, it is retried once and then refused rather
+   * than mixing generations.
+   */
+  async readBaseGraph(): Promise<{ tables: Buffer[]; generation?: string }> {
+    const backend = this.requireBackend();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const before = this.currentGenerationUuid();
+      const nodes = await backend.execute("MATCH (n) RETURN n");
+      const edges = await backend.execute("MATCH ()-[r]->() RETURN r");
+      const after = this.currentGenerationUuid();
+      if (before === after) {
+        return after ? { tables: [nodes, edges], generation: after } : { tables: [nodes, edges] };
+      }
+    }
+    throw Object.assign(
+      new Error("The graph kept changing while its base tables were read. Try again once writes settle."),
+      { code: "GF_BASE_GENERATION_CHANGED" },
+    );
+  }
+
   restoreResult(result: QueryResult, title = "Saved result"): void {
     this.rememberResult(result, title);
   }
@@ -1489,35 +1498,6 @@ function rowsToAssertions(result: QueryResult): AssertionRow[] {
     claim: stringField(row, "claim") ?? "",
     ...row,
   }));
-}
-
-function labelsFromRow(row: TableRow, prefix = ""): string[] {
-  const key = prefix ? `${prefix}_label` : "label";
-  const labelsKey = prefix ? `${prefix}_labels` : "labels";
-  const label = stringField(row, key);
-  if (label) {
-    return [label];
-  }
-  const labels = row[labelsKey];
-  if (Array.isArray(labels)) {
-    return labels.map(String);
-  }
-  if (typeof labels === "string") {
-    return [labels];
-  }
-  return [];
-}
-
-/**
- * Optional per-row status hint from the query/verb result itself (e.g. a
- * Cypher query that projects `n.epistemic_status`). Returns `undefined` —
- * never a default "statusless" — so `toGraphPayload` can tell a real hint
- * apart from "no data": defaulting here would fabricate a status when the
- * knowledge capability is absent.
- */
-function statusFromRow(row: TableRow): EpistemicStatus | undefined {
-  const raw = stringField(row, "epistemic_status") ?? stringField(row, "status");
-  return isEpistemicStatus(raw) ? raw : undefined;
 }
 
 function demoGraphPayload(title: string, result: QueryResult): GraphPayload {

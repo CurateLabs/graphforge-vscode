@@ -165,6 +165,7 @@ UUIDv7 (engine-enforced). Knowledge-ledger writes require the Node runtime.
 |---|---|
 | GraphForge: Show Results Table | `graphforge.showResultsTable` |
 | GraphForge: Show Result Graph | `graphforge.showResultGraph` |
+| GraphForge: Visualize Result with XYG… | `graphforge.visualizeResult` |
 | GraphForge: Result Graph (Advanced)… | `graphforge.showResultGraphAdvanced` |
 | GraphForge: Show Figure | `graphforge.showFigure` |
 | GraphForge: Figure from Result… | `graphforge.figureFromResult` |

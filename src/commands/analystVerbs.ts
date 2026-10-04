@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { isGraphProjectable } from "../session/resultProjection";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { AnalystVerb, QueryResult } from "../session/types";
 import type { ResultTableViewProvider } from "../views/resultTableView";
@@ -240,10 +241,11 @@ async function runVerb(
     const openGraph = vscode.workspace
       .getConfiguration("graphforge")
       .get<boolean>("openResultGraphOnQuery", false);
-    if (openGraph) {
+    if (openGraph && isGraphProjectable(result)) {
       const commands = await vscode.commands.getCommands(true);
       if (commands.includes("graphforge.showResultGraph")) {
         await vscode.commands.executeCommand("graphforge.showResultGraph", {
+          auto: true,
           title: `${verb}${by ? `:${by}` : ""}`,
         });
       }
