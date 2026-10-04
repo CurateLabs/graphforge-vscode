@@ -113,6 +113,10 @@ suite("GraphForge extension", () => {
   test("activates and registers all agent-facing command IDs", async () => {
     const ext = vscode.extensions.getExtension("CurateLabsAI.graphforge");
     assert.ok(ext, "extension CurateLabsAI.graphforge not found");
+    assert.ok(
+      ext.packageJSON.activationEvents.includes("onUri"),
+      "Hub links must activate the extension before its URI handler is registered",
+    );
     await ext.activate();
     assert.equal(ext.isActive, true);
 

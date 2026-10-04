@@ -25,6 +25,7 @@
   ],
   "activationEvents": [
     "onLanguage:cypher",
+    "onUri",
     "workspaceContains:FORMAT",
     "onCommand:graphforge.getStarted.showHub"
   ],
