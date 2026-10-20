@@ -156,6 +156,10 @@ suite("palette titles ↔ package.json contributes.commands (#41)", () => {
     assert.equal(title, "GraphForge: Clone from Hub…");
   });
 
+  test("Publish to Hub prompts for a repository and selection, so it ends with …", () => {
+    assert.equal(byId.get("graphforge.publishToHub"), "GraphForge: Publish to Hub…");
+  });
+
   test("zero-prompt commands do not end with …", () => {
     for (const id of ZERO_PROMPT_COMMAND_IDS) {
       const title = byId.get(id);

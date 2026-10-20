@@ -23,6 +23,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.openProject",
   "graphforge.openSampleProject",
   "graphforge.cloneFromHub",
+  "graphforge.publishToHub",
   "graphforge.openSampleNotebook",
   "graphforge.openSampleStreamlit",
   "graphforge.closeProject",
@@ -619,6 +620,20 @@ const NO_PROJECT_STRUCTURED_RESULTS: ReadonlyArray<readonly [string, unknown]> =
     {
       repository: "openalex/openalex",
       destination: `${os.tmpdir()}/gf-clone-ci-${process.pid}-does-not-exist`,
+    },
+  ],
+  // Publish to Hub (#91) — agent calls never prompt and none of these can reach
+  // Core: no binding ⇒ CLI_UNAVAILABLE; no `gf publish` ⇒ PUBLISH_UNSUPPORTED;
+  // no project ⇒ HUB_PUBLISH_PROJECT_REQUIRED; no confirm ⇒ CONFIRMATION_REQUIRED;
+  // previews ⇒ HUB_PUBLISH_PREVIEWS_UNAVAILABLE (xyg#935).
+  ["graphforge.publishToHub", { repository: "openalex/openalex", ref: "main" }],
+  [
+    "graphforge.publishToHub",
+    {
+      repository: "openalex/openalex",
+      ref: "main",
+      previews: ["chart.png", "chart.svg"],
+      confirm: true,
     },
   ],
   // Knowledge ledger (#13)

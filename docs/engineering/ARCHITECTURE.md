@@ -270,6 +270,31 @@ intentionally out of v0 rather than inferred from point order.
 `runCli` is synchronous, so a long download blocks the extension host until Core finishes.
 An asynchronous Core entry point would remove that limit.
 
+### Publish to the Hub
+
+1. A user runs `graphforge.publishToHub` from the palette, or an agent calls it with
+   `{ repository, ref | versionUuid, confirm: true }`. A binding without `gf publish` (0.5.x)
+   fails closed with `PUBLISH_UNSUPPORTED` before any prompt (`publish --help` probe).
+2. `hubPublish.ts` (vscode-free) validates the identity and exactly one of Branch ref or Version
+   UUID, and rejects any preview selection (`HUB_PUBLISH_PREVIEWS_UNAVAILABLE`). Agent calls
+   without `confirm: true` return `CONFIRMATION_REQUIRED`; palette calls show a modal listing the
+   repository, selection, project, and the binding's `version()` as the producing Core version.
+3. The binding's in-process `runCli(["publish", repo, "--project", root, "--json", "--ref" |
+   "--version-uuid", ...])` derives, verifies, and uploads the native package
+   (`graphforge-hub-publish/1`). The extension passes no file paths, so notebooks, apps, intent
+   documents, and saved results are never sent.
+4. Core owns the credential. In-process calls never run Core's device flow, so with no
+   `GRAPHFORGE_HUB_PUBLISH_TOKEN` in the extension host's environment Core returns
+   `hub.publish.auth_denied` with its next action, which the extension passes through. The
+   extension stores no token and logs no repository content or raw Core output.
+5. The receipt maps to `{ repository, refs, revision, previousRevision, manifestValidator,
+   operationUuid, requestCommitment }`. Core's `hub.publish.*` semantic codes pass through.
+
+Previews are deferred: the pinned Core's `gf publish` has no preview flag, and XYG's PNG/SVG
+static export (CurateLabs/xyg#935) does not exist yet. Recording the producing Core version in
+the published Version waits on CurateLabs/graphforge#1769; until then it appears only in the
+confirmation and the result (`coreVersion`).
+
 ### Open ontology
 
 1. User opens Ontology view or Show Ontology — command/tree
