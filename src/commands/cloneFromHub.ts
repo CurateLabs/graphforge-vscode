@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { isCliAvailable, runGraphForgeCli } from "../session/graphforgeCli";
 import {
+  buildHubCloneArgs,
   cloneFromHub,
   isHubCloneFailure,
   parseHubCloneUriQuery,
@@ -33,6 +34,16 @@ export interface CloneFromHubArgs {
 export type CloneFromHubResult = HubCloneSuccess & { opened: boolean };
 
 const TITLE = "GraphForge: Clone from Hub…";
+
+function isCloneFromHubArgs(value: unknown): value is CloneFromHubArgs {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const args = value as Record<string, unknown>;
+  return ["repository", "destination", "ref", "versionUuid"].every(
+    (field) => args[field] === undefined || typeof args[field] === "string",
+  ) && (args.open === undefined || typeof args.open === "boolean");
+}
 
 export function registerCloneFromHub(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
@@ -74,19 +85,38 @@ async function handleHubUri(uri: vscode.Uri): Promise<void> {
 }
 
 async function runCloneFromHub(
-  args?: CloneFromHubArgs,
+  args?: unknown,
   fromLink = false,
 ): Promise<CommandOutcome<CloneFromHubResult>> {
+  if (args !== undefined && !isCloneFromHubArgs(args)) {
+    return reportFailure({
+      error: "Clone arguments must be an object with correctly typed fields.",
+      code: "HUB_CLONE_ARGUMENTS_INVALID",
+      nextAction:
+        "Pass an object with string repository and destination; optional ref and versionUuid must be strings, and open must be a boolean.",
+    }, false);
+  }
+  // Supplied arguments identify an agent call; only palette and link calls prompt.
+  const interactive = fromLink || args === undefined;
+  if (!interactive) {
+    const validated = buildHubCloneArgs({
+      repository: args.repository ?? "",
+      destination: args.destination ?? "",
+      ...(args.ref !== undefined ? { ref: args.ref } : {}),
+      ...(args.versionUuid !== undefined ? { versionUuid: args.versionUuid } : {}),
+    });
+    if (!Array.isArray(validated)) {
+      return reportFailure(validated, interactive);
+    }
+  }
   if (!isCliAvailable()) {
     return reportFailure({
       error: "Cloning from the Hub needs the Node binding (@curatelabs/graphforge), which isn't loaded.",
       code: "CLI_UNAVAILABLE",
       nextAction: 'Run "GraphForge: Setup Native Binding" (graphforge.setupNativeBinding).',
-    }, args);
+    }, interactive);
   }
 
-  // Agents pass destination and skip every prompt; palette and link calls prompt.
-  const interactive = fromLink || args?.destination === undefined;
   let repository = args?.repository;
   if (repository === undefined) {
     if (!interactive) {
@@ -94,7 +124,7 @@ async function runCloneFromHub(
         error: "A repository is required.",
         code: "HUB_REPOSITORY_INVALID",
         nextAction: "Pass repository: owner/repository or https://graphforge.sh/owner/repository.",
-      }, args);
+      }, interactive);
     }
     repository = await vscode.window.showInputBox({
       title: TITLE,
@@ -127,7 +157,7 @@ async function runCloneFromHub(
         error: `${destination} already exists.`,
         code: "HUB_CLONE_DESTINATION_EXISTS",
         nextAction: "Choose a different parent folder, or move the existing folder.",
-      }, args);
+      }, interactive);
     }
   }
 
@@ -156,7 +186,7 @@ async function runCloneFromHub(
     };
   }
   if (isHubCloneFailure(outcome)) {
-    return reportFailure(outcome, args);
+    return reportFailure(outcome, interactive);
   }
 
   const shouldOpen = args?.open ?? interactive;
@@ -176,10 +206,10 @@ async function runCloneFromHub(
 
 function reportFailure(
   failure: { error: string; code: string; nextAction: string },
-  args?: CloneFromHubArgs,
+  interactive: boolean,
 ): { error: string; code: string; nextAction: string } {
   // Agents read the structured outcome; humans get a toast without blocking it.
-  if (args?.destination === undefined) {
+  if (interactive) {
     void vscode.window.showErrorMessage(`GraphForge: ${failure.error} ${failure.nextAction}`);
   }
   return failure;
