@@ -12,6 +12,20 @@ export type EpistemicStatus =
   | "superseded"
   | "statusless";
 
+export const ALL_EPISTEMIC_STATUSES: EpistemicStatus[] = [
+  "hypothesis",
+  "supported",
+  "refuted",
+  "disputed",
+  "retracted",
+  "superseded",
+  "statusless",
+];
+
+export function isEpistemicStatus(value: unknown): value is EpistemicStatus {
+  return typeof value === "string" && (ALL_EPISTEMIC_STATUSES as string[]).includes(value);
+}
+
 export type OntologyMode = "exploratory" | "advisory" | "strict" | "none" | string;
 
 export interface CurrentPointer {
@@ -31,11 +45,61 @@ export interface TableRow {
   [key: string]: unknown;
 }
 
+/**
+ * JSON-safe description of an Arrow field type. UUIDs are GraphForge's
+ * `FixedSizeBinary(16)`; `uuid-list` is an ordered `List<FixedSizeBinary(16)>`
+ * (paths, walks, cycles); `float-vector` covers embedding `List`/`FixedSizeList`
+ * of floats.
+ */
+export type ResultFieldType =
+  | { kind: "uuid" }
+  | { kind: "uuid-list" }
+  | { kind: "float-vector"; dimensions?: number }
+  | { kind: "utf8" }
+  | { kind: "bool" }
+  | { kind: "int"; bits: number; signed: boolean }
+  | { kind: "float" }
+  | { kind: "timestamp"; timezone?: string }
+  | { kind: "date" }
+  | { kind: "binary" }
+  | { kind: "list"; item: ResultFieldType }
+  | { kind: "struct"; fields: ResultField[] }
+  | { kind: "other"; arrowType: string };
+
+export interface ResultField {
+  name: string;
+  type: ResultFieldType;
+  nullable: boolean;
+  metadata?: Record<string, string>;
+}
+
+/** Arrow schema preserved after engine execution (field types + bounded metadata). */
+export interface ResultSchema {
+  fields: ResultField[];
+  metadata: Record<string, string>;
+}
+
+/**
+ * Where a result came from. `resultId` is minted by the extension for every
+ * engine result; `generationUuid` is the committed project generation the
+ * result was read from. Projections and selection links are bound to both.
+ */
+export interface ResultProvenance {
+  resultId: string;
+  generationUuid?: string;
+  /** Cypher `graphforge.query_id` when the engine supplied one. */
+  queryId?: string;
+  /** SHA-256 of the saved `.arrow` engine bytes this result document pairs with. */
+  ipcSha256?: string;
+}
+
 export interface QueryResult {
   columns: string[];
   rows: TableRow[];
   rowCount: number;
   algorithm?: string;
+  schema?: ResultSchema;
+  provenance?: ResultProvenance;
 }
 
 export interface GraphNode {
@@ -53,6 +117,37 @@ export interface GraphEdge {
   target: string;
   epistemicStatus?: EpistemicStatus;
   properties?: TableRow;
+  /**
+   * True when the edge is derived from an analytical result (similarity pair,
+   * path step, flow pair) rather than a persisted relationship.
+   */
+  derived?: boolean;
+}
+
+/** Identity-bound source of a projected graph (never contains result values). */
+export interface GraphProjectionSource {
+  resultId?: string;
+  generationUuid?: string;
+  schemaId: string;
+  schemaVersion: number;
+  disposition: string;
+}
+
+/** Safe projection diagnostic: kinds, counts, duration — never result values. */
+export interface ResultProjectionDiagnostic {
+  schemaId: string;
+  schemaVersion: number;
+  disposition: string;
+  rows: number;
+  nodes: number;
+  edges: number;
+  durationMs: number;
+}
+
+/** Row index → UUID identities, so selection never relies on row position alone. */
+export interface ResultRowEntities {
+  nodeIds: string[];
+  edgeIds: string[];
 }
 
 /**
@@ -76,6 +171,12 @@ export interface GraphPayload {
   styleMode: GraphStyleMode;
   /** Human-readable note shown in the webview header (e.g. why styling fell back). */
   banner?: string;
+  /** Result/schema/generation identity this graph was projected from. */
+  source?: GraphProjectionSource;
+  /** Per-row UUID identities (index-aligned with the source result rows). */
+  rowEntities?: ResultRowEntities[];
+  /** Safe projection diagnostic for agents/troubleshooting. */
+  diagnostic?: ResultProjectionDiagnostic;
 }
 
 export interface OntologyEntityType {

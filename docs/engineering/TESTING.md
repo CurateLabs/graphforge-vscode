@@ -29,6 +29,9 @@ Requires `@vscode/test-electron` ≥ 3.1.0 on macOS (VS Code 1.110+ ships `Code`
 | Result Graph | `src/test/resultGraphModel.test.ts`, `settingsSchema.test.ts`, `extension.test.ts` | Renderer default/options, styling helpers, selection-message resolution, live setting-switch host smoke |
 | Module activation | `src/test/extension.test.ts` | First-party module commands, exported registration API, and Module Bay command/panel activation |
 | Results ↔ graph linking | `src/test/resultTableModel.test.ts`, `quickstart.e2e.test.ts` | Identity/endpoint matching plus the air-routes-scale integration path |
+| Result routing and projection (#80) | `src/test/resultProjection.test.ts`, `resultDocument.test.ts`, `graphForgeSession.test.ts` | Engine-produced Arrow fixtures. Covers: algorithm/find results route to XYG from metadata; typed decode; Cypher identity projection and UUID selection; `.arrow` persistence with SHA-256 binding; bounded IPC retention; generation-checked base-graph reads |
+| XYG adapter (#80) | `src/test/xygAdapter.test.ts` (real native core + real `xyg-wasm.wasm`) | XYG's ledger covers all 94 engine contracts and agrees with RESULT_SCHEMAS.md. Every algorithm/find fixture composes for each selectable intent over its own base graph and paints a payload or table. Also covers: rows ↔ identities round-trip, stale/missing generation codes, loader failure codes, and **native/WASM byte-identical requests and documents** for every fixture × intent |
+| XYG view in a real webview (#80) | `src/test/xygVisualizationPanel.test.ts` (EDH) | Native compose plus a real webview paint under the strict nonce CSP; row selection by UUID; table intent; stale generation; the direct-browser WASM host composing and painting in a Blob-URL Worker; Visualize Result refusing Cypher results without fallback. `.vscode-test.mjs` enables SwiftShader so headless hosts have WebGL2 |
 | Visualization artifacts (#67) | `src/test/projectArtifacts.test.ts`, `settingsSchema.test.ts`, `quickstartSample.test.ts` | v1 read compatibility; strict v2 validation; Cytoscape/Plotly graph/chart defaults; explicit G6/G2/L7 alternatives, bindings, coordinates, and time configuration; project-owned sample artifacts |
 
 ### Python runtime testing notes (#12)
@@ -180,6 +183,25 @@ Run the Extension Development Host in light, dark, and high-contrast themes:
 6. Exercise filters, switches, actions, and focus order with keyboard only; resize
    the panel and enable reduced motion to confirm the responsive/accessibility
    behavior remains intact.
+
+## XYG scale evidence (#80)
+
+These figures come from a one-off native-host run on Linux x64 (2026-10-01), using GraphForge 0.5.2 and
+XYG candidate `0.0.0-dryrun.11`. The graph had 10,000 nodes and 30,000 relationships, written in one
+bulk `UNWIND` (per-call `addNode` commits a generation each and costs gigabytes of temp storage):
+
+| Step | Result |
+|---|---|
+| GraphForge PageRank | 46 ms |
+| Base-graph read (`MATCH (n)` + `MATCH ()-[r]->()`) | 34 ms |
+| XYG Rust composition | 45 ms |
+| Webview paint payload | 1.03 s |
+| Re-select with reused positions | 0.40 s |
+| Engine IPC handed to Rust | 2.5 MiB |
+| Webview transfer | 0.13 MiB JSON spec + 4.7 MiB typed paint buffer |
+| Extension-host RSS increase | about 237 MiB |
+
+XYG's own benchmarks cover 100k nodes (spec/benchmarks/results.md, "GraphForge composition scale").
 
 ## Remaining test gaps
 

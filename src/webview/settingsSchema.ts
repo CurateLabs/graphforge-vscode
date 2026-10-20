@@ -129,6 +129,28 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         ],
       },
       {
+        key: "visualization.xygHost",
+        label: "XYG host for algorithm results",
+        description:
+          "Where XYG composes GraphForge algorithm and search results. There is no automatic fallback between hosts.",
+        type: "enum",
+        default: "native",
+        options: [
+          {
+            value: "native",
+            label: "Native (recommended)",
+            description:
+              "Compose and lay out in the extension host with the bundled XYG native core; any graph size.",
+          },
+          {
+            value: "wasm",
+            label: "Browser (WebAssembly)",
+            description:
+              "Compose and lay out in the view with the bundled XYG WebAssembly module; graphs and tables up to 1,024 nodes plus edges.",
+          },
+        ],
+      },
+      {
         key: "chart.renderer",
         label: "Chart renderer",
         description:

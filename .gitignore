@@ -64,6 +64,8 @@ web_modules/
 
 # Output of 'npm pack'
 *.tgz
+# Exact-version XYG candidate packages consumed until npm publication (#80).
+!vendor/xyg/*.tgz
 
 # Yarn Integrity file
 .yarn-integrity

@@ -6,6 +6,7 @@ azure-pipelines.yml
 src/**
 webview-ui/**
 scripts/**
+vendor/**
 dist/test/**
 dist/bench/**
 docs/**

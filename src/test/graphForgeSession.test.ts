@@ -1,4 +1,7 @@
 import * as assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { GraphForgeSession } from "../session/graphForgeSession";
 import { NodeEngineBackend } from "../session/nodeEngineBackend";
@@ -306,6 +309,74 @@ suite("GraphForgeSession.knowledgeSummary status counts", () => {
     const row = await session.getAssertion("a2");
     assert.equal(row?.status, undefined);
     assert.ok(String(row?.statusNote).includes("assertionStatus"));
+    session.dispose();
+  });
+});
+
+suite("GraphForgeSession result provenance (#80)", () => {
+  const cypherEdges = fs.readFileSync(
+    path.resolve(__dirname, "fixtures", "graphforge-results", "cypher-edges.arrow"),
+  );
+
+  test("execute binds each result to a fresh id and projects UUID identities", async () => {
+    const session = new GraphForgeSession();
+    injectForge(session, makeStubForge({ execute: () => cypherEdges }));
+    const first = await session.execute("MATCH (a)-[r]->(b) RETURN a, r, b");
+    const second = await session.execute("MATCH (a)-[r]->(b) RETURN a, r, b");
+    assert.ok(first.provenance?.resultId);
+    assert.notEqual(first.provenance?.resultId, second.provenance?.resultId);
+    assert.equal(first.provenance?.queryId, first.schema?.metadata["graphforge.query_id"]);
+
+    const payload = await session.toGraphPayload(first, "edges");
+    assert.equal(payload.source?.resultId, first.provenance?.resultId);
+    assert.equal(payload.source?.schemaId, "cypher-entities");
+    assert.equal(payload.rowEntities?.length, first.rowCount);
+    const r = first.rows[0].r as Record<string, unknown>;
+    assert.ok(payload.edges.some((edge) => edge.id === r.edge_uuid));
+    assert.equal(payload.diagnostic?.rows, first.rowCount);
+    session.dispose();
+  });
+
+  test("retains engine IPC bytes per result for XYG, bounded", async () => {
+    const session = new GraphForgeSession();
+    injectForge(session, makeStubForge({ execute: () => cypherEdges }));
+    const first = await session.execute("RETURN 1");
+    assert.deepEqual(session.resultIpcBytes(first), cypherEdges);
+    for (let i = 0; i < 20; i++) await session.execute("RETURN 1");
+    assert.equal(session.resultIpcBytes(first), undefined, "oldest bytes evicted");
+    session.dispose();
+  });
+
+  test("reads the base graph for XYG at one verified generation", async () => {
+    const session = new GraphForgeSession();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-base-"));
+    const generations = ["01890000-0000-7000-8000-000000000001"];
+    const writeCurrent = (uuid: string) =>
+      fs.writeFileSync(path.join(root, "CURRENT"), JSON.stringify({ format: "graphforge-project", format_version: 1, generation_uuid: uuid }));
+    writeCurrent(generations[0]);
+    const queries: string[] = [];
+    injectForge(session, makeStubForge({ execute: (cypher: string) => { queries.push(cypher); return cypherEdges; } }));
+    (session as unknown as { activeProject: unknown }).activeProject = { rootPath: root, name: "base" };
+    const base = await session.readBaseGraph();
+    assert.equal(base.generation, generations[0]);
+    assert.deepEqual(queries, ["MATCH (n) RETURN n", "MATCH ()-[r]->() RETURN r"]);
+
+    // A write that keeps committing during the read is refused, never mixed.
+    let tick = 2;
+    injectForge(session, makeStubForge({
+      execute: () => { writeCurrent(`01890000-0000-7000-8000-00000000000${tick++}`); return cypherEdges; },
+    }));
+    await assert.rejects(session.readBaseGraph(), (err: unknown) => (err as { code?: string }).code === "GF_BASE_GENERATION_CHANGED");
+    session.dispose();
+  });
+
+  test("table-only results fail with a stable code instead of a demo graph", async () => {
+    const session = new GraphForgeSession();
+    injectForge(session, makeStubForge());
+    await assert.rejects(
+      session.toGraphPayload({ columns: ["name"], rows: [{ name: "Ada" }], rowCount: 1 }),
+      (err: unknown) => (err as { code?: string }).code === "GF_RESULT_NO_IDENTITY",
+    );
     session.dispose();
   });
 });

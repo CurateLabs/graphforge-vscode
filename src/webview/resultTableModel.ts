@@ -3,6 +3,7 @@ import type {
   GraphNode,
   GraphPayload,
   QueryResult,
+  ResultRowEntities,
   TableRow,
 } from "../session/types";
 import type { GraphSelection } from "./resultGraphModel";
@@ -166,6 +167,40 @@ function hasHighlight(highlight: GraphElementHighlight): boolean {
   return highlight.nodeIds.length > 0 || highlight.edgeIds.length > 0;
 }
 
+/** String identities carried by a cell: UUID scalars, UUID lists, entity structs. */
+function cellIdentities(value: unknown, out = new Set<string>(), depth = 0): Set<string> {
+  if (typeof value === "string") {
+    if (value) out.add(value);
+  } else if (Array.isArray(value) && depth < 4) {
+    for (const item of value) cellIdentities(item, out, depth + 1);
+  } else if (value && typeof value === "object" && depth < 4) {
+    for (const item of Object.values(value)) cellIdentities(item, out, depth + 1);
+  }
+  return out;
+}
+
+function ownIdentity(value: unknown, kind: ResultEntityLink["kind"]): unknown {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return (value as TableRow)[kind === "node" ? "node_uuid" : "edge_uuid"];
+  }
+  return value;
+}
+
+/** Row identities from the schema projection (UUIDs), narrowed to a cell when possible. */
+function rowEntityHighlight(
+  row: TableRow,
+  entities: ResultRowEntities,
+  column?: string,
+): GraphElementHighlight {
+  if (column && Object.hasOwn(row, column)) {
+    const ids = cellIdentities(row[column]);
+    const nodeIds = entities.nodeIds.filter((id) => ids.has(id));
+    const edgeIds = entities.edgeIds.filter((id) => ids.has(id));
+    if (nodeIds.length > 0 || edgeIds.length > 0) return { nodeIds, edgeIds };
+  }
+  return { nodeIds: [...entities.nodeIds], edgeIds: [...entities.edgeIds] };
+}
+
 /**
  * A cell first resolves as its own graph identity. If it is a metric or other
  * non-identity value, the containing row becomes the fallback selection.
@@ -179,6 +214,10 @@ export function resolveResultGraphHighlight(
   const row = result.rows[rowIndex];
   if (!payload || !row) {
     return { nodeIds: [], edgeIds: [] };
+  }
+  const entities = payload.rowEntities?.[rowIndex];
+  if (payload.rowEntities) {
+    return entities ? rowEntityHighlight(row, entities, column) : { nodeIds: [], edgeIds: [] };
   }
 
   if (column && Object.hasOwn(row, column)) {
@@ -226,6 +265,9 @@ function resultEntityLinksWithLookup(
 ): ResultEntityLink[] {
   const row = result.rows[rowIndex];
   if (!payload || !row || !lookup) return [];
+  if (payload.rowEntities) {
+    return rowEntityLinks(result, row, payload.rowEntities[rowIndex]);
+  }
 
   const links: ResultEntityLink[] = [];
   const seen = new Set<string>();
@@ -255,6 +297,29 @@ function resultEntityLinksWithLookup(
       .get(endpointKey(source, target))
       ?.forEach((id) => add("edge", id, "Edge"));
   }
+  return links;
+}
+
+/** Entity Inspect links from projected UUIDs, labelled by the column that holds them. */
+function rowEntityLinks(
+  result: QueryResult,
+  row: TableRow,
+  entities: ResultRowEntities | undefined,
+): ResultEntityLink[] {
+  if (!entities) return [];
+  const links: ResultEntityLink[] = [];
+  const add = (kind: ResultEntityLink["kind"], ids: string[]) => {
+    for (const id of ids) {
+      // Prefer the column that *is* the entity (scalar UUID or entity struct)
+      // over one that merely references it (e.g. a relationship's dst_uuid).
+      const column =
+        result.columns.find((name) => ownIdentity(row[name], kind) === id) ??
+        result.columns.find((name) => cellIdentities(row[name]).has(id));
+      links.push({ kind, id, label: column ? linkLabel(column, kind) : kind === "node" ? "Node" : "Edge" });
+    }
+  };
+  add("node", entities.nodeIds);
+  add("edge", entities.edgeIds);
   return links;
 }
 
@@ -289,8 +354,17 @@ export function resolveResultEntitySelection(
 export function resultRowsForGraphSelection(
   result: QueryResult,
   selection: GraphSelection,
+  payload?: GraphPayload,
 ): number[] {
   const rows: number[] = [];
+  if (payload?.rowEntities) {
+    const id = selection.item.id;
+    payload.rowEntities.forEach((entities, index) => {
+      const ids = selection.kind === "node" ? entities.nodeIds : entities.edgeIds;
+      if (ids.includes(id)) rows.push(index);
+    });
+    return rows;
+  }
   const itemKeys =
     selection.kind === "node"
       ? nodeAliases(selection.item)

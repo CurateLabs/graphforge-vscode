@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { isGraphProjectable } from "../session/resultProjection";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import {
   persistQueryResultDocuments,
@@ -156,7 +157,13 @@ async function executeAndShowResult(
     if (!projectRoot) {
       throw new Error("Query completed without an open GraphForge project.");
     }
-    const documents = await persistQueryResultDocuments(projectRoot, result, resultName);
+    const documents = await persistQueryResultDocuments(
+      projectRoot,
+      result,
+      resultName,
+      undefined,
+      session.resultIpcBytes(result),
+    );
     // Refresh project-backed query/result lists after files are durable.
     session.notifyChanged();
     await results.show(result, "Cypher result", documents);
@@ -164,10 +171,13 @@ async function executeAndShowResult(
     const openGraph = vscode.workspace
       .getConfiguration("graphforge")
       .get<boolean>("openResultGraphOnQuery", false);
-    if (openGraph) {
+    // Table-only results stay in the table; auto-open never reports a
+    // successful query as failed because its result has no graph identity.
+    if (openGraph && isGraphProjectable(result)) {
       const commands = await vscode.commands.getCommands(true);
       if (commands.includes("graphforge.showResultGraph")) {
         await vscode.commands.executeCommand("graphforge.showResultGraph", {
+          auto: true,
           title: "Cypher result",
         });
       }

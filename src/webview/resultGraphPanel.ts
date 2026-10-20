@@ -1,6 +1,7 @@
 import * as crypto from "node:crypto";
 import * as vscode from "vscode";
-import type { GraphPayload, QueryResult } from "../session/types";
+import type { GraphPayload, GraphProjectionSource, QueryResult } from "../session/types";
+import { sourceMismatch } from "../session/resultProjection";
 import { replaceProjectVisualization } from "../session/projectArtifacts";
 import type { ResultGraphVisualizationSpecV2 } from "../session/visualizationRegistry";
 import { VisualizationDocumentState } from "../session/visualizationDocumentState";
@@ -45,12 +46,18 @@ export type ResultGraphLifecycleMessage = Extract<
   }
 >;
 
+/** A graph selection plus the result identity the selected graph was projected from. */
+export interface ResultGraphSelectionEvent {
+  selection: GraphSelection;
+  source?: GraphProjectionSource;
+}
+
 export class ResultGraphPanel implements VisualizationController {
   public readonly kind = "graph" as const;
   private readonly lifecycle: VisualizationInstanceLifecycle;
   public get renderGeneration(): number { return this.lifecycle.renderGeneration; }
   private static readonly selectionEmitter =
-    new vscode.EventEmitter<GraphSelection>();
+    new vscode.EventEmitter<ResultGraphSelectionEvent>();
   public static readonly onDidSelect = ResultGraphPanel.selectionEmitter.event;
   private static readonly timebarEmitter =
     new vscode.EventEmitter<{ values: [number, number] }>();
@@ -212,7 +219,7 @@ export class ResultGraphPanel implements VisualizationController {
       }
       const selection = resolveGraphSelection(this.payload, msg);
       if (selection) {
-        ResultGraphPanel.selectionEmitter.fire(selection);
+        ResultGraphPanel.selectionEmitter.fire({ selection, source: this.payload?.source });
         EntityInspectPanel.show(
           this.extensionUri,
           selection,
@@ -287,6 +294,27 @@ export class ResultGraphPanel implements VisualizationController {
     return visualizationInstances.values<ResultGraphPanel>("graph");
   }
 
+  /**
+   * The graph panel showing `result`: the active panel when its projection
+   * source matches, otherwise any open panel projected from the same result.
+   */
+  static forResult(result: QueryResult): ResultGraphPanel | undefined {
+    const active = ResultGraphPanel.active();
+    if (active && active.sourceMismatch(result) === undefined) return active;
+    return ResultGraphPanel.instances().find(
+      (panel) => panel.sourceMismatch(result) === undefined,
+    );
+  }
+
+  get source(): GraphProjectionSource | undefined {
+    return this.payload?.source;
+  }
+
+  /** Why this graph cannot be joined with `result`, or undefined when it can. */
+  sourceMismatch(result: QueryResult): string | undefined {
+    return this.payload ? sourceMismatch(this.payload.source, result) : "The graph has no data yet.";
+  }
+
   reveal(): void {
     visualizationInstances.activate(this.instanceId);
     revealVizPanel(this.panel);
@@ -342,6 +370,9 @@ export class ResultGraphPanel implements VisualizationController {
     rowIndex: number,
     column?: string,
   ): GraphElementHighlight {
+    if (this.sourceMismatch(result) !== undefined) {
+      return { nodeIds: [], edgeIds: [] };
+    }
     const highlight = resolveResultGraphHighlight(
       result,
       this.payload,
