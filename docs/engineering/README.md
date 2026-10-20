@@ -18,6 +18,7 @@ pre-release evidence, continuous delivery, and production learning.
 | Document | Description |
 |---|---|
 | [`MODULES.md`](MODULES.md) | Module manifests, providers, lifecycle, catalog discovery, and side-load security |
+| [`PRODUCT_BOUNDARIES.md`](PRODUCT_BOUNDARIES.md) | GraphForge ADR 0054: ownership between Core, XYG, this extension, and the Hub. A generated shared copy; do not edit it here |
 
 ## Decision records
 

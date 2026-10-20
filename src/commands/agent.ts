@@ -51,6 +51,11 @@ export const AGENT_OPERATION_COMMANDS: readonly AgentCommandDescriptor[] = [
     returns: "{ path, projectPath, relativePath, command }",
   },
   {
+    id: "graphforge.cloneFromHub",
+    args: "{ repository: string; destination: string; ref?: string; versionUuid?: string; open?: boolean }",
+    returns: "{ repository, destination, immutableVersion, packageDigest, generationUuid, opened }",
+  },
+  {
     id: "graphforge.openProject",
     args: "string | Uri | { path: string | Uri }",
     returns: "{ path, project }",

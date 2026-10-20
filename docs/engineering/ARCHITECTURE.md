@@ -12,6 +12,12 @@ path for externally developed modules. See
 [ADR-0002](./adrs/0002-unified-module-lifecycle.md) for the catalog-first
 lifecycle decision.
 
+How the extension fits with GraphForge Core, XYG, and the Hub (graphforge.sh) is decided in
+GraphForge ADR 0054, published verbatim as [`PRODUCT_BOUNDARIES.md`](PRODUCT_BOUNDARIES.md).
+[ADR-0005](./adrs/0005-hub-extension-core-xyg-interplay.md) records what that decision means
+for this extension, along with its rollout. Where this document describes the current state
+differently, those two documents state the target.
+
 ## Context diagram
 
 ```mermaid
@@ -274,6 +280,23 @@ intentionally out of v0 rather than inferred from point order.
    lifecycle events without graph properties, rows, coordinates, timestamps, or paths.
 5. Viewport or temporal-range changes create a host-validated draft and visible
    dirty state. Save atomically replaces the artifact; Revert restores committed JSON.
+
+### Clone from the Hub
+
+1. The Hub's Open tab links to `vscode://curatelabsai.graphforge/clone?repository=owner/repo`,
+   or a user or agent calls `graphforge.cloneFromHub`.
+2. `hubClone.ts` (vscode-free) validates the identity, branch ref, and Version UUID locally, so
+   a malformed link never reaches Core. A clicked link always confirms before any disk or
+   network work.
+3. The binding's in-process `runCli(["clone", repo, destination, "--json", ...])` does
+   discovery, download, verification, and import (`graphforge-hub-clone/1`). The extension
+   never speaks the Hub protocol ([ADR-0005](./adrs/0005-hub-extension-core-xyg-interplay.md)).
+4. The receipt maps to `{ repository, destination, immutableVersion, packageDigest,
+   generationUuid }`. Core's structured errors pass through with their `hub.*` semantic code.
+5. `graphforge.openProject` opens the destination, so project detection stays in one place.
+
+`runCli` is synchronous, so a long download blocks the extension host until Core finishes.
+An asynchronous Core entry point would remove that limit.
 
 ### Open ontology
 

@@ -22,6 +22,7 @@ import {
 const ALL_COMMAND_IDS = [
   "graphforge.openProject",
   "graphforge.openSampleProject",
+  "graphforge.cloneFromHub",
   "graphforge.openSampleNotebook",
   "graphforge.openSampleStreamlit",
   "graphforge.closeProject",
@@ -43,7 +44,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.checkEnvironment",
   "graphforge.copyEnvironmentReport",
   "graphforge.getStarted",
-  "graphforge.getStarted.showHub",
+  "graphforge.getStarted.showHome",
   "graphforge.getStarted.showQuery",
   "graphforge.getStarted.showVisualize",
   "graphforge.openSettings",
@@ -112,6 +113,10 @@ suite("GraphForge extension", () => {
   test("activates and registers all agent-facing command IDs", async () => {
     const ext = vscode.extensions.getExtension("CurateLabsAI.graphforge");
     assert.ok(ext, "extension CurateLabsAI.graphforge not found");
+    assert.ok(
+      ext.packageJSON.activationEvents.includes("onUri"),
+      "Hub links must activate the extension before its URI handler is registered",
+    );
     await ext.activate();
     assert.equal(ext.isActive, true);
 
@@ -119,6 +124,10 @@ suite("GraphForge extension", () => {
     for (const id of ALL_COMMAND_IDS) {
       assert.ok(commands.includes(id), `missing command ${id}`);
     }
+    assert.ok(
+      commands.includes("graphforge.getStarted.showHub"),
+      "the pre-ADR-0005 Show Hub alias must stay callable",
+    );
     const modules = await vscode.commands.executeCommand<
       Array<{ id: string; source: string; installed: boolean; removable: boolean }>
     >("graphforge.refreshModules");
@@ -603,6 +612,15 @@ const NO_PROJECT_STRUCTURED_RESULTS: ReadonlyArray<readonly [string, unknown]> =
   ],
   // CLI adoption (Part F) — no binding ⇒ CLI unavailable, fails closed with nextAction.
   ["graphforge.runCli", { args: ["status"] }],
+  // Clone from Hub (#88) — agent call with a destination never prompts. No binding
+  // ⇒ CLI_UNAVAILABLE; a binding without `gf clone` ⇒ CLONE_UNSUPPORTED.
+  [
+    "graphforge.cloneFromHub",
+    {
+      repository: "openalex/openalex",
+      destination: `${os.tmpdir()}/gf-clone-ci-${process.pid}-does-not-exist`,
+    },
+  ],
   // Knowledge ledger (#13)
   ["graphforge.listAssertions", { limit: 5 }],
   [

@@ -104,8 +104,14 @@ export function registerOpenViews(
       }
     }),
 
+    vscode.commands.registerCommand("graphforge.getStarted.showHome", () =>
+      showGetStartedPage("home"),
+    ),
+
+    // Pre-ADR-0005 alias: "Hub" now names graphforge.sh, but existing
+    // keybindings and agent calls keep working. Not contributed to the palette.
     vscode.commands.registerCommand("graphforge.getStarted.showHub", () =>
-      showGetStartedPage("hub"),
+      showGetStartedPage("home"),
     ),
 
     vscode.commands.registerCommand("graphforge.getStarted.showQuery", () =>

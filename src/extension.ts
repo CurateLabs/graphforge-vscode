@@ -11,6 +11,7 @@ import { registerOpenViews } from "./commands/openViews";
 import { registerPower } from "./commands/power";
 import { registerProjectArtifacts } from "./commands/projectArtifacts";
 import { registerRunCli } from "./commands/runCli";
+import { registerCloneFromHub } from "./commands/cloneFromHub";
 import { registerSetup } from "./commands/setup";
 import { registerSetupPython } from "./commands/setupPython";
 import { GraphForgeSession } from "./session/graphForgeSession";
@@ -76,6 +77,7 @@ export async function activate(
   registerEmbeddingSpaces(context, session);
   registerPower(context, session);
   registerRunCli(context, session);
+  registerCloneFromHub(context);
   registerOpenViews(context, session, refreshTrees);
   registerOpenSampleProject(context, session, refreshTrees);
   registerSetup(context, session, refreshTrees);
