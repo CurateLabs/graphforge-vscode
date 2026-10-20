@@ -11,6 +11,8 @@ export type { ProjectKind } from "./projectKind";
 export interface NodeBindingStatus {
   available: boolean;
   error?: string;
+  /** Version reported by the loaded binding's `version()`, when it exposes one (#95). */
+  version?: string;
 }
 
 /**

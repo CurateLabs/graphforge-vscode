@@ -1,3 +1,4 @@
+import { QUALIFIED_CORE, type CoreQualification, type QualifiedCoreDeclaration } from "./coreQualification";
 import type { ProjectKind } from "./projectKind";
 import type { PythonRuntimeStatus, RuntimeKind, RuntimePreference } from "./types";
 
@@ -9,6 +10,15 @@ import type { PythonRuntimeStatus, RuntimeKind, RuntimePreference } from "./type
 export interface NodeBindingReport {
   available: boolean;
   error?: string;
+}
+
+/** Supported-Core declaration and per-runtime verdicts (#95). */
+export interface CoreReport {
+  declared: QualifiedCoreDeclaration;
+  /** Verdict for the Node binding, when it is loaded. */
+  node?: CoreQualification;
+  /** Verdict for the Python graphforge, when importable. */
+  python?: CoreQualification;
 }
 
 export interface EnvironmentReport {
@@ -27,6 +37,8 @@ export interface EnvironmentReport {
   /** Legacy top-level field (#2); mirrors `runtime` Node status. */
   nodeBinding: NodeBindingReport;
   python: PythonRuntimeStatus;
+  /** Qualified Core range and whether each resolved runtime is within it (#95). */
+  core: CoreReport;
   project: {
     open: boolean;
     path?: string;
@@ -38,12 +50,19 @@ export interface EnvironmentReport {
   timestamp: string;
 }
 
+export { QUALIFIED_CORE };
+
 export function computeNextAction(
   nodeAvailable: boolean,
   pythonAvailable: boolean,
   projectOpen: boolean,
   active: RuntimeKind | "none",
+  /** Verdict for the runtime that will be used; a non-qualified verdict leads the next action (#95). */
+  coreIssue?: CoreQualification,
 ): string {
+  if (coreIssue && coreIssue.status !== "qualified") {
+    return `[${coreIssue.code}] ${coreIssue.message} ${coreIssue.nextAction}`;
+  }
   if (active === "none") {
     if (!nodeAvailable && !pythonAvailable) {
       return 'Run "GraphForge: Setup Native Binding" or "GraphForge: Setup Python Binding" — no runtime is usable yet.';
