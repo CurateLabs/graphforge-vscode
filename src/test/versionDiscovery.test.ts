@@ -60,6 +60,7 @@ suite("versionDiscovery", () => {
     const result = await discoverEngineVersions("npm", { fetchImpl });
     assert.equal(result.source, "fallback");
     assert.deepEqual(result.versions, fallbackVersions("npm"));
+    assert.equal(result.latest, undefined, "the registry's latest tag is unknown offline");
     assert.ok(result.note && result.note.length > 0, "fallback must carry a note for the picker");
   });
 

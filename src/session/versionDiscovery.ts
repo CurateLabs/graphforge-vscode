@@ -102,8 +102,8 @@ export function fallbackVersions(
 }
 
 function fallback(target: DiscoverTarget, note: string): VersionDiscovery {
-  const versions = fallbackVersions(target);
-  return { versions, latest: versions[0], source: "fallback", note };
+  // `latest` stays unknown: "Latest" installs the registry's tag, not this fallback.
+  return { versions: fallbackVersions(target), source: "fallback", note };
 }
 
 export type VersionStatus = "qualified" | "unqualified" | "unsupported";

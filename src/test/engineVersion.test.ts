@@ -37,4 +37,11 @@ suite("engineVersion", () => {
     assert.equal(pypiEngineSpec(""), "graphforge");
     assert.equal(pypiEngineSpec(undefined), "graphforge");
   });
+
+  test("npmEngineSpec converts a PEP 440 pre-release saved by the Python wizard", () => {
+    assert.equal(npmEngineSpec("0.6.0rc5"), "@curatelabs/graphforge@0.6.0-rc.5");
+    assert.equal(npmEngineSpec("0.6.0b2"), "@curatelabs/graphforge@0.6.0-beta.2");
+    assert.equal(npmEngineSpec("0.6.0-rc.5"), "@curatelabs/graphforge@0.6.0-rc.5");
+    assert.equal(pypiEngineSpec("0.6.0-rc.5"), "graphforge==0.6.0-rc.5", "uv/pip normalize this spelling");
+  });
 });
