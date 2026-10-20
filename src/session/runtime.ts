@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { getNativeLoadError, loadGraphForgeModule } from "./nativeLoader";
+import { enforceCoreQualification, evaluateCoreVersion } from "./coreQualification";
 import { NodeEngineBackend } from "./nodeEngineBackend";
 import { detectWorkspaceProjectKind } from "./projectKindDetector";
 import { PythonEngineBackend } from "./pythonBridge";
@@ -18,8 +19,32 @@ export function runtimePreference(): RuntimePreference {
 }
 
 export function nodeBindingStatus(): NodeBindingStatus {
-  const available = loadGraphForgeModule() !== null;
-  return { available, error: available ? undefined : getNativeLoadError() };
+  const mod = loadGraphForgeModule();
+  const available = mod !== null;
+  let version: string | undefined;
+  try {
+    version = mod?.version?.();
+  } catch {
+    version = undefined;
+  }
+  return { available, error: available ? undefined : getNativeLoadError(), version };
+}
+
+const warnedUnqualified = new Set<string>();
+
+/**
+ * Supported-Core gate (#95): refuse a Core below the declared floor, warn once
+ * per runtime+version for a loadable-but-unqualified one.
+ */
+function gateCoreVersion(runtime: "node" | "python", version: string | undefined): void {
+  const q = enforceCoreQualification(evaluateCoreVersion(runtime, version));
+  if (q.status === "unqualified") {
+    const key = `${runtime}:${q.version ?? ""}`;
+    if (!warnedUnqualified.has(key)) {
+      warnedUnqualified.add(key);
+      void vscode.window.showWarningMessage(`GraphForge: ${q.message} [${q.code}] ${q.nextAction}`);
+    }
+  }
 }
 
 export async function pythonRuntimeStatus(): Promise<PythonRuntimeStatus> {
@@ -50,6 +75,8 @@ export async function openEngineBackend(
   if (!chosen) {
     throw new Error(describeRuntimeUnavailable(preference, node, python));
   }
+
+  gateCoreVersion(chosen, chosen === "node" ? node.version : python.graphforgeVersion);
 
   if (chosen === "node") {
     const mod = loadGraphForgeModule();

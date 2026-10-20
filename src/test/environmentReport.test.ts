@@ -1,4 +1,5 @@
 import * as assert from "node:assert/strict";
+import { QUALIFIED_CORE } from "../session/coreQualification";
 import {
   computeNextAction,
   formatSummaryLines,
@@ -36,6 +37,7 @@ suite("formatSummaryLines", () => {
       nodeBinding: { available: true },
       python: { available: false, error: "no interpreter" },
       project: { open: true, path: "/tmp/proj", name: "proj" },
+      core: { declared: QUALIFIED_CORE },
       nextAction: "Ready.",
       timestamp: "2026-01-01T00:00:00.000Z",
     });
@@ -51,6 +53,7 @@ suite("formatSummaryLines", () => {
       nodeBinding: { available: false, error: "no candidates" },
       python: { available: true, interpreter: "/usr/bin/python3", graphforgeVersion: "0.5.0-dev" },
       project: { open: false },
+      core: { declared: QUALIFIED_CORE },
       nextAction: "Setup.",
       timestamp: "2026-01-01T00:00:00.000Z",
     });
@@ -65,6 +68,7 @@ suite("formatSummaryLines", () => {
       nodeBinding: { available: false, error: "no candidates" },
       python: { available: false, error: "no interpreter" },
       project: { open: false },
+      core: { declared: QUALIFIED_CORE },
       nextAction: "Setup both.",
       timestamp: "2026-01-01T00:00:00.000Z",
     });

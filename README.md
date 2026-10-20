@@ -37,6 +37,7 @@ User-facing docs: [`docs/published/`](docs/published/) ([overview](docs/publishe
 - One GraphForge engine runtime, either:
   - **Node** — a built `@curatelabs/graphforge` package (optional peer dependency), or
   - **Python** — a `graphforge` (PyPI) install in an interpreter VS Code can see, plus [`uv`](https://docs.astral.sh/uv/) for setup (never `pip`)
+- **Qualified Core** — this build declares the Core versions it was qualified against in `package.json` (`graphforge.qualifiedCore`, currently `>=0.6.0-rc.5 <0.7.0`). Outside that range the extension warns (`CORE_VERSION_UNQUALIFIED`); below the declared floor it refuses (`CORE_VERSION_UNSUPPORTED`). Either way the message names the fix: set `graphforge.engineVersion` or pick a matching Python environment. `Check Environment` reports the verdict under `core`.
 - No runtime yet? Run **`GraphForge: Check Environment`** after installing — it always tells you what to run next.
 
 ## Develop

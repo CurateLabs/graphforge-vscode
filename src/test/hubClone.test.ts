@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import type { CliRunResult } from "../session/graphforgeCli";
 import {
   HUB_CLONE_CONTRACT,
+  type EngineHost,
   buildHubCloneArgs,
   cloneFromHub,
   interpretHubCloneResult,
@@ -222,6 +223,85 @@ suite("Hub clone (#88)", () => {
       assert.ok(isHubCloneFailure(outcome));
       assert.equal(outcome.code, "HUB_CLONE_FAILED");
       assert.match(outcome.error, /network unreachable/);
+    });
+  });
+
+  suite("filesystem admission (#94)", () => {
+    // Captured from @curatelabs/graphforge 0.6.0-rc.5: `gf clone … /dev/shm/x --json`.
+    const CORE_REJECTION = `${JSON.stringify({
+      error: {
+        code: "GF_UNSUPPORTED_FILESYSTEM",
+        message: "GF_UNSUPPORTED_FILESYSTEM: phase=CLASSIFY outcome=rejected cause=filesystem_class_unproven",
+        details: { source: "runtime", kind: "project" },
+      },
+    })}\n`;
+
+    function reject(host?: EngineHost) {
+      const outcome = interpretHubCloneResult(cli(1, "", CORE_REJECTION), host);
+      assert.ok(isHubCloneFailure(outcome));
+      return outcome;
+    }
+
+    test("preserves Core's code and message verbatim", () => {
+      const outcome = reject({ platform: "linux" });
+      assert.equal(outcome.code, "GF_UNSUPPORTED_FILESYSTEM");
+      assert.match(outcome.error, /phase=CLASSIFY outcome=rejected cause=filesystem_class_unproven/);
+    });
+
+    test("keeps guidance when a semantic code replaces the class code", () => {
+      const stderr = JSON.stringify({
+        error: {
+          code: "GF_UNSUPPORTED_FILESYSTEM",
+          message: "rejected",
+          details: { semantic_code: "storage.class_unproven" },
+        },
+      });
+      const outcome = interpretHubCloneResult(cli(1, "", stderr), { platform: "darwin" });
+      assert.ok(isHubCloneFailure(outcome));
+      assert.equal(outcome.code, "storage.class_unproven");
+      assert.match(outcome.nextAction, /APFS/);
+    });
+
+    test("names the admitted volumes for each extension-host platform", () => {
+      assert.match(reject({ platform: "linux" }).nextAction, /ext4, XFS, or Btrfs/);
+      assert.match(reject({ platform: "darwin" }).nextAction, /local APFS/);
+      assert.match(reject({ platform: "win32" }).nextAction, /fixed, writable, local NTFS/);
+      assert.match(reject({ platform: "freebsd" }).nextAction, /platform supports/);
+      assert.match(reject().nextAction, /this computer/);
+    });
+
+    test("names the remote host, not the UI's OS", () => {
+      const wsl = reject({ platform: "linux", remoteName: "wsl" }).nextAction;
+      assert.match(wsl, /the WSL distribution/);
+      assert.match(wsl, /ext4, XFS, or Btrfs/);
+      assert.doesNotMatch(wsl, /NTFS|APFS/);
+      assert.match(reject({ platform: "linux", remoteName: "dev-container" }).nextAction, /dev container/);
+      assert.match(reject({ platform: "linux", remoteName: "ssh-remote" }).nextAction, /SSH host/);
+      assert.match(reject({ platform: "linux", remoteName: "future-remote" }).nextAction, /remote host/);
+    });
+
+    test("never requires the process root to be on the admitted filesystem", () => {
+      for (const platform of ["linux", "darwin", "win32"]) {
+        const action = reject({ platform }).nextAction;
+        assert.match(action, /beneath any container or VM root/);
+        assert.doesNotMatch(action, /(chroot|replace|change) the (process )?root/i);
+      }
+    });
+
+    test("states the no-partial-destination guarantee and in-memory distinction", () => {
+      const action = reject({ platform: "linux" }).nextAction;
+      assert.match(action, /Nothing was created at the destination/);
+      assert.match(action, /in-memory/);
+    });
+
+    test("cloneFromHub forwards the engine host to the mapping", () => {
+      const outcome = cloneFromHub(
+        { repository: "openalex/openalex", destination: "/mnt/x/openalex" },
+        () => cli(1, "", CORE_REJECTION),
+        { platform: "win32" },
+      );
+      assert.ok(isHubCloneFailure(outcome));
+      assert.match(outcome.nextAction, /NTFS/);
     });
   });
 

@@ -104,6 +104,20 @@ the global default**, with one exception: a Python-first workspace (see "Project
 below) prefers Python even when Node is available. An explicit `node` or `python` preference
 never falls back to the other, and never consults project kind.
 
+### Supported-Core declaration (#95)
+
+`package.json` holds the single declaration, `graphforge.qualifiedCore` (`range`, `refuseBelow`), and
+the `@curatelabs/graphforge` peer range tracks it. `coreQualification.ts` (`vscode`-free) reads it and
+compares the resolved binding's version (`version()` for Node, the probe's `__version__` for Python;
+PEP 440 prereleases such as `0.6.0rc5` are mapped to semver) with `semver`. `openEngineBackend()`
+gates the chosen runtime: below `refuseBelow` throws `CoreVersionError` (`CORE_VERSION_UNSUPPORTED`,
+presented as an error with its code); other out-of-range or unparsable versions show a one-time
+warning (`CORE_VERSION_UNQUALIFIED`) and continue. `buildEnvironmentReport` exposes the declaration
+and per-runtime verdicts under `core`, and a non-qualified active runtime leads `nextAction`; agent
+context embeds the same report. The check is a single version comparison - Core's data/format and
+Hub version errors (Core #1769/#1936) pass through untouched, per ADR 0054 and consistent with
+xyg#936.
+
 ### Project-kind detection (auto Python-prefer rule)
 
 `projectKind.ts` (pure, `vscode`-free — same testing convention as `runtimeSelection.ts`)
@@ -266,6 +280,18 @@ intentionally out of v0 rather than inferred from point order.
 4. The receipt maps to `{ repository, destination, immutableVersion, packageDigest,
    generationUuid }`. Core's structured errors pass through with their `hub.*` semantic code.
 5. `graphforge.openProject` opens the destination, so project detection stays in one place.
+
+**Destination storage.** A cloned project is a durable, path-backed project, so Core admits or
+rejects the destination volume (fail closed, no partial destination; the extension adds no
+cleanup). Core's contract: Linux local ext4/XFS/Btrfs, macOS local APFS, Windows fixed writable
+local NTFS, judged on the project folder's own volume. A supported volume may be mounted beneath
+a container or VM root that is not itself supported, so the extension imposes no process-root
+restriction and does not probe filesystems. On `GF_UNSUPPORTED_FILESYSTEM` the code and message
+pass through unchanged and `nextAction` names the admitted volumes for the **extension host**
+(`process.platform` plus `vscode.env.remoteName`), because in WSL, SSH, and container windows
+Core and the destination run there, not on the machine showing the UI. A filesystem name is not a
+promise that every mount passes. An in-memory `GraphForge()` session needs none of this: it is a
+runtime capability, whereas clone/open need an admitted durable volume.
 
 `runCli` is synchronous, so a long download blocks the extension host until Core finishes.
 An asynchronous Core entry point would remove that limit.

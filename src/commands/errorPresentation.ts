@@ -1,3 +1,4 @@
+import { CoreVersionError } from "../session/coreQualification";
 import { NodeOnlyFeatureError, UnsupportedByBindingError } from "../session/errors";
 
 /**
@@ -11,7 +12,8 @@ import { NodeOnlyFeatureError, UnsupportedByBindingError } from "../session/erro
 export function engineErrorCode(err: unknown): string | undefined {
   if (err && typeof err === "object" && "code" in err) {
     const code = (err as { code?: unknown }).code;
-    if (typeof code === "string" && code.startsWith("GF_")) {
+    // `CORE_VERSION_*` are the extension's own stable Supported-Core codes (#95).
+    if (typeof code === "string" && (code.startsWith("GF_") || code.startsWith("CORE_VERSION_"))) {
       return code;
     }
   }
@@ -110,6 +112,12 @@ export function presentError(err: unknown): PresentedError {
 
   if (err instanceof UnsupportedByBindingError || err instanceof NodeOnlyFeatureError) {
     return { severity: "warning", message: detail, setup: false, code, detail };
+  }
+
+  // A refused Core version is a setup failure with a specific next action
+  // (already in the message), not a generic engine error (#95).
+  if (err instanceof CoreVersionError) {
+    return { severity: "error", message: detail, setup: false, code, detail };
   }
 
   if (
