@@ -2,6 +2,12 @@
 
 All notable changes to the GraphForge VS Code extension are documented here.
 
+## Unreleased
+
+### Fixed
+
+- Setup's engine version picker recommends the newest qualified Core (`graphforge.qualifiedCore`) instead of leading with the registry's `latest` tag, which currently points at a Core that cannot clone. Versions are labelled qualified / not qualified, refused versions are hidden, and the offline fallback derives from the qualified range.
+
 ## 0.1.3
 
 ### Added

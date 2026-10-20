@@ -80,7 +80,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         key: "engineVersion",
         label: "Engine version",
         description:
-          "Which graphforge version the Setup wizards install (npm @curatelabs/graphforge, or PyPI graphforge for the Python runtime). Use \"latest\" or pin a version like \"0.5.1\". The version picker in Setup Native/Python Binding writes here.",
+          "Which graphforge version the Setup wizards install (npm @curatelabs/graphforge, or PyPI graphforge for the Python runtime). Use \"latest\" (the registry's latest tag, which may be outside the qualified Core range) or pin a version like \"0.6.0-rc.5\". The version picker in Setup Native/Python Binding recommends the newest qualified version and writes here.",
         type: "string",
         default: "latest",
         placeholder: "latest",
