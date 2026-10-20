@@ -11,7 +11,7 @@ import {
   evaluateCoreVersion,
   toSemver,
 } from "../session/coreQualification";
-import { computeNextAction } from "../session/environmentReport";
+import { computeNextAction, coreVerdictFor, type CoreReport } from "../session/environmentReport";
 
 suite("Supported-Core declaration (#95)", () => {
   test("is read from package.json graphforge.qualifiedCore and is a valid range", () => {
@@ -101,5 +101,17 @@ suite("Supported-Core declaration (#95)", () => {
     assert.match(computeNextAction(true, false, true, "node", warn), /^\[CORE_VERSION_UNQUALIFIED\]/);
     const ok = evaluateCoreVersion("node", "0.6.0");
     assert.match(computeNextAction(true, false, true, "node", ok), /Ready/);
+  });
+
+  test("with no project open, the runtime that would be selected supplies the verdict", () => {
+    const refused = evaluateCoreVersion("node", "0.4.9");
+    const core: CoreReport = { declared: QUALIFIED_CORE, node: refused };
+    assert.equal(coreVerdictFor(core, "none", "node"), refused);
+    assert.equal(coreVerdictFor(core, "none", undefined), undefined);
+    assert.equal(coreVerdictFor(core, "python", "node"), undefined);
+    // A refused open must not be answered with "open a project" again.
+    const action = computeNextAction(true, false, false, "none", coreVerdictFor(core, "none", "node"));
+    assert.match(action, /^\[CORE_VERSION_UNSUPPORTED\]/);
+    assert.doesNotMatch(action, /Open Project/);
   });
 });

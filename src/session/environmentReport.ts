@@ -52,6 +52,20 @@ export interface EnvironmentReport {
 
 export { QUALIFIED_CORE };
 
+/**
+ * Verdict for the runtime the next open will use: the active backend, or with
+ * none open the runtime `chooseRuntime` would select. Without the fallback a
+ * refused Core would be advised to "open a project" again (#95).
+ */
+export function coreVerdictFor(
+  core: CoreReport,
+  active: RuntimeKind | "none",
+  selected: RuntimeKind | undefined,
+): CoreQualification | undefined {
+  const runtime = active === "none" ? selected : active;
+  return runtime ? core[runtime] : undefined;
+}
+
 export function computeNextAction(
   nodeAvailable: boolean,
   pythonAvailable: boolean,

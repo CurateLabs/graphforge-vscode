@@ -5,12 +5,13 @@ import {
   EnvironmentReport,
   computeNextAction,
   formatSummaryLines,
+  coreVerdictFor,
 } from "../session/environmentReport";
 import { evaluateCoreVersion, QUALIFIED_CORE } from "../session/coreQualification";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { detectSiblingBindingPath, resetNativeCache } from "../session/nativeLoader";
 import { classifyInitTarget } from "../session/projectDetector";
-import { summarizeNodeUnavailable } from "../session/runtimeSelection";
+import { chooseRuntime, summarizeNodeUnavailable } from "../session/runtimeSelection";
 import { npmEngineSpec } from "../session/engineVersion";
 import { isCliAvailable, runGraphForgeCli } from "../session/graphforgeCli";
 import { pickEngineVersion } from "./engineVersionPick";
@@ -118,7 +119,11 @@ export async function buildEnvironmentReport(session: GraphForgeSession): Promis
   if (snapshot.python.available) {
     core.python = evaluateCoreVersion("python", snapshot.python.graphforgeVersion);
   }
-  const coreIssue = active === "none" ? undefined : core[active];
+  const coreIssue = coreVerdictFor(
+    core,
+    active,
+    chooseRuntime(snapshot.preference, snapshot.node, snapshot.python, snapshot.projectKind),
+  );
   return {
     runtime: {
       preference: snapshot.preference,
