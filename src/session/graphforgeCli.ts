@@ -29,6 +29,23 @@ export function isCliAvailable(): boolean {
 }
 
 /**
+ * Version of the loaded Core binding (`version()`), e.g. `0.6.0-rc.5`, or
+ * `undefined` when no binding is loaded or it predates `version()`.
+ */
+export function bindingVersion(): string | undefined {
+  const version = loadGraphForgeModule()?.version;
+  if (typeof version !== "function") {
+    return undefined;
+  }
+  try {
+    const value = version();
+    return typeof value === "string" && value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Resolve the packaged project-skills dir from an installed
  * `@curatelabs/graphforge-cli`, or `undefined` when the optional package isn't
  * present. The specifier is held in a variable so the bundler doesn't try to

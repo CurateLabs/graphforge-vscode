@@ -12,6 +12,7 @@ import { registerPower } from "./commands/power";
 import { registerProjectArtifacts } from "./commands/projectArtifacts";
 import { registerRunCli } from "./commands/runCli";
 import { registerCloneFromHub } from "./commands/cloneFromHub";
+import { registerPublishToHub } from "./commands/publishToHub";
 import { registerSetup } from "./commands/setup";
 import { registerSetupPython } from "./commands/setupPython";
 import { GraphForgeSession } from "./session/graphForgeSession";
@@ -78,6 +79,7 @@ export async function activate(
   registerPower(context, session);
   registerRunCli(context, session);
   registerCloneFromHub(context);
+  registerPublishToHub(context, session);
   registerOpenViews(context, session, refreshTrees);
   registerOpenSampleProject(context, session, refreshTrees);
   registerSetup(context, session, refreshTrees);

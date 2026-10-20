@@ -16,7 +16,7 @@ export const HUB_ORIGIN = "https://graphforge.sh";
 /** Same slug rule as the Hub's protocol identity (lowercase, ≤100 chars). */
 const SLUG = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/;
 const MAX_SLUG = 100;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface HubRepositoryIdentity {
   owner: string;
@@ -132,7 +132,7 @@ export function parseHubCloneUriQuery(query: string): HubCloneUriRequest | HubCl
   };
 }
 
-function invalidRepository(input: string): HubCloneFailure {
+export function invalidRepository(input: string): HubCloneFailure {
   return {
     error: `Not a GraphForge Hub repository: "${input}".`,
     code: "HUB_REPOSITORY_INVALID",
@@ -207,11 +207,11 @@ interface CoreCliError {
   error?: { code?: unknown; message?: unknown; details?: { semantic_code?: unknown } };
 }
 
-function asString(value: unknown): string | undefined {
+export function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function lastJsonLine(text: string): unknown {
+export function lastJsonLine(text: string): unknown {
   const lines = text.trim().split(/\r?\n/).filter((line) => line.trim().startsWith("{"));
   const line = lines.at(-1);
   if (!line) {
