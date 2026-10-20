@@ -715,6 +715,39 @@ suite("GraphForge agent interop — structured fail-closed results (no binding, 
   }
 });
 
+suite("Hub clone agent argument validation", () => {
+  suiteSetup(async () => {
+    await vscode.extensions.getExtension("CurateLabsAI.graphforge")!.activate();
+  });
+
+  for (const [label, args, code] of [
+    ["missing destination", { repository: "openalex/openalex" }, "HUB_CLONE_DESTINATION_REQUIRED"],
+    ["empty arguments", {}, "HUB_REPOSITORY_INVALID"],
+    ["empty destination", { repository: "openalex/openalex", destination: "" }, "HUB_CLONE_DESTINATION_REQUIRED"],
+    ["null arguments", null, "HUB_CLONE_ARGUMENTS_INVALID"],
+    ["string arguments", "openalex/openalex", "HUB_CLONE_ARGUMENTS_INVALID"],
+    ["number arguments", 42, "HUB_CLONE_ARGUMENTS_INVALID"],
+    ["array arguments", [], "HUB_CLONE_ARGUMENTS_INVALID"],
+    ["mistyped repository", { repository: 42 }, "HUB_CLONE_ARGUMENTS_INVALID"],
+    ["mistyped destination", { destination: false }, "HUB_CLONE_ARGUMENTS_INVALID"],
+    ["mistyped ref", { ref: [] }, "HUB_CLONE_ARGUMENTS_INVALID"],
+    ["mistyped version UUID", { versionUuid: null }, "HUB_CLONE_ARGUMENTS_INVALID"],
+    ["mistyped open", { open: "true" }, "HUB_CLONE_ARGUMENTS_INVALID"],
+  ] as const) {
+    test(`rejects ${label} without prompts or a native binding`, async function () {
+      this.timeout(5_000);
+      const result = await vscode.commands.executeCommand<{
+        error: string;
+        code: string;
+        nextAction: string;
+      }>("graphforge.cloneFromHub", args);
+      assert.equal(result?.code, code);
+      assert.equal(typeof result.error, "string");
+      assert.ok(result.nextAction.length > 0);
+    });
+  }
+});
+
 /**
  * NOT executed here — registration is covered above, but invoking these in
  * a headless test would either hang (they await a `showQuickPick` /
