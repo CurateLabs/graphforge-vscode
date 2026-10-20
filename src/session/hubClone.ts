@@ -50,6 +50,17 @@ export interface HubCloneFailure {
   nextAction: string;
 }
 
+/**
+ * Where Core and the destination storage actually run: the extension host,
+ * which in a remote/WSL/container window is not the machine showing the UI.
+ */
+export interface EngineHost {
+  /** `process.platform` of the extension host. */
+  platform: string;
+  /** `vscode.env.remoteName`; undefined for a local window. */
+  remoteName?: string;
+}
+
 export type HubCloneOutcome = HubCloneSuccess | HubCloneFailure;
 
 export function isHubCloneFailure<T extends object>(
@@ -214,7 +225,7 @@ function lastJsonLine(text: string): unknown {
 }
 
 /** Map one `runCli(["clone", …, "--json"])` result onto a clone outcome. */
-export function interpretHubCloneResult(result: CliRunResult): HubCloneOutcome {
+export function interpretHubCloneResult(result: CliRunResult, host?: EngineHost): HubCloneOutcome {
   if (result.exitCode === 0) {
     const receipt = lastJsonLine(result.stdout) as CoreCloneReceipt | undefined;
     const repository = asString(receipt?.repository);
@@ -259,7 +270,15 @@ export function interpretHubCloneResult(result: CliRunResult): HubCloneOutcome {
     asString(structured?.error?.details?.semantic_code) ?? asString(structured?.error?.code);
   const message = asString(structured?.error?.message);
   if (code && message) {
-    return { error: message, code, nextAction: nextActionForCoreCode(code, message) };
+    // The semantic code may replace the class code, so check both.
+    const codes = [code, asString(structured?.error?.code)];
+    return {
+      error: message,
+      code,
+      nextAction: codes.includes(UNSUPPORTED_FILESYSTEM)
+        ? unsupportedFilesystemAction(host)
+        : nextActionForCoreCode(code, message),
+    };
   }
   const text = result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`;
   return {
@@ -279,6 +298,57 @@ export function cloneUnsupported(): HubCloneFailure {
   };
 }
 
+const UNSUPPORTED_FILESYSTEM = "GF_UNSUPPORTED_FILESYSTEM";
+
+const REMOTE_LABELS: Record<string, string> = {
+  wsl: "WSL distribution",
+  "ssh-remote": "SSH host",
+  "dev-container": "dev container",
+  "attached-container": "container",
+  codespaces: "Codespace",
+  tunnel: "remote tunnel machine",
+};
+
+/** The machine Core runs on, named for the user (not the UI's OS). */
+function hostLabel(host?: EngineHost): string {
+  if (!host?.remoteName) {
+    return "this computer";
+  }
+  return `the ${REMOTE_LABELS[host.remoteName] ?? "remote host"}`;
+}
+
+function admittedVolumes(platform?: string): string {
+  switch (platform) {
+    case "linux":
+      return "a local ext4, XFS, or Btrfs volume";
+    case "darwin":
+      return "a local APFS volume";
+    case "win32":
+      return "a fixed, writable, local NTFS drive";
+    default:
+      return "a local volume your platform supports";
+  }
+}
+
+/**
+ * Guidance for Core's fail-closed filesystem admission. The platform list
+ * mirrors Core's contract (graphforge#2120) for the user; Core alone decides,
+ * so a supported filesystem name is not a promise that every mount passes.
+ */
+export function unsupportedFilesystemAction(host?: EngineHost): string {
+  const where = hostLabel(host);
+  const remote = host?.remoteName
+    ? ` GraphForge runs on ${where}, so choose a folder on that machine's storage, not the one showing the editor.`
+    : "";
+  return (
+    `GraphForge could not admit this destination for a durable project. On ${where}, choose a folder on ` +
+    `${admittedVolumes(host?.platform)}; network shares, RAM disks, and other unproven mounts are rejected.` +
+    " The volume may be mounted beneath any container or VM root; the root itself need not be supported." +
+    remote +
+    " Nothing was created at the destination. (An in-memory GraphForge session has no such requirement.)"
+  );
+}
+
 function nextActionForCoreCode(code: string, message: string): string {
   if (/hub\.(missing_ref|invalid_identity)|not.found|404/i.test(`${code} ${message}`)) {
     return "Check the repository name (and ref or version) on graphforge.sh.";
@@ -293,10 +363,11 @@ function nextActionForCoreCode(code: string, message: string): string {
 export function cloneFromHub(
   request: HubCloneRequest,
   runCli: (args: string[]) => CliRunResult,
+  host?: EngineHost,
 ): HubCloneOutcome {
   const args = buildHubCloneArgs(request);
   if (!Array.isArray(args)) {
     return args;
   }
-  return interpretHubCloneResult(runCli(args));
+  return interpretHubCloneResult(runCli(args), host);
 }

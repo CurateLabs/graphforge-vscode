@@ -140,7 +140,12 @@ async function runCloneFromHub(
   let outcome;
   try {
     outcome = await withEngineProgress(`Cloning ${repository}…`, async () =>
-      cloneFromHub(request, runGraphForgeCli),
+      // Core runs in this extension host, so its platform and remote name
+      // (not the UI's OS) decide which storage guidance applies.
+      cloneFromHub(request, runGraphForgeCli, {
+        platform: process.platform,
+        ...(vscode.env.remoteName ? { remoteName: vscode.env.remoteName } : {}),
+      }),
     );
   } catch (err) {
     logErrorDetail("clone from Hub failed", err);
