@@ -1,14 +1,17 @@
 import * as fs from "node:fs";
 import * as vscode from "vscode";
 import {
+  CoreReport,
   EnvironmentReport,
   computeNextAction,
   formatSummaryLines,
+  coreVerdictFor,
 } from "../session/environmentReport";
+import { evaluateCoreVersion, QUALIFIED_CORE } from "../session/coreQualification";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { detectSiblingBindingPath, resetNativeCache } from "../session/nativeLoader";
 import { classifyInitTarget } from "../session/projectDetector";
-import { summarizeNodeUnavailable } from "../session/runtimeSelection";
+import { chooseRuntime, summarizeNodeUnavailable } from "../session/runtimeSelection";
 import { npmEngineSpec } from "../session/engineVersion";
 import { isCliAvailable, runGraphForgeCli } from "../session/graphforgeCli";
 import { pickEngineVersion } from "./engineVersionPick";
@@ -109,6 +112,18 @@ export async function buildEnvironmentReport(session: GraphForgeSession): Promis
   const project = session.project;
   const projectOpen = Boolean(project);
   const active = snapshot.active ?? "none";
+  const core: CoreReport = { declared: QUALIFIED_CORE };
+  if (snapshot.node.available) {
+    core.node = evaluateCoreVersion("node", snapshot.node.version);
+  }
+  if (snapshot.python.available) {
+    core.python = evaluateCoreVersion("python", snapshot.python.graphforgeVersion);
+  }
+  const coreIssue = coreVerdictFor(
+    core,
+    active,
+    chooseRuntime(snapshot.preference, snapshot.node, snapshot.python, snapshot.projectKind),
+  );
   return {
     runtime: {
       preference: snapshot.preference,
@@ -120,13 +135,14 @@ export async function buildEnvironmentReport(session: GraphForgeSession): Promis
       error: snapshot.node.error,
     },
     python: snapshot.python,
+    core,
     project: {
       open: projectOpen,
       path: project?.rootPath,
       name: project?.name,
       ontologyMode: projectOpen ? await session.ontologyMode() : undefined,
     },
-    nextAction: computeNextAction(snapshot.node.available, snapshot.python.available, projectOpen, active),
+    nextAction: computeNextAction(snapshot.node.available, snapshot.python.available, projectOpen, active, coreIssue),
     timestamp: new Date().toISOString(),
   };
 }

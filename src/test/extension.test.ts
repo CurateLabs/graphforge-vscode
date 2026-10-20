@@ -613,11 +613,13 @@ const NO_PROJECT_STRUCTURED_RESULTS: ReadonlyArray<readonly [string, unknown]> =
   // CLI adoption (Part F) — no binding ⇒ CLI unavailable, fails closed with nextAction.
   ["graphforge.runCli", { args: ["status"] }],
   // Clone from Hub (#88) — agent call with a destination never prompts. No binding
-  // ⇒ CLI_UNAVAILABLE; a binding without `gf clone` ⇒ CLONE_UNSUPPORTED.
+  // ⇒ CLI_UNAVAILABLE; a binding without `gf clone` ⇒ CLONE_UNSUPPORTED. The
+  // repository does not exist, so a 0.6 binding with `gf clone` fails with a Hub
+  // error instead of downloading a real project.
   [
     "graphforge.cloneFromHub",
     {
-      repository: "openalex/openalex",
+      repository: "graphforge-ci/does-not-exist",
       destination: `${os.tmpdir()}/gf-clone-ci-${process.pid}-does-not-exist`,
     },
   ],
