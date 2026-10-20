@@ -159,7 +159,7 @@ export function buildHubPublishArgs(request: HubPublishRequest): string[] | HubP
  */
 export function requirePublishConfirmation(
   confirm: unknown,
-  request: { repository: string; ref?: string; versionUuid?: string },
+  request: { repository: string; projectPath?: string; ref?: string; versionUuid?: string },
 ): HubPublishFailure | undefined {
   if (confirm === true) {
     return undefined;
@@ -168,10 +168,13 @@ export function requirePublishConfirmation(
     request.versionUuid !== undefined
       ? `versionUuid: ${JSON.stringify(request.versionUuid)}`
       : `ref: ${JSON.stringify(request.ref ?? "")}`;
+  // Name the project explicitly so the retry cannot publish whichever one is open.
+  const project =
+    request.projectPath !== undefined ? `, projectPath: ${JSON.stringify(request.projectPath)}` : "";
   return {
     error: "Publishing to the Hub requires explicit { confirm: true }.",
     code: "CONFIRMATION_REQUIRED",
-    nextAction: `Call graphforge.publishToHub({ repository: ${JSON.stringify(request.repository)}, ${selection}, confirm: true }).`,
+    nextAction: `Call graphforge.publishToHub({ repository: ${JSON.stringify(request.repository)}, ${selection}${project}, confirm: true }).`,
   };
 }
 

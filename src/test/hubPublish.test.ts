@@ -144,6 +144,15 @@ suite("Hub publish (#91)", () => {
       assert.match(byVersion?.nextAction ?? "", new RegExp(`versionUuid: "${VERSION_UUID}"`));
     });
 
+    test("the suggested retry keeps the requested project", () => {
+      const gate = requirePublishConfirmation(undefined, {
+        repository: "openalex/demo",
+        projectPath: PROJECT,
+        ref: "main",
+      });
+      assert.match(gate?.nextAction ?? "", new RegExp(`projectPath: ${JSON.stringify(PROJECT)}, confirm: true`));
+    });
+
     test("confirm: true passes", () => {
       assert.equal(requirePublishConfirmation(true, { repository: "openalex/demo", ref: "main" }), undefined);
     });
