@@ -157,7 +157,11 @@ async function main() {
     fs.writeFileSync(reportPath, `${JSON.stringify(failed, null, 2)}\n`);
     throw error;
   } finally {
-    fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+    try {
+      fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+    } catch (cleanupError) {
+      console.warn(`Could not remove qualification work directory ${root}: ${cleanupError}`);
+    }
   }
 }
 
