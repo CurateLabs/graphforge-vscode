@@ -38,7 +38,7 @@ function receipt(extra: Record<string, unknown> = {}): string {
     operation_uuid: "00000000-0000-7000-8000-000000000001",
     previous_revision: null,
     refs: ["main"],
-    repository: { owner: "openalex", repository: "demo" },
+    repository: { owner: "opendata", repository: "demo" },
     request_commitment: `sha256:${"b".repeat(64)}`,
     revision: `sha256:${"c".repeat(64)}`,
     ...extra,
@@ -63,21 +63,21 @@ suite("Hub publish (#91)", () => {
   suite("buildHubPublishArgs", () => {
     test("builds Core's publish argv with --project, --json, and the selection flag", () => {
       assert.deepEqual(
-        buildHubPublishArgs({ repository: "openalex/demo", projectPath: PROJECT, ref: "main" }),
-        ["publish", "openalex/demo", "--project", PROJECT, "--json", "--ref", "main"],
+        buildHubPublishArgs({ repository: "opendata/demo", projectPath: PROJECT, ref: "main" }),
+        ["publish", "opendata/demo", "--project", PROJECT, "--json", "--ref", "main"],
       );
       assert.deepEqual(
         buildHubPublishArgs({
-          repository: "https://graphforge.sh/openalex/demo",
+          repository: "https://graphforge.sh/opendata/demo",
           projectPath: PROJECT,
           versionUuid: VERSION_UUID,
         }),
-        ["publish", "openalex/demo", "--project", PROJECT, "--json", "--version-uuid", VERSION_UUID],
+        ["publish", "opendata/demo", "--project", PROJECT, "--json", "--version-uuid", VERSION_UUID],
       );
     });
 
     test("never passes preview, notebook, app, or other file arguments", () => {
-      const args = buildHubPublishArgs({ repository: "openalex/demo", projectPath: PROJECT, ref: "main", previews: [] });
+      const args = buildHubPublishArgs({ repository: "opendata/demo", projectPath: PROJECT, ref: "main", previews: [] });
       assert.ok(Array.isArray(args));
       assert.ok(!args.some((arg) => arg === "--preview"));
       assert.equal(args.length, 7);
@@ -87,16 +87,16 @@ suite("Hub publish (#91)", () => {
       const cases: Array<[Parameters<typeof buildHubPublishArgs>[0], string]> = [
         [{ repository: "Not A Repo", projectPath: PROJECT, ref: "main" }, "HUB_REPOSITORY_INVALID"],
         [{ repository: "https://evil.example/a/b", projectPath: PROJECT, ref: "main" }, "HUB_REPOSITORY_INVALID"],
-        [{ repository: "openalex/demo", projectPath: "", ref: "main" }, "HUB_PUBLISH_PROJECT_REQUIRED"],
-        [{ repository: "openalex/demo", projectPath: "--json", ref: "main" }, "HUB_PUBLISH_PROJECT_REQUIRED"],
-        [{ repository: "openalex/demo", projectPath: PROJECT }, "HUB_PUBLISH_SELECTION_REQUIRED"],
+        [{ repository: "opendata/demo", projectPath: "", ref: "main" }, "HUB_PUBLISH_PROJECT_REQUIRED"],
+        [{ repository: "opendata/demo", projectPath: "--json", ref: "main" }, "HUB_PUBLISH_PROJECT_REQUIRED"],
+        [{ repository: "opendata/demo", projectPath: PROJECT }, "HUB_PUBLISH_SELECTION_REQUIRED"],
         [
-          { repository: "openalex/demo", projectPath: PROJECT, ref: "main", versionUuid: VERSION_UUID },
+          { repository: "opendata/demo", projectPath: PROJECT, ref: "main", versionUuid: VERSION_UUID },
           "HUB_PUBLISH_SELECTION_CONFLICT",
         ],
-        [{ repository: "openalex/demo", projectPath: PROJECT, ref: " " }, "HUB_PUBLISH_REF_INVALID"],
-        [{ repository: "openalex/demo", projectPath: PROJECT, ref: "--fork-of" }, "HUB_PUBLISH_REF_INVALID"],
-        [{ repository: "openalex/demo", projectPath: PROJECT, versionUuid: "v1" }, "HUB_PUBLISH_VERSION_INVALID"],
+        [{ repository: "opendata/demo", projectPath: PROJECT, ref: " " }, "HUB_PUBLISH_REF_INVALID"],
+        [{ repository: "opendata/demo", projectPath: PROJECT, ref: "--fork-of" }, "HUB_PUBLISH_REF_INVALID"],
+        [{ repository: "opendata/demo", projectPath: PROJECT, versionUuid: "v1" }, "HUB_PUBLISH_VERSION_INVALID"],
       ];
       for (const [request, code] of cases) {
         const outcome = buildHubPublishArgs(request);
@@ -108,7 +108,7 @@ suite("Hub publish (#91)", () => {
 
     test("fails closed on any preview selection until xyg#935 and a preview-capable Core ship", () => {
       const outcome = buildHubPublishArgs({
-        repository: "openalex/demo",
+        repository: "opendata/demo",
         projectPath: PROJECT,
         ref: "main",
         previews: ["chart.png", "chart.svg"],
@@ -132,13 +132,13 @@ suite("Hub publish (#91)", () => {
   suite("requirePublishConfirmation", () => {
     test("agent calls without confirm: true fail closed with CONFIRMATION_REQUIRED", () => {
       for (const confirm of [undefined, false, "true", 1]) {
-        const gate = requirePublishConfirmation(confirm, { repository: "openalex/demo", ref: "main" });
+        const gate = requirePublishConfirmation(confirm, { repository: "opendata/demo", ref: "main" });
         assert.ok(gate, String(confirm));
         assert.equal(gate.code, "CONFIRMATION_REQUIRED");
         assert.match(gate.nextAction, /graphforge\.publishToHub\(.*confirm: true/);
       }
       const byVersion = requirePublishConfirmation(undefined, {
-        repository: "openalex/demo",
+        repository: "opendata/demo",
         versionUuid: VERSION_UUID,
       });
       assert.match(byVersion?.nextAction ?? "", new RegExp(`versionUuid: "${VERSION_UUID}"`));
@@ -146,7 +146,7 @@ suite("Hub publish (#91)", () => {
 
     test("the suggested retry keeps the requested project", () => {
       const gate = requirePublishConfirmation(undefined, {
-        repository: "openalex/demo",
+        repository: "opendata/demo",
         projectPath: PROJECT,
         ref: "main",
       });
@@ -154,7 +154,7 @@ suite("Hub publish (#91)", () => {
     });
 
     test("confirm: true passes", () => {
-      assert.equal(requirePublishConfirmation(true, { repository: "openalex/demo", ref: "main" }), undefined);
+      assert.equal(requirePublishConfirmation(true, { repository: "opendata/demo", ref: "main" }), undefined);
     });
   });
 
@@ -162,7 +162,7 @@ suite("Hub publish (#91)", () => {
     test("maps the graphforge-hub-publish/1 receipt", () => {
       const outcome = interpretHubPublishResult(cli(0, receipt()));
       assert.deepEqual(outcome, {
-        repository: "openalex/demo",
+        repository: "opendata/demo",
         refs: ["main"],
         revision: `sha256:${"c".repeat(64)}`,
         previousRevision: null,
@@ -181,9 +181,9 @@ suite("Hub publish (#91)", () => {
     test("rejects a success without the expected contract or fields", () => {
       for (const stdout of [
         "",
-        "Published openalex/demo (main) at revision sha256:…\n",
+        "Published opendata/demo (main) at revision sha256:…\n",
         receipt({ format: "graphforge-hub-publish/2" }),
-        receipt({ repository: "openalex/demo" }),
+        receipt({ repository: "opendata/demo" }),
         receipt({ refs: "main" }),
         receipt({ revision: undefined }),
         receipt({ previous_revision: 7 }),
@@ -195,7 +195,7 @@ suite("Hub publish (#91)", () => {
     });
 
     test("passes Core's real credential-required error through with Core's next action", () => {
-      const outcome = interpretHubPublishResult(cli(2, "", REAL_CREDENTIAL_REQUIRED), "openalex/demo");
+      const outcome = interpretHubPublishResult(cli(2, "", REAL_CREDENTIAL_REQUIRED), "opendata/demo");
       assert.ok(isHubCloneFailure(outcome));
       assert.equal(outcome.code, "hub.publish.auth_denied");
       assert.equal(
@@ -227,7 +227,7 @@ suite("Hub publish (#91)", () => {
     test("maps Core's publish error codes, preferring the semantic code", () => {
       const cases: Array<[string, string, string | undefined, string, RegExp]> = [
         ["GF_VALIDATION", "validation error: hub.publish.auth_denied: the Hub refused the publish credential", "hub.publish.auth_denied", "hub.publish.auth_denied", /Refresh GRAPHFORGE_HUB_PUBLISH_TOKEN/],
-        ["GF_VALIDATION", "validation error: hub.publish.entitlement_denied: the Hub refused the publication entitlement", "hub.publish.entitlement_denied", "hub.publish.entitlement_denied", /may publish to openalex\/demo/],
+        ["GF_VALIDATION", "validation error: hub.publish.entitlement_denied: the Hub refused the publication entitlement", "hub.publish.entitlement_denied", "hub.publish.entitlement_denied", /may publish to opendata\/demo/],
         ["GF_VALIDATION", "validation error: hub.publish.ref_conflict: the repository changed", "hub.publish.ref_conflict", "hub.publish.ref_conflict", /Publish again/],
         ["GF_TRANSACTION_CONFLICT", "hub.publish.idempotency_conflict: the operation identity was already used", undefined, "hub.publish.idempotency_conflict", /already used/],
         ["GF_VALIDATION", "validation error: hub.publish.unsupported_future: newer", "hub.publish.unsupported_future", "hub.publish.unsupported_future", /Upgrade/],
@@ -236,7 +236,7 @@ suite("Hub publish (#91)", () => {
         ["GF_STORAGE", "network unavailable", undefined, "GF_STORAGE", /network/],
       ];
       for (const [klass, message, semantic, code, nextAction] of cases) {
-        const outcome = interpretHubPublishResult(cli(2, "", coreError(klass, message, semantic)), "openalex/demo");
+        const outcome = interpretHubPublishResult(cli(2, "", coreError(klass, message, semantic)), "opendata/demo");
         assert.ok(isHubCloneFailure(outcome), message);
         assert.equal(outcome.code, code, message);
         assert.equal(outcome.error, message);
@@ -284,7 +284,7 @@ suite("Hub publish (#91)", () => {
 
   test("publishToHub never calls Core for an invalid request", () => {
     let called = false;
-    const outcome = publishToHub({ repository: "openalex/demo", projectPath: PROJECT }, () => {
+    const outcome = publishToHub({ repository: "opendata/demo", projectPath: PROJECT }, () => {
       called = true;
       return cli(0, receipt());
     });
@@ -295,12 +295,12 @@ suite("Hub publish (#91)", () => {
 
   test("publishToHub runs Core with the built argv", () => {
     let seen: string[] = [];
-    const outcome = publishToHub({ repository: "openalex/demo", projectPath: PROJECT, ref: "main" }, (args) => {
+    const outcome = publishToHub({ repository: "opendata/demo", projectPath: PROJECT, ref: "main" }, (args) => {
       seen = args;
       return cli(0, receipt());
     });
-    assert.deepEqual(seen, ["publish", "openalex/demo", "--project", PROJECT, "--json", "--ref", "main"]);
+    assert.deepEqual(seen, ["publish", "opendata/demo", "--project", PROJECT, "--json", "--ref", "main"]);
     assert.ok(!isHubCloneFailure(outcome));
-    assert.equal(outcome.repository, "openalex/demo");
+    assert.equal(outcome.repository, "opendata/demo");
   });
 });

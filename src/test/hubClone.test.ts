@@ -16,7 +16,7 @@ const VERSION_UUID = "0193e4f6-7b2a-7c3d-8e4f-5a6b7c8d9e0f";
 function receipt(extra: Record<string, unknown> = {}): string {
   return `${JSON.stringify({
     contract: HUB_CLONE_CONTRACT,
-    repository: "openalex/openalex",
+    repository: "opendata/openalex",
     destination: "/tmp/openalex",
     immutable_version: `sha256:${"a".repeat(64)}`,
     package_digest: `sha256:${"b".repeat(64)}`,
@@ -33,8 +33,8 @@ function cli(exitCode: number, stdout = "", stderr = ""): CliRunResult {
 suite("Hub clone (#88)", () => {
   suite("parseHubRepository", () => {
     test("accepts owner/repo and canonical graphforge.sh URLs", () => {
-      assert.deepEqual(parseHubRepository("openalex/openalex"), {
-        owner: "openalex",
+      assert.deepEqual(parseHubRepository("opendata/openalex"), {
+        owner: "opendata",
         repository: "openalex",
       });
       assert.deepEqual(parseHubRepository(" https://graphforge.sh/acme/air-routes.v2/ "), {
@@ -46,7 +46,7 @@ suite("Hub clone (#88)", () => {
     test("rejects other hosts, uppercase, traversal, and extra segments", () => {
       for (const input of [
         "",
-        "openalex",
+        "opendata",
         "Owner/repo",
         "a/b/c",
         "../etc",
@@ -64,8 +64,8 @@ suite("Hub clone (#88)", () => {
 
   suite("parseHubCloneUriQuery", () => {
     test("maps repository, ref, and version", () => {
-      assert.deepEqual(parseHubCloneUriQuery("repository=openalex%2Fopenalex&ref=main"), {
-        repository: "openalex/openalex",
+      assert.deepEqual(parseHubCloneUriQuery("repository=opendata%2Fopenalex&ref=main"), {
+        repository: "opendata/openalex",
         ref: "main",
       });
       assert.deepEqual(
@@ -97,11 +97,11 @@ suite("Hub clone (#88)", () => {
     test("builds Core's clone argv with --json and the selection flag", () => {
       assert.deepEqual(
         buildHubCloneArgs({
-          repository: "https://graphforge.sh/openalex/openalex",
+          repository: "https://graphforge.sh/opendata/openalex",
           destination: "/tmp/openalex",
           ref: "main",
         }),
-        ["clone", "openalex/openalex", "/tmp/openalex", "--json", "--ref", "main"],
+        ["clone", "opendata/openalex", "/tmp/openalex", "--json", "--ref", "main"],
       );
       assert.deepEqual(
         buildHubCloneArgs({ repository: "a/b", destination: "/tmp/b", versionUuid: VERSION_UUID }),
@@ -125,7 +125,7 @@ suite("Hub clone (#88)", () => {
           cli(0, receipt({ research_version_uuid: VERSION_UUID, research_version_kind: "branch_head" })),
         ),
         {
-          repository: "openalex/openalex",
+          repository: "opendata/openalex",
           destination: "/tmp/openalex",
           immutableVersion: `sha256:${"a".repeat(64)}`,
           packageDigest: `sha256:${"b".repeat(64)}`,
@@ -296,7 +296,7 @@ suite("Hub clone (#88)", () => {
 
     test("cloneFromHub forwards the engine host to the mapping", () => {
       const outcome = cloneFromHub(
-        { repository: "openalex/openalex", destination: "/mnt/x/openalex" },
+        { repository: "opendata/openalex", destination: "/mnt/x/openalex" },
         () => cli(1, "", CORE_REJECTION),
         { platform: "win32" },
       );
@@ -317,11 +317,11 @@ suite("Hub clone (#88)", () => {
 
   test("cloneFromHub runs Core with the built argv", () => {
     let seen: string[] = [];
-    const outcome = cloneFromHub({ repository: "openalex/openalex", destination: "/tmp/openalex" }, (args) => {
+    const outcome = cloneFromHub({ repository: "opendata/openalex", destination: "/tmp/openalex" }, (args) => {
       seen = args;
       return cli(0, receipt());
     });
-    assert.deepEqual(seen, ["clone", "openalex/openalex", "/tmp/openalex", "--json"]);
+    assert.deepEqual(seen, ["clone", "opendata/openalex", "/tmp/openalex", "--json"]);
     assert.ok(!isHubCloneFailure(outcome));
   });
 });

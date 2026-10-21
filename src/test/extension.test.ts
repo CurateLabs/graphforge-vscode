@@ -628,11 +628,11 @@ const NO_PROJECT_STRUCTURED_RESULTS: ReadonlyArray<readonly [string, unknown]> =
   // Core: no binding ⇒ CLI_UNAVAILABLE; no `gf publish` ⇒ PUBLISH_UNSUPPORTED;
   // no project ⇒ HUB_PUBLISH_PROJECT_REQUIRED; no confirm ⇒ CONFIRMATION_REQUIRED;
   // previews ⇒ HUB_PUBLISH_PREVIEWS_UNAVAILABLE (xyg#935).
-  ["graphforge.publishToHub", { repository: "openalex/openalex", ref: "main" }],
+  ["graphforge.publishToHub", { repository: "opendata/openalex", ref: "main" }],
   [
     "graphforge.publishToHub",
     {
-      repository: "openalex/openalex",
+      repository: "opendata/openalex",
       ref: "main",
       previews: ["chart.png", "chart.svg"],
       confirm: true,
@@ -721,11 +721,11 @@ suite("Hub clone agent argument validation", () => {
   });
 
   for (const [label, args, code] of [
-    ["missing destination", { repository: "openalex/openalex" }, "HUB_CLONE_DESTINATION_REQUIRED"],
+    ["missing destination", { repository: "opendata/openalex" }, "HUB_CLONE_DESTINATION_REQUIRED"],
     ["empty arguments", {}, "HUB_REPOSITORY_INVALID"],
-    ["empty destination", { repository: "openalex/openalex", destination: "" }, "HUB_CLONE_DESTINATION_REQUIRED"],
+    ["empty destination", { repository: "opendata/openalex", destination: "" }, "HUB_CLONE_DESTINATION_REQUIRED"],
     ["null arguments", null, "HUB_CLONE_ARGUMENTS_INVALID"],
-    ["string arguments", "openalex/openalex", "HUB_CLONE_ARGUMENTS_INVALID"],
+    ["string arguments", "opendata/openalex", "HUB_CLONE_ARGUMENTS_INVALID"],
     ["number arguments", 42, "HUB_CLONE_ARGUMENTS_INVALID"],
     ["array arguments", [], "HUB_CLONE_ARGUMENTS_INVALID"],
     ["mistyped repository", { repository: 42 }, "HUB_CLONE_ARGUMENTS_INVALID"],
