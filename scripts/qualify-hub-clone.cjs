@@ -6,6 +6,19 @@ const path = require("node:path");
 const { createHash } = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 
+// The shipped code.cmd names the CLI's actual location, including versioned
+// application directories in recent Windows archives. Read it; never execute it.
+function resolveWindowsCli(executable, launcher) {
+  const match = /"%~dp0([^"\r\n]+\\resources\\app\\out\\cli\.js)"/i.exec(launcher);
+  assert.ok(match, "Packaged Windows launcher does not identify its CLI script");
+  const installation = path.win32.dirname(executable);
+  const cli = path.win32.resolve(installation, "bin", match[1]);
+  const relative = path.win32.relative(installation, cli);
+  assert.ok(relative !== ".." && !relative.startsWith("..\\") && !path.win32.isAbsolute(relative), "Windows CLI must be inside its installation");
+  return cli;
+}
+exports.resolveWindowsCli = resolveWindowsCli;
+
 // VS Code loads this same file as its test entrypoint. No source extension is loaded.
 exports.run = async function run() {
   const vscode = require("vscode");
@@ -27,6 +40,7 @@ exports.run = async function run() {
     report.coreVersion = require(binding).version();
     assert.equal(report.coreVersion, process.env.GRAPHFORGE_QUALIFICATION_CORE);
     report.vscodeVersion = vscode.version;
+    report.extensionHostNodeVersion = process.version;
     report.host = { platform: process.platform, arch: process.arch, release: os.release(), remoteName: vscode.env.remoteName ?? null };
     assert.equal(vscode.env.remoteName, undefined, "This lane qualifies a local extension host");
 
@@ -88,6 +102,7 @@ async function main() {
     vsixSha256: createHash("sha256").update(fs.readFileSync(vsix)).digest("hex"),
     requestedCore: coreVersion,
     requestedVSCode: vscodeVersion,
+    runnerNodeVersion: process.version,
     scope: "Local packaged-extension clone/open/query/close/reopen; not useful-result, remote-host, or publish-back qualification",
   };
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
@@ -102,9 +117,14 @@ async function main() {
     const profiles = [`--extensions-dir=${extensions}`, `--user-data-dir=${userData}`];
     // Invoke Electron's CLI script directly: Windows code.cmd goes through a shell
     // in the upstream helper, which splits paths containing spaces/metacharacters.
-    const cli = process.platform === "darwin"
-      ? path.resolve(path.dirname(executable), "..", "Resources", "app", "out", "cli.js")
-      : path.join(path.dirname(executable), "resources", "app", "out", "cli.js");
+    const cli = process.platform === "win32"
+      ? resolveWindowsCli(executable, fs.readFileSync(path.join(path.dirname(executable), "bin", "code.cmd"), "utf8"))
+      : process.platform === "darwin"
+        ? path.resolve(path.dirname(executable), "..", "Resources", "app", "out", "cli.js")
+        : path.join(path.dirname(executable), "resources", "app", "out", "cli.js");
+    assert.ok(fs.statSync(cli).isFile(), "Packaged VS Code CLI script is missing");
+    report.cliRelativePath = path.relative(path.dirname(executable), cli);
+    fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
     execFileSync(executable, [cli, ...profiles, "--install-extension", vsix, "--force", "--no-sandbox"], {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
       stdio: "inherit",

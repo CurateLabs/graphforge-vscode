@@ -38,6 +38,9 @@ jobs:
       - name: Type check
         run: npm run check
 
+      - name: Qualification runner regression tests
+        run: node --test scripts/qualify-hub-clone.test.cjs
+
       - name: Compile
         run: npm run compile
 
@@ -126,7 +129,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install test runner dependencies
