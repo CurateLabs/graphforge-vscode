@@ -21,9 +21,25 @@ export function normalizeEngineVersion(raw: string | undefined | null): string |
   return value;
 }
 
+/**
+ * The setting is shared by both wizards, so a Python pick may have saved the
+ * PEP 440 spelling (`0.6.0rc5`). npm needs semver (`0.6.0-rc.5`); uv/pip accept
+ * either, so only the npm side converts.
+ */
+function toNpmVersion(version: string): string {
+  const pep = /^v?(\d+\.\d+\.\d+)\.?(a|b|rc|alpha|beta)\.?(\d+)$/i.exec(version);
+  if (!pep) {
+    return version;
+  }
+  const raw = pep[2].toLowerCase();
+  const tag = raw === "a" ? "alpha" : raw === "b" ? "beta" : raw;
+  return `${pep[1]}-${tag}.${pep[3]}`;
+}
+
 /** npm install spec: `@curatelabs/graphforge@0.5.1` or `@curatelabs/graphforge@latest`. */
 export function npmEngineSpec(raw: string | undefined | null): string {
-  return `@curatelabs/graphforge@${normalizeEngineVersion(raw) ?? LATEST}`;
+  const version = normalizeEngineVersion(raw);
+  return `@curatelabs/graphforge@${version ? toNpmVersion(version) : LATEST}`;
 }
 
 /** PyPI requirement for uv: `graphforge==0.5.1` when pinned, else bare `graphforge`. */

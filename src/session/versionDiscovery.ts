@@ -6,7 +6,14 @@
  * cache, and a static fallback so the picker never blocks or dead-ends offline
  * — the "Pin a version…" free-text path always works regardless. `fetchImpl` /
  * `now` are injectable so the unit tests never touch the network.
+ *
+ * The offline fallback and the picker's qualification labels both derive from
+ * the supported-Core declaration (`graphforge.qualifiedCore`, #95), so bumping
+ * that range is the only edit a new Core needs here.
  */
+
+import * as semver from "semver";
+import { evaluateCoreVersion, QUALIFIED_CORE, toSemver, type QualifiedCoreDeclaration } from "./coreQualification";
 
 export type DiscoverTarget = "npm" | "pypi";
 
@@ -19,9 +26,6 @@ export interface VersionDiscovery {
   /** Human-facing reason when `source === "fallback"`; surfaced in the picker. */
   note?: string;
 }
-
-/** Last-resort list when the registry is unreachable (keep newest-first). */
-const FALLBACK_VERSIONS = ["0.5.1", "0.5.0"];
 
 const REGISTRY_URL: Record<DiscoverTarget, string> = {
   npm: "https://registry.npmjs.org/@curatelabs/graphforge",
@@ -45,10 +49,16 @@ export function resetVersionDiscoveryCache(): void {
 }
 
 /**
- * Compare two dotted versions descending (newest first). Non-numeric / prerelease
- * segments sort after their numeric base; unknown shapes fall back to string order.
+ * Compare two versions descending (newest first). semver and PEP 440
+ * pre-releases (`0.6.0-rc.5`, `0.6.0rc5`) use semver precedence; other shapes
+ * compare segment-wise, prerelease after its numeric base, else string order.
  */
 export function compareVersionsDesc(a: string, b: string): number {
+  const sa = toSemver(a);
+  const sb = toSemver(b);
+  if (sa && sb) {
+    return semver.rcompare(sa, sb);
+  }
   const parse = (v: string) => v.split(/[.+-]/).map((p) => (/^\d+$/.test(p) ? Number(p) : p));
   const pa = parse(a);
   const pb = parse(b);
@@ -65,8 +75,74 @@ export function compareVersionsDesc(a: string, b: string): number {
   return 0;
 }
 
-function fallback(note: string): VersionDiscovery {
-  return { versions: [...FALLBACK_VERSIONS], latest: FALLBACK_VERSIONS[0], source: "fallback", note };
+/** `0.6.0-rc.5` -> `0.6.0rc5` (PyPI spelling); releases pass through. */
+function toPep440(version: string): string {
+  const pre = /^(\d+\.\d+\.\d+)-(alpha|beta|rc)\.(\d+)$/.exec(version);
+  if (!pre) {
+    return version;
+  }
+  const tag = pre[2] === "alpha" ? "a" : pre[2] === "beta" ? "b" : "rc";
+  return `${pre[1]}${tag}${pre[3]}`;
+}
+
+/**
+ * Last-resort list when the registry is unreachable: the lowest version the
+ * qualified range admits, spelled for the target registry. Never a stale
+ * hand-kept list.
+ */
+export function fallbackVersions(
+  target: DiscoverTarget,
+  declaration: QualifiedCoreDeclaration = QUALIFIED_CORE,
+): string[] {
+  const floor = semver.minVersion(declaration.range)?.version;
+  if (!floor) {
+    return [];
+  }
+  return [target === "pypi" ? toPep440(floor) : floor];
+}
+
+function fallback(target: DiscoverTarget, note: string): VersionDiscovery {
+  // `latest` stays unknown: "Latest" installs the registry's tag, not this fallback.
+  return { versions: fallbackVersions(target), source: "fallback", note };
+}
+
+export type VersionStatus = "qualified" | "unqualified" | "unsupported";
+
+export interface VersionChoice {
+  version: string;
+  status: VersionStatus;
+  isLatest: boolean;
+}
+
+export interface VersionChoices {
+  /** Newest version inside the qualified range, when discovery found one. */
+  recommended?: string;
+  /** Status of the registry's `latest`, so "Latest" can say when it is not qualified. */
+  latestStatus?: VersionStatus;
+  /** Newest-first, with versions below `refuseBelow` removed (Pin still reaches them). */
+  choices: VersionChoice[];
+  /** How many refused versions were hidden. */
+  hidden: number;
+}
+
+/** Label discovered versions against the qualified range for the picker. Pure. */
+export function versionChoices(
+  discovery: VersionDiscovery,
+  declaration: QualifiedCoreDeclaration = QUALIFIED_CORE,
+): VersionChoices {
+  const status = (v: string): VersionStatus => evaluateCoreVersion("node", v, declaration).status;
+  const all = discovery.versions.map<VersionChoice>((version) => ({
+    version,
+    status: status(version),
+    isLatest: version === discovery.latest,
+  }));
+  const choices = all.filter((c) => c.status !== "unsupported");
+  return {
+    recommended: choices.find((c) => c.status === "qualified")?.version,
+    latestStatus: discovery.latest ? status(discovery.latest) : undefined,
+    choices,
+    hidden: all.length - choices.length,
+  };
 }
 
 function parseNpm(json: unknown): { latest?: string; versions: string[] } {
@@ -93,7 +169,7 @@ export async function discoverEngineVersions(
 
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
   if (typeof fetchImpl !== "function") {
-    return fallback("Version discovery unavailable in this runtime.");
+    return fallback(target, "Version discovery unavailable in this runtime.");
   }
 
   const controller = new AbortController();
@@ -101,12 +177,12 @@ export async function discoverEngineVersions(
   try {
     const res = await fetchImpl(REGISTRY_URL[target], { signal: controller.signal });
     if (!res.ok) {
-      return fallback(`Registry returned HTTP ${res.status}; showing known versions.`);
+      return fallback(target, `Registry returned HTTP ${res.status}; showing the qualified Core version.`);
     }
     const json = (await res.json()) as unknown;
     const { latest, versions } = target === "npm" ? parseNpm(json) : parsePypi(json);
     if (versions.length === 0) {
-      return fallback("Registry listed no versions; showing known versions.");
+      return fallback(target, "Registry listed no versions; showing the qualified Core version.");
     }
     const value: VersionDiscovery = {
       latest,
@@ -117,7 +193,7 @@ export async function discoverEngineVersions(
     return value;
   } catch (err) {
     const reason = err instanceof Error && err.name === "AbortError" ? "timed out" : "failed";
-    return fallback(`Version discovery ${reason}; showing known versions.`);
+    return fallback(target, `Version discovery ${reason}; showing the qualified Core version.`);
   } finally {
     clearTimeout(timer);
   }

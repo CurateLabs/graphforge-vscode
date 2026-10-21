@@ -610,7 +610,7 @@
         "graphforge.engineVersion": {
           "type": "string",
           "default": "latest",
-          "description": "Which graphforge engine version the Setup wizards install — npm @curatelabs/graphforge for Node, PyPI graphforge for Python. Use \"latest\" or a specific version like \"0.5.1\". The version picker in Setup Native/Python Binding writes here."
+          "description": "Which graphforge engine version the Setup wizards install — npm @curatelabs/graphforge for Node, PyPI graphforge for Python. Use \"latest\" (whatever the registry tags latest, which may be outside `graphforge.qualifiedCore`) or a specific version like \"0.6.0-rc.5\". The version picker in Setup Native/Python Binding recommends the newest qualified version and writes here."
         },
         "graphforge.pythonInterpreterPath": {
           "type": "string",
