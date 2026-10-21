@@ -665,6 +665,7 @@
     "bench:run": "node dist/bench/index.mjs",
     "benchmark:visualizations": "node scripts/benchmark-visualizations.mjs",
     "verify:package": "node scripts/verify-package-contents.mjs",
+    "qualify:hub-clone": "node scripts/qualify-hub-clone.cjs",
     "package": "vsce package"
   },
   "dependencies": {
