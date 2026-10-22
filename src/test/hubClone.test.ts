@@ -139,7 +139,8 @@ suite("Hub clone (#88)", () => {
       assert.equal(warning.producingCoreVersion, coreWarning.producing_core_version);
       assert.equal(warning.runningCoreVersion, coreWarning.running_core_version);
       assert.match(warning.nextAction, /graphforge.engineVersion to 0\.6\.0-rc\.4/);
-      assert.match(warning.nextAction, /matching Python environment/);
+      assert.match(warning.nextAction, /clone with a matching Node Core/);
+      assert.match(warning.nextAction, /To open the cloned project with Python, select a matching Python environment/);
     });
 
     test("keeps warnings alongside a Core error without changing the error", () => {

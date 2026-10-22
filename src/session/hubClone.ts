@@ -246,7 +246,7 @@ function coreWarnings(value: unknown): { warnings?: HubCloneWarning[] } {
       ...(producingCoreVersion ? { producingCoreVersion } : {}),
       ...(runningCoreVersion ? { runningCoreVersion } : {}),
       nextAction: code === "GF_CORE_VERSION_MISMATCH" && producingCoreVersion
-        ? `Set graphforge.engineVersion to ${producingCoreVersion} and run GraphForge: Setup Native Binding, or select a matching Python environment.`
+        ? `To clone with a matching Node Core, set graphforge.engineVersion to ${producingCoreVersion} and run GraphForge: Setup Native Binding. To open the cloned project with Python, select a matching Python environment.`
         : "Follow the GraphForge Core warning's guidance.",
     });
   }
