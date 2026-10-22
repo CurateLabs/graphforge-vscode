@@ -9,6 +9,7 @@ import {
   parseHubCloneUriQuery,
   parseHubRepository,
   type HubCloneSuccess,
+  type HubCloneFailure,
 } from "../session/hubClone";
 import { CommandOutcome, logErrorDetail, withEngineProgress } from "./shared";
 
@@ -185,6 +186,13 @@ async function runCloneFromHub(
       nextAction: "See the GraphForge Errors output for details, then retry.",
     };
   }
+  if (interactive) {
+    for (const warning of outcome.warnings ?? []) {
+      void vscode.window.showWarningMessage(
+        `GraphForge: ${warning.code}: ${warning.message} ${warning.nextAction}`,
+      );
+    }
+  }
   if (isHubCloneFailure(outcome)) {
     return reportFailure(outcome, interactive);
   }
@@ -205,9 +213,9 @@ async function runCloneFromHub(
 }
 
 function reportFailure(
-  failure: { error: string; code: string; nextAction: string },
+  failure: HubCloneFailure,
   interactive: boolean,
-): { error: string; code: string; nextAction: string } {
+): HubCloneFailure {
   // Agents read the structured outcome; humans get a toast without blocking it.
   if (interactive) {
     void vscode.window.showErrorMessage(`GraphForge: ${failure.error} ${failure.nextAction}`);

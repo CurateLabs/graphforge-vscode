@@ -115,8 +115,15 @@ presented as an error with its code); other out-of-range or unparsable versions 
 warning (`CORE_VERSION_UNQUALIFIED`) and continue. `buildEnvironmentReport` exposes the declaration
 and per-runtime verdicts under `core`, and a non-qualified active runtime leads `nextAction`; agent
 context embeds the same report. The check is a single version comparison - Core's data/format and
-Hub version errors (Core #1769/#1936) pass through untouched, per ADR 0054 and consistent with
-xyg#936.
+Hub version errors and warnings (Core #1769/#1936) pass through, per ADR 0054 and consistent
+with xyg#936. Clone outcomes retain Core's `warnings` from both successful receipts and error
+documents. `GF_CORE_VERSION_MISMATCH` keeps Core's code/message and producing/running versions,
+with guidance to choose `graphforge.engineVersion` and rerun Setup Native Binding for another
+clone. A matching Python environment can open the cloned project afterward; cloning itself uses
+the Node binding. Interactive clones display these warnings; agent calls receive them
+in the structured outcome. The extension does not compare the data's versions itself or refuse a
+clone because Core warned. Live qualification of this warning still needs a published Core binding
+containing Core #1936; the `0.6.0-rc.5` npm candidate predates that change.
 
 ### Project-kind detection (auto Python-prefer rule)
 

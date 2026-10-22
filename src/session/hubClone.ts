@@ -42,12 +42,23 @@ export interface HubCloneSuccess {
   generationUuid: string;
   researchVersionUuid?: string;
   researchVersionKind?: string;
+  warnings?: HubCloneWarning[];
+}
+
+/** Core decides whether a version mismatch warrants a warning (#1936). */
+export interface HubCloneWarning {
+  code: string;
+  message: string;
+  producingCoreVersion?: string;
+  runningCoreVersion?: string;
+  nextAction: string;
 }
 
 export interface HubCloneFailure {
   error: string;
   code: string;
   nextAction: string;
+  warnings?: HubCloneWarning[];
 }
 
 /**
@@ -193,6 +204,7 @@ export function buildHubCloneArgs(request: HubCloneRequest): string[] | HubClone
 }
 
 interface CoreCloneReceipt {
+  warnings?: unknown;
   contract?: unknown;
   repository?: unknown;
   destination?: unknown;
@@ -205,10 +217,40 @@ interface CoreCloneReceipt {
 
 interface CoreCliError {
   error?: { code?: unknown; message?: unknown; details?: { semantic_code?: unknown } };
+  warnings?: unknown;
 }
 
 export function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function coreWarnings(value: unknown): { warnings?: HubCloneWarning[] } {
+  if (!Array.isArray(value)) {
+    return {};
+  }
+  const warnings: HubCloneWarning[] = [];
+  for (const item of value) {
+    if (item === null || typeof item !== "object") {
+      continue;
+    }
+    const code = asString(item.code);
+    const message = asString(item.message);
+    if (!code || !message) {
+      continue;
+    }
+    const producingCoreVersion = asString(item.producing_core_version);
+    const runningCoreVersion = asString(item.running_core_version);
+    warnings.push({
+      code,
+      message,
+      ...(producingCoreVersion ? { producingCoreVersion } : {}),
+      ...(runningCoreVersion ? { runningCoreVersion } : {}),
+      nextAction: code === "GF_CORE_VERSION_MISMATCH" && producingCoreVersion
+        ? `To clone with a matching Node Core, set graphforge.engineVersion to ${producingCoreVersion} and run GraphForge: Setup Native Binding. To open the cloned project with Python, select a matching Python environment.`
+        : "Follow the GraphForge Core warning's guidance.",
+    });
+  }
+  return warnings.length > 0 ? { warnings } : {};
 }
 
 export function lastJsonLine(text: string): unknown {
@@ -233,6 +275,7 @@ export function interpretHubCloneResult(result: CliRunResult, host?: EngineHost)
     const immutableVersion = asString(receipt?.immutable_version);
     const packageDigest = asString(receipt?.package_digest);
     const generationUuid = asString(receipt?.generation_uuid);
+    const warnings = coreWarnings(receipt?.warnings);
     if (
       receipt?.contract !== HUB_CLONE_CONTRACT ||
       !repository ||
@@ -245,6 +288,7 @@ export function interpretHubCloneResult(result: CliRunResult, host?: EngineHost)
         error: `GraphForge clone succeeded but did not return a ${HUB_CLONE_CONTRACT} receipt.`,
         code: "HUB_CLONE_RECEIPT_INVALID",
         nextAction: "Check that @curatelabs/graphforge matches the version this extension supports.",
+        ...warnings,
       };
     }
     const researchVersionUuid = asString(receipt.research_version_uuid);
@@ -257,6 +301,7 @@ export function interpretHubCloneResult(result: CliRunResult, host?: EngineHost)
       generationUuid,
       ...(researchVersionUuid ? { researchVersionUuid } : {}),
       ...(researchVersionKind ? { researchVersionKind } : {}),
+      ...warnings,
     };
   }
 
@@ -264,6 +309,7 @@ export function interpretHubCloneResult(result: CliRunResult, host?: EngineHost)
     return cloneUnsupported();
   }
   const structured = lastJsonLine(result.stderr) as CoreCliError | undefined;
+  const warnings = coreWarnings(structured?.warnings);
   // Core's semantic code (e.g. `hub.missing_ref`) is more specific than its
   // error class (e.g. `GF_VALIDATION`), so prefer it when present.
   const code =
@@ -278,6 +324,7 @@ export function interpretHubCloneResult(result: CliRunResult, host?: EngineHost)
       nextAction: codes.includes(UNSUPPORTED_FILESYSTEM)
         ? unsupportedFilesystemAction(host)
         : nextActionForCoreCode(code, message),
+      ...warnings,
     };
   }
   const text = result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`;
@@ -285,6 +332,7 @@ export function interpretHubCloneResult(result: CliRunResult, host?: EngineHost)
     error: `GraphForge clone failed: ${text}`,
     code: "HUB_CLONE_FAILED",
     nextAction: "Check the repository name and your network connection, then retry.",
+    ...warnings,
   };
 }
 

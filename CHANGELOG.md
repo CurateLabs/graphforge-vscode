@@ -6,6 +6,7 @@ All notable changes to the GraphForge VS Code extension are documented here.
 
 ### Fixed
 
+- Hub clones retain Core's structured warnings on success and failure. A `GF_CORE_VERSION_MISMATCH` warning reaches agents in the command result and users in a warning notification, with the producing/running versions and matching-runtime guidance; a warning alone does not turn a completed clone into a failure.
 - Setup's engine version picker recommends the newest qualified Core (`graphforge.qualifiedCore`) instead of leading with the registry's `latest` tag, which currently points at a Core that cannot clone. Versions are labelled qualified / not qualified, refused versions are hidden, and the offline fallback derives from the qualified range.
 
 ## 0.1.3
