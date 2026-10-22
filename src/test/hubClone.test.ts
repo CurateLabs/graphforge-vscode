@@ -119,6 +119,58 @@ suite("Hub clone (#88)", () => {
   });
 
   suite("interpretHubCloneResult", () => {
+    // Core a0902def (#1936/#2208): CoreVersionWarning is carried inside the
+    // single --json result/error document, including successful clones.
+    const coreWarning = {
+      code: "GF_CORE_VERSION_MISMATCH",
+      producing_core_version: "0.6.0-rc.4",
+      running_core_version: "0.6.0-rc.5",
+      message: "data was produced by GraphForge Core 0.6.0-rc.4, but this is Core 0.6.0-rc.5; it may not read correctly. Use a matching runtime: `python -m pip install graphforge==0.6.0-rc.4`, `npm install @curatelabs/graphforge@0.6.0-rc.4`, or `npx @curatelabs/graphforge-cli@0.6.0-rc.4`",
+    };
+
+    test("keeps a successful clone's Core version warning and matching-runtime guidance", () => {
+      const outcome = interpretHubCloneResult(cli(0, receipt({ warnings: [coreWarning] })));
+      assert.ok(!isHubCloneFailure(outcome));
+      assert.equal(outcome.destination, "/tmp/openalex");
+      assert.equal(outcome.warnings?.length, 1);
+      const warning = outcome.warnings[0];
+      assert.equal(warning.code, coreWarning.code);
+      assert.equal(warning.message, coreWarning.message);
+      assert.equal(warning.producingCoreVersion, coreWarning.producing_core_version);
+      assert.equal(warning.runningCoreVersion, coreWarning.running_core_version);
+      assert.match(warning.nextAction, /graphforge.engineVersion to 0\.6\.0-rc\.4/);
+      assert.match(warning.nextAction, /matching Python environment/);
+    });
+
+    test("keeps warnings alongside a Core error without changing the error", () => {
+      const outcome = interpretHubCloneResult(cli(1, "", JSON.stringify({
+        error: { code: "GF_UNSUPPORTED_PROJECT_FORMAT", message: "project format is unreadable" },
+        warnings: [coreWarning],
+      })));
+      assert.ok(isHubCloneFailure(outcome));
+      assert.equal(outcome.code, "GF_UNSUPPORTED_PROJECT_FORMAT");
+      assert.equal(outcome.error, "project format is unreadable");
+      assert.equal(outcome.warnings?.[0]?.message, coreWarning.message);
+    });
+
+    test("leaves version detection to Core and preserves other structured warnings", () => {
+      const outcome = interpretHubCloneResult(cli(0, receipt({ warnings: [
+        { ...coreWarning, producing_core_version: coreWarning.running_core_version },
+        { code: "GF_FUTURE_WARNING", message: "Core guidance" },
+      ] })));
+      assert.ok(!isHubCloneFailure(outcome));
+      assert.equal(outcome.warnings?.length, 2);
+      assert.equal(outcome.warnings[1].code, "GF_FUTURE_WARNING");
+      assert.equal(outcome.warnings[1].message, "Core guidance");
+    });
+
+    test("accepts older receipts and ignores malformed optional warnings", () => {
+      const expected = interpretHubCloneResult(cli(0, receipt()));
+      for (const warnings of [[], null, {}, [null, 1, "warning", {}, { code: "MISSING_MESSAGE" }]]) {
+        assert.deepEqual(interpretHubCloneResult(cli(0, receipt({ warnings }))), expected);
+      }
+    });
+
     test("maps the graphforge-hub-clone/1 receipt", () => {
       assert.deepEqual(
         interpretHubCloneResult(
