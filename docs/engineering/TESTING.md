@@ -38,7 +38,8 @@ ext4/XFS/Btrfs guidance naming "the dev container"), not the desktop UI's (APFS)
 local-only and not wired into CI: GitHub macOS runners have no Docker, and the point is a
 non-Linux UI host driving a Linux engine. Linux CI already covers a Linux UI host.
 
-Prerequisites: a desktop macOS or Linux host with Docker running, and network access to
+Prerequisites: a macOS desktop with Docker Desktop running (its named volumes are ext4 and its
+folder sharing is a non-admitted virtiofs mount, which the runner asserts), and network access to
 npm, VS Code downloads, the Marketplace (Dev Containers), the container registry, and
 `graphforge.sh`. Run it through npm, with a candidate VSIX and an evidence directory outside
 the repository:

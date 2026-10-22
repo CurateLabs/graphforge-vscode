@@ -39,7 +39,8 @@ function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, 
 }
 Object.assign(exports, { devContainerAuthority, remoteUri, containerFilter, buildDevcontainerConfig });
 
-const docker = (...args) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+// Bounded so an unresponsive daemon cannot stall the watchdog or cleanup.
+const docker = (...args) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 });
 const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
 
@@ -51,7 +52,8 @@ async function main() {
   const watchdogMs = 25 * 60 * 1000;
   assert.ok(fs.statSync(vsix).isFile(), "Pass an existing packaged VSIX");
   assert.ok(process.env.npm_execpath, "Run through npm run qualify:hub-clone:dev-container -- <vsix> <evidence-directory>");
-  assert.notEqual(process.platform, "win32", "The Dev Container lane runs from a macOS or Linux desktop");
+  // The mount expectations (ext4 volume, non-admitted virtiofs bind mount) are Docker Desktop on macOS.
+  assert.equal(process.platform, "darwin", "The Dev Container lane runs from a macOS desktop with Docker Desktop");
   const dockerServer = JSON.parse(docker("version", "--format", "json")).Server;
   const dockerPath = execFileSync("which", ["docker"], { encoding: "utf8" }).trim();
   fs.mkdirSync(evidence, { recursive: true });
