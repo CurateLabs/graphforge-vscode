@@ -24,10 +24,56 @@ npm run qualify:hub-clone -- /absolute/path/candidate.vsix /absolute/path/eviden
 
 The current `openalex/openalex` fixture may be metadata-only. The test records its
 actual node count and requires an identical result after reopen; a zero count
-does not qualify #95's useful-result journey. These are local extension-host
-checks: remote/WSL/container identity, a separate admitted volume beneath an
-unsupported process root, useful rendering, and authenticated publish-back need
-their own actual-host evidence. No runtime filesystem probe or fallback is added.
+does not qualify #95's useful-result journey. These are extension-host storage and
+identity checks: useful rendering and authenticated publish-back still need their
+own actual-host evidence. The Dev Container lane below is the qualified remote host; WSL,
+SSH, and tunnel sessions use the same `remoteName` path and are covered by unit tests only.
+No runtime filesystem probe or fallback is added.
+
+### Remote extension host (Dev Container) lane
+
+This proves that in a remote session the extension identifies the host where Core and
+the destination actually run, and applies that host's storage rules (Linux
+ext4/XFS/Btrfs guidance naming "the dev container"), not the desktop UI's (APFS). It is
+local-only and not wired into CI: GitHub macOS runners have no Docker, and the point is a
+non-Linux UI host driving a Linux engine. Linux CI already covers a Linux UI host.
+
+Prerequisites: a desktop macOS or Linux host with Docker running, and network access to
+npm, VS Code downloads, the Marketplace (Dev Containers), the container registry, and
+`graphforge.sh`. Run it through npm, with a candidate VSIX and an evidence directory outside
+the repository:
+
+```sh
+npm run qualify:hub-clone:dev-container -- /absolute/path/candidate.vsix /absolute/path/evidence
+```
+
+The container uses Docker's native architecture. Set
+`GRAPHFORGE_QUALIFICATION_DOCKER_PLATFORM=linux/amd64` to run the engine host as Linux
+x64 instead (emulated on Apple silicon); the report records the platform. On Apple silicon
+the native `linux-arm64-gnu` Core `0.6.0-rc.5` build currently fails the Hub clone with
+`hub.network` while x64 succeeds from the same host (#94 evidence). A native arm64 run
+therefore ends `status: "failed"` at the clone step after its storage rejections pass; set
+the x64 platform for a passing report until Core fixes that build.
+
+The driver installs the VSIX and `ms-vscode-remote.remote-containers` into a fresh VS Code
+1.142.0 profile, writes a throwaway `devcontainer.json` (Node 22 image, `node` user, Core
+`0.6.0-rc.5` installed in the container, a new Docker named volume at `/gfwork`), and
+opens that folder as a `dev-container+<hex>` remote URI. This runner file is the test
+entrypoint inside the remote extension host. It requires `remoteName` to be
+`dev-container` and the destination parent to be an admitted ext4 volume beneath a
+different root filesystem, then runs clone, open, query, close, durable reopen, and the same
+query again. Real `/dev/shm` (tmpfs) and macOS bind-mount (virtiofs) destinations must each
+fail with `GF_UNSUPPORTED_FILESYSTEM`, Linux guidance naming the dev container, no
+APFS/NTFS text, and no destination left behind. A failure of the bind-mount check is a Core
+finding, not something to relax in the runner.
+
+The report records the VSIX digest, versions (VS Code, Dev Containers, Core), UI host and
+extension-host platform/arch/uid, statfs types, both rejections, clone identity, and node
+counts. There is no CI artifact, so attach `report.json` to the tracking issue. The driver
+removes its container (by Dev Containers label), volume, and work directory on exit, whether the
+run passes or fails; the 25-minute watchdog removes the container to unblock a hung window.
+`ELECTRON_RUN_AS_NODE` is cleared for the VS Code launch. Same fixture caveat: a zero node count is
+storage and identity evidence, not #95 useful-result evidence.
 
 ## Local gates
 

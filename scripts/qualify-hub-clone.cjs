@@ -26,6 +26,9 @@ exports.run = async function run() {
   const reportPath = process.env.GRAPHFORGE_QUALIFICATION_REPORT;
   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
   const command = (id, args) => vscode.commands.executeCommand(id, args);
+  // "local" is a desktop host; any other lane names the remote extension host it must run in.
+  const lane = process.env.GRAPHFORGE_QUALIFICATION_LANE ?? "local";
+  const expectedRemote = lane === "local" ? undefined : lane;
   try {
     const config = vscode.workspace.getConfiguration("graphforge");
     const binding = path.join(root, "binding", "node_modules", "@curatelabs", "graphforge");
@@ -41,22 +44,43 @@ exports.run = async function run() {
     assert.equal(report.coreVersion, process.env.GRAPHFORGE_QUALIFICATION_CORE);
     report.vscodeVersion = vscode.version;
     report.extensionHostNodeVersion = process.version;
-    report.host = { platform: process.platform, arch: process.arch, release: os.release(), remoteName: vscode.env.remoteName ?? null };
-    assert.equal(vscode.env.remoteName, undefined, "This lane qualifies a local extension host");
+    report.host = { platform: process.platform, arch: process.arch, release: os.release(), uid: typeof process.getuid === "function" ? process.getuid() : null, remoteName: vscode.env.remoteName ?? null };
+    assert.equal(vscode.env.remoteName, expectedRemote, `This lane qualifies the ${lane} extension host`);
 
     const destination = path.join(root, "project");
-    if (process.platform === "linux") {
-      report.filesystems = { root: fs.statfsSync("/").type, destinationParent: fs.statfsSync(root).type };
-      // /dev/shm is an actual unsupported tmpfs; do not simulate Core admission.
-      assert.equal(fs.statfsSync("/dev/shm").type, 0x01021994);
-      const rejectedDestination = path.join("/dev/shm", `graphforge-qualification-${process.pid}`);
+    // A real unsupported destination parent: Core must reject it with the host's own guidance and leave nothing.
+    const rejectIn = async (parentDir, label) => {
+      assert.ok(fs.statSync(parentDir).isDirectory(), `${label} parent is missing`);
+      const rejectedDestination = path.join(parentDir, `graphforge-qualification-${process.pid}`);
       assert.equal(fs.existsSync(rejectedDestination), false);
       const rejected = await command("graphforge.cloneFromHub", { repository: "openalex/openalex", destination: rejectedDestination });
-      assert.equal(rejected.code, "GF_UNSUPPORTED_FILESYSTEM", JSON.stringify(rejected));
+      assert.equal(rejected.code, "GF_UNSUPPORTED_FILESYSTEM", `${label}: ${JSON.stringify(rejected)}`);
       assert.match(rejected.error, /GF_UNSUPPORTED_FILESYSTEM/);
       assert.match(rejected.nextAction, /ext4, XFS, or Btrfs/);
-      assert.equal(fs.existsSync(rejectedDestination), false, "Rejected clone left a destination");
-      report.unsupportedStorage = { code: rejected.code, error: rejected.error, nextAction: rejected.nextAction, destinationExists: false };
+      if (expectedRemote) {
+        assert.match(rejected.nextAction, /the dev container/);
+        assert.match(rejected.nextAction, /GraphForge runs on the dev container/);
+        assert.doesNotMatch(rejected.nextAction, /APFS|NTFS/);
+      }
+      assert.equal(fs.existsSync(rejectedDestination), false, `${label}: rejected clone left a destination`);
+      return { code: rejected.code, error: rejected.error, nextAction: rejected.nextAction, destinationExists: false, parentFilesystemType: fs.statfsSync(parentDir).type };
+    };
+    if (process.platform === "linux") {
+      report.filesystems = { root: fs.statfsSync("/").type, destinationParent: fs.statfsSync(root).type, devShm: fs.statfsSync("/dev/shm").type };
+      // /dev/shm is an actual unsupported tmpfs; do not simulate Core admission.
+      assert.equal(report.filesystems.devShm, 0x01021994);
+      // Remote: an admitted ext4 volume beneath a non-admitted process root.
+      if (expectedRemote) {
+        assert.equal(report.filesystems.destinationParent, 0xef53);
+        assert.notEqual(report.filesystems.root, report.filesystems.destinationParent);
+      }
+      report.unsupportedStorage = { tmpfs: await rejectIn("/dev/shm", "tmpfs") };
+      const bindMount = process.env.GRAPHFORGE_QUALIFICATION_REJECT_BIND;
+      if (bindMount) {
+        report.filesystems.bindMount = fs.statfsSync(bindMount).type;
+        assert.notEqual(report.filesystems.bindMount, 0xef53, "Bind mount is on an admitted filesystem; nothing to reject");
+        report.unsupportedStorage.hostBindMount = await rejectIn(bindMount, "host bind mount");
+      }
     }
 
     const cloned = await command("graphforge.cloneFromHub", { repository: "openalex/openalex", destination, open: true });
@@ -142,6 +166,7 @@ async function main() {
       extensionTestsPath: __filename,
       launchArgs: profiles,
       extensionTestsEnv: {
+        ELECTRON_RUN_AS_NODE: undefined, // some shells export it, which makes VS Code reject every flag
         GRAPHFORGE_QUALIFICATION_WORK: root,
         GRAPHFORGE_QUALIFICATION_REPORT: reportPath,
         GRAPHFORGE_QUALIFICATION_CORE: coreVersion,
