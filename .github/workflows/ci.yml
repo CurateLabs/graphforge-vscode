@@ -4,6 +4,12 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      qualify_hub_clone:
+        description: "Qualify the packaged VSIX with the public Core candidate on Linux, macOS, and Windows"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -31,6 +37,9 @@ jobs:
 
       - name: Type check
         run: npm run check
+
+      - name: Qualification runner regression tests
+        run: node --test scripts/qualify-hub-clone.test.cjs
 
       - name: Compile
         run: npm run compile
@@ -102,3 +111,52 @@ jobs:
           name: graphforge-vsix
           path: graphforge-ci.vsix
           retention-days: 7
+
+  hub-clone-qualification:
+    name: Hub clone qualification (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch' && inputs.qualify_hub_clone
+    needs: package
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [blacksmith-4vcpu-ubuntu-2404, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install test runner dependencies
+        run: npm ci
+
+      - name: Download the packaged extension from this commit
+        uses: actions/download-artifact@v8
+        with:
+          name: graphforge-vsix
+
+      - name: Install Xvfb
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Qualify Linux storage and durable reopen
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run qualify:hub-clone -- graphforge-ci.vsix "${{ runner.temp }}/hub-clone-evidence"
+
+      - name: Qualify desktop storage and durable reopen
+        if: runner.os != 'Linux'
+        run: npm run qualify:hub-clone -- graphforge-ci.vsix "${{ runner.temp }}/hub-clone-evidence"
+
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hub-clone-${{ matrix.os }}
+          path: ${{ runner.temp }}/hub-clone-evidence/report.json
+          if-no-files-found: warn
+          retention-days: 30

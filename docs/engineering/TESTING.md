@@ -1,5 +1,34 @@
 # Testing
 
+## Packaged Hub clone storage qualification (#94)
+
+The existing CI workflow has an opt-in `qualify_hub_clone` dispatch input. It builds
+one VSIX, then installs those same bytes into fresh VS Code 1.142.0 profiles on
+Linux, macOS, and Windows with a Node 22 test runner and the public Core
+`0.6.0-rc.5` package. It exercises
+the agent clone command, open, query, close, durable reopen, and the same query
+again. Linux also verifies real tmpfs rejection and an absent destination. This
+does not publish anything. Dispatch it on the exact branch or commit being
+qualified; each host uploads a JSON report with the VSIX digest, versions,
+platform, clone identity, and before/after result.
+
+For a local run, use the command below (prefix with `xvfb-run -a` on headless Linux).
+The evidence directory must be on storage Core admits. The runner requires network access to
+the public package registry, VS Code downloads, and `graphforge.sh`; a download,
+install, clone, or native-load failure fails the run. It uses the existing
+`@vscode/test-electron` runner and removes only its own temporary profile/project.
+
+```sh
+npm run qualify:hub-clone -- /absolute/path/candidate.vsix /absolute/path/evidence
+```
+
+The current `openalex/openalex` fixture may be metadata-only. The test records its
+actual node count and requires an identical result after reopen; a zero count
+does not qualify #95's useful-result journey. These are local extension-host
+checks: remote/WSL/container identity, a separate admitted volume beneath an
+unsupported process root, useful rendering, and authenticated publish-back need
+their own actual-host evidence. No runtime filesystem probe or fallback is added.
+
 ## Local gates
 
 ```bash
