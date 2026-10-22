@@ -53,7 +53,7 @@ exports.run = async function run() {
       assert.ok(fs.statSync(parentDir).isDirectory(), `${label} parent is missing`);
       const rejectedDestination = path.join(parentDir, `graphforge-qualification-${process.pid}`);
       assert.equal(fs.existsSync(rejectedDestination), false);
-      const rejected = await command("graphforge.cloneFromHub", { repository: "openalex/openalex", destination: rejectedDestination });
+      const rejected = await command("graphforge.cloneFromHub", { repository: "opendata/openalex", destination: rejectedDestination });
       assert.equal(rejected.code, "GF_UNSUPPORTED_FILESYSTEM", `${label}: ${JSON.stringify(rejected)}`);
       assert.match(rejected.error, /GF_UNSUPPORTED_FILESYSTEM/);
       assert.match(rejected.nextAction, /ext4, XFS, or Btrfs/);
@@ -83,7 +83,7 @@ exports.run = async function run() {
       }
     }
 
-    const cloned = await command("graphforge.cloneFromHub", { repository: "openalex/openalex", destination, open: true });
+    const cloned = await command("graphforge.cloneFromHub", { repository: "opendata/openalex", destination, open: true });
     assert.equal(cloned.opened, true, JSON.stringify(cloned));
     assert.ok(cloned.immutableVersion && cloned.packageDigest && cloned.generationUuid, "Clone identity is incomplete");
     report.clone = cloned;

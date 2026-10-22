@@ -22,7 +22,7 @@ install, clone, or native-load failure fails the run. It uses the existing
 npm run qualify:hub-clone -- /absolute/path/candidate.vsix /absolute/path/evidence
 ```
 
-The current `openalex/openalex` fixture may be metadata-only. The test records its
+The current `opendata/openalex` fixture may be metadata-only. The test records its
 actual node count and requires an identical result after reopen; a zero count
 does not qualify #95's useful-result journey. These are extension-host storage and
 identity checks: useful rendering and authenticated publish-back still need their
