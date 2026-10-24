@@ -96,15 +96,15 @@ The older fixture identity in this receipt records what was actually tested and
 must not be rewritten after migration.
 
 For a repeat, install the exact VSIX and Core candidate into a fresh profile,
-configure the candidate's Node binding, open a Markdown preview containing the
-URI below, and click it. Retain the one-time VS Code URI permission prompt and
+configure the candidate's Node binding, put the Markdown link below in a file,
+open its preview, and click it. Retain the one-time VS Code URI permission prompt and
 the extension's own confirmation. Exercise both cancellation points before
 selecting a fresh parent on admitted storage; verify the active project and
 query/close/reopen through the existing commands. Record the VSIX hash, Core
 version/source, host, URI, generation identity, and query comparison.
 
-```text
-vscode://curatelabsai.graphforge/clone?repository=openalex%2Fopenalex
+```markdown
+[Clone from Hub](vscode://curatelabsai.graphforge/clone?repository=openalex%2Fopenalex)
 ```
 
 #### Producing-version mismatch qualification
