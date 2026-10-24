@@ -27,7 +27,8 @@ try {
   const addon = Object.keys(require.cache).find((file) => file.endsWith(".node") && file.includes("graphforge"));
   assert.ok(addon, "Loaded Core native addon was not found");
   report.addon = { name: path.basename(addon), sha256: createHash("sha256").update(fs.readFileSync(addon)).digest("hex") };
-  report.result = core.runCli(["clone", repository, destination, "--json"]);
+  const result = core.runCli(["clone", repository, destination, "--json"]);
+  report.result = { exitCode: result.exitCode, stdout: result.stdout.toString("utf8"), stderr: result.stderr.toString("utf8") };
   report.destinationExists = fs.existsSync(destination);
   assert.equal(report.result.exitCode, 0, JSON.stringify(report.result));
   const receipt = JSON.parse(report.result.stdout.trim().split(/\r?\n/).at(-1));
