@@ -29,17 +29,20 @@ try {
   report.addon = { name: path.basename(addon), sha256: createHash("sha256").update(fs.readFileSync(addon)).digest("hex") };
   const result = core.runCli(["clone", repository, destination, "--json"]);
   report.result = { exitCode: result.exitCode, stdout: result.stdout.toString("utf8"), stderr: result.stderr.toString("utf8") };
-  report.destinationExists = fs.existsSync(destination);
   assert.equal(report.result.exitCode, 0, JSON.stringify(report.result));
   const receipt = JSON.parse(report.result.stdout.trim().split(/\r?\n/).at(-1));
   assert.equal(receipt.contract, "graphforge-hub-clone/1");
+  assert.equal(receipt.repository, repository, "Clone receipt repository differs from the request");
+  assert.equal(receipt.destination, destination, "Clone receipt destination differs from the request");
   assert.ok(receipt.package_digest && receipt.generation_uuid && receipt.immutable_version, "Clone receipt identity is incomplete");
+  assert.ok(fs.statSync(destination).isDirectory(), "Successful clone destination must be a directory");
   report.status = "passed";
 } catch (error) {
   report.status = "failed";
   report.error = error instanceof Error ? error.stack : String(error);
   process.exitCode = 1;
 } finally {
+  report.destinationExists = fs.existsSync(destination);
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(report, null, 2));
 }
