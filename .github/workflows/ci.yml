@@ -10,6 +10,10 @@ on:
         description: "Qualify the packaged VSIX with the public Core candidate on Linux, macOS, and Windows"
         type: boolean
         default: false
+      probe_core_arm64:
+        description: "Reproduce the published Core Hub clone on real Linux arm64 (#104)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,6 +23,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  core-arm64-probe:
+    name: Native Linux arm64 Core Hub clone
+    if: github.event_name == 'workflow_dispatch' && inputs.probe_core_arm64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Install the exact published Core addon
+        run: npm install --prefix "$RUNNER_TEMP/core-probe" --no-package-lock --no-save --no-audit --no-fund @curatelabs/graphforge@0.6.0-rc.5
+      - name: Clone through Core directly on arm64
+        run: node scripts/probe-core-hub-clone.cjs "$RUNNER_TEMP/core-probe/node_modules/@curatelabs/graphforge" openalex/openalex "$RUNNER_TEMP/core-probe" "$RUNNER_TEMP/core-probe/report.json"
+      - name: Preserve native reproduction evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: core-arm64-probe
+          path: ${{ runner.temp }}/core-probe/report.json
+          if-no-files-found: error
+          retention-days: 30
+
   build:
     name: Check, compile, unit test
     runs-on: blacksmith-4vcpu-ubuntu-2404
