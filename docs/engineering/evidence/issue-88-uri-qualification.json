@@ -1,0 +1,108 @@
+{
+  "status": "partial",
+  "extensionSource": "9d2b1092fc298c7440f7486a144314cf0e30b8f9",
+  "extensionVersion": "0.1.3",
+  "vsixSha256": "29778bebc8cc8da181802a59ea6888b4c9bac32dbc8d8336644ff3ea5bb7f49a",
+  "host": {
+    "vscode": "1.142.0",
+    "node": "v24.21.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "coreVersion": "0.6.0-rc.5",
+  "coreSource": "public npm candidate",
+  "uri": "vscode://curatelabsai.graphforge/clone?repository=openalex%2Fopenalex",
+  "entrypoint": "Actual click in built-in Markdown preview; one-time VS Code URI permission, then real extension modal and native folder picker. Not the production Hub Open-tab UI.",
+  "checks": {
+    "before-confirmation": {
+      "projectOpen": false
+    },
+    "after-cancel": {
+      "projectOpen": false
+    },
+    "after-folder-cancel": {
+      "projectOpen": false
+    },
+    "after-uri-clone": {
+      "projectOpen": true
+    }
+  },
+  "generationAfterUriClone": {
+    "format": "graphforge-project",
+    "format_version": 1,
+    "generation_uuid": "b1c53d96-bf1a-54b6-9e2e-50d20a21c464",
+    "generation_manifest_sha256": "ffed47da8e266c5c1a16f1bd0dd8730fa220adede63436bb80519285fa84fcf4"
+  },
+  "query": {
+    "columns": [
+      "nodes"
+    ],
+    "rows": [
+      {
+        "nodes": "0"
+      }
+    ],
+    "rowCount": 1
+  },
+  "reopenedQuery": {
+    "columns": [
+      "nodes"
+    ],
+    "rows": [
+      {
+        "nodes": "0"
+      }
+    ],
+    "rowCount": 1
+  },
+  "closedAfterVerification": true,
+  "candidate": {
+    "source": "dba39e8d7383f2403ffc89ae1b88eebb18d031b4",
+    "run": "https://github.com/CurateLabs/graphforge/actions/runs/40050247534",
+    "version": "0.6.0-rc.5",
+    "assembledFromVerifiedAddonAndLoaders": true,
+    "loadedSuccessfully": true,
+    "artifacts": {
+      "addon-aarch64-apple-darwin": {
+        "id": 12543251823,
+        "sha256": "1eec6ed4362b5c5061fa66cf2b1790049e868a8159d7f7d35227d62fbaaf4b8e"
+      },
+      "node-loaders": {
+        "id": 12543591401,
+        "sha256": "20dbddf86f85699ab23df8a61f285d340eed98bd5248b2f60c151db85f68bbce"
+      }
+    },
+    "loadProbeNodeVersion": "v24.16.0"
+  },
+  "remainingGate": "Authentic differing-producing-version fixture and compatible candidate; candidate and current regenerated fixture both declare 0.6.0-rc.5.",
+  "limits": [
+    "No browser-to-OS external protocol association proof.",
+    "No production Hub Open-tab button is available on the current page.",
+    "No genuine producing-version mismatch clone was performed.",
+    "Zero-node fixture qualifies clone/storage, not useful-result or publish-back."
+  ],
+  "recordedOn": "2026-10-23 America/Denver",
+  "verification": {
+    "typecheck": "passed",
+    "compile": "passed",
+    "packageContents": "passed",
+    "hubCloneUnitTests": {
+      "passed": 26
+    },
+    "qualificationRunnerTests": {
+      "passed": 7
+    }
+  },
+  "cancellationDestinationEvidence": {
+    "checkedBeforeClone": true,
+    "confirmationCancelDestinationAbsent": true,
+    "folderCancelDestinationAbsent": true,
+    "method": "Filesystem checks plus command context; no network capture was performed."
+  },
+  "notes": [
+    "The built VSIX excludes TASKS.md via a temporary ignore file. No product code was changed.",
+    "An observer extension used only existing GraphForge commands to capture context and query/reopen results; it did not replace the URI handler, binding or UI.",
+    "The initial untrusted window deferred activation; it was trusted only for this generated test window, without adding a trusted folder or changing the global trust setting."
+  ],
+  "followUpReceipt": "issue-88-mismatch-qualification.json"
+}

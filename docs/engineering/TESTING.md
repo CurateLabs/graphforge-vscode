@@ -78,6 +78,72 @@ storage and identity evidence, not #95 useful-result evidence.
 
 ## Local gates
 
+### URI qualification (#88)
+
+The [2026-10-23 receipt](./evidence/issue-88-uri-qualification.json) records a manual
+run of the packaged extension at `9d2b109` in a fresh macOS arm64 VS Code 1.142.0
+profile with public Node Core `0.6.0-rc.5`. Clicking the actual `vscode://` link in
+VS Code's built-in Markdown preview reached the extension's confirmation and native
+parent-folder picker. Cancelling confirmation or folder selection left no clone
+destination and no open project. Confirming and selecting an empty parent cloned
+the live `openalex/openalex` fixture and opened it; query, close, reopen, and the
+same query passed with zero nodes both times.
+
+This proves the extension's URI flow, not a browser-to-OS protocol association or
+the production Hub's Open-tab button. The production page still exposes a CLI clone
+command, and `opendata/openalex` still returns 404 there; Hub #215 owns that rollout.
+The older fixture identity in this receipt records what was actually tested and
+must not be rewritten after migration.
+
+For a repeat, install the exact VSIX and Core candidate into a fresh profile,
+configure the candidate's Node binding, open a Markdown preview containing the
+URI below, and click it. Retain the one-time VS Code URI permission prompt and
+the extension's own confirmation. Exercise both cancellation points before
+selecting a fresh parent on admitted storage; verify the active project and
+query/close/reopen through the existing commands. Record the VSIX hash, Core
+version/source, host, URI, generation identity, and query comparison.
+
+```text
+vscode://curatelabsai.graphforge/clone?repository=openalex%2Fopenalex
+```
+
+#### Producing-version mismatch qualification
+
+The [follow-up receipt](./evidence/issue-88-mismatch-qualification.json) completes
+the authentic mismatch scenario on macOS arm64. Official Core `0.6.0-rc.6`
+candidate artifacts at `2618813` cloned the unchanged native `opendata/openalex`
+fixture produced by Core `0.6.0-rc.5` at `d5bbb93`. The exact preview deployment's
+manifest and downloaded object hashes matched its pinned source artifacts.
+
+The real native CLI returned exit 0, a `graphforge-hub-clone/1` receipt and
+`GF_CORE_VERSION_MISMATCH` naming both versions. The actual extension mapper
+preserved the warning with `graphforge.engineVersion`/Setup Native Binding and
+matching-Python guidance. A second run clicked the URI in the same packaged
+extension, confirmed, selected a fresh parent, showed that warning and guidance,
+and opened the clone. Query, close, reopen and query again passed with zero nodes
+both times. A warning alone did not turn success into failure.
+
+The extension accepts the production Hub identity, so this preview qualification
+used an external test binding wrapper. It forwarded the real candidate's exports
+and added only Core's supported `--hub <exact-preview-deployment>` and
+`--protection-bypass-env <variable-name>` arguments to clone calls; it returned
+the native result unchanged. The existing Vercel automation credential was passed
+only through the test process environment. Neither the extension's handler nor
+the fixture metadata was modified. This is candidate/native consumer evidence,
+not registry-package, browser protocol association, Hub-button or production
+promotion qualification. The earlier partial receipt remains historical evidence.
+
+For a repeat, verify the artifact ZIPs and fixture hashes in the receipt, load
+that exact candidate, supply the existing preview credential through Core's
+named environment-variable option, and run the same clone with the exact Hub
+deployment. Check both native warnings and the extension's mapped next action;
+for the interactive path, use the transparent argument wrapper described above
+in a fresh profile and inspect the warning notification. Never relabel data to
+substitute for this authentic different-producer scenario or weaken Core's public
+HTTPS/storage admission checks to create a local clone fixture.
+
+### Commands
+
 ```bash
 npm install
 npm run check      # tsc --noEmit
