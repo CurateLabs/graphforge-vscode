@@ -122,8 +122,11 @@ with guidance to choose `graphforge.engineVersion` and rerun Setup Native Bindin
 clone. A matching Python environment can open the cloned project afterward; cloning itself uses
 the Node binding. Interactive clones display these warnings; agent calls receive them
 in the structured outcome. The extension does not compare the data's versions itself or refuse a
-clone because Core warned. Live qualification of this warning still needs a published Core binding
-containing Core #1936; the `0.6.0-rc.5` npm candidate predates that change.
+clone because Core warned. Live qualification uses a candidate binding containing Core #1936
+and an authentic fixture produced by a different Core version. Official build artifacts can
+provide that candidate before registry publication. The `0.6.0-rc.6` candidate cloned the
+unchanged `0.6.0-rc.5` native preview fixture successfully, preserving the warning and guidance
+through the packaged extension. See the [bounded #88 qualification](./TESTING.md#uri-qualification-88).
 
 ### Project-kind detection (auto Python-prefer rule)
 

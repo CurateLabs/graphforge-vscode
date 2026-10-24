@@ -1,0 +1,147 @@
+{
+  "status": "passed",
+  "recordedAt": "2026-10-24T04:16:15.716238+00:00",
+  "scope": "Issue 88 authentic producing-version mismatch: native clone, extension mapping, packaged URI/UI warning, project open and durable reopen.",
+  "extension": {
+    "source": "9d2b1092fc298c7440f7486a144314cf0e30b8f9",
+    "version": "0.1.3",
+    "vsixSha256": "29778bebc8cc8da181802a59ea6888b4c9bac32dbc8d8336644ff3ea5bb7f49a"
+  },
+  "host": {
+    "vscode": "1.142.0",
+    "node": "v24.21.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "reader": {
+    "version": "0.6.0-rc.6",
+    "source": "26188130678bacd65ae92c1884c340d334c68479",
+    "buildRun": "https://github.com/CurateLabs/graphforge/actions/runs/40057566895",
+    "assembledCandidate": true,
+    "artifacts": {
+      "addon-aarch64-apple-darwin": {
+        "id": 12546202584,
+        "sha256": "e7d8393261ce029c0631ef85373e057661e85e310c0df2d978aeb32a2eda651e"
+      },
+      "node-loaders": {
+        "id": 12545299760,
+        "sha256": "d5ab7535e2a9b15c1c7684a658c7969c3e64c8d627716fa0112451dd572eb1b7"
+      }
+    }
+  },
+  "writer": {
+    "version": "0.6.0-rc.5",
+    "source": "d5bbb93dac5435873ce880a38c8812fb75edc095",
+    "provenance": "https://github.com/CurateLabs/graphforge-nextjs/blob/caeb7a76d5b038ff4f106a80d4c5bb3e7cde318a/packages/hub-fixture/preview-source.json"
+  },
+  "fixture": {
+    "repository": "opendata/openalex",
+    "deployment": "https://graphforge-nextjs-19yznb85l-curate-labs-ai.vercel.app",
+    "hubSource": "caeb7a76d5b038ff4f106a80d4c5bb3e7cde318a",
+    "manifestSha256": "86ea70118efb2861fd039217d7d38ef918ff98bbc95e566374b6fa09bde9860c",
+    "bundleSha256": "b2d08fdb0bacd23e001c4ace92e4eb86b9fb359da35552460f4d102e2725d775",
+    "bundleBytes": 21504,
+    "metadataRelabelled": false
+  },
+  "native": {
+    "exitCode": 0,
+    "receipt": {
+      "contract": "graphforge-hub-clone/1",
+      "generation_uuid": "8eddb929-fd8d-5126-a922-98b48f4bbe97",
+      "immutable_version": "sha256:07a0beb91567217d4b0f44f27879ab268630b02575527eb32a6a173a11b3bf38",
+      "package_digest": "sha256:07a0beb91567217d4b0f44f27879ab268630b02575527eb32a6a173a11b3bf38",
+      "repository": "opendata/openalex",
+      "resumed_bytes": 0,
+      "warnings": [
+        {
+          "code": "GF_CORE_VERSION_MISMATCH",
+          "message": "data was produced by GraphForge Core 0.6.0-rc.5, but this is Core 0.6.0-rc.6; it may not read correctly. Use a matching runtime: `python -m pip install graphforge==0.6.0-rc.5`, `npm install @curatelabs/graphforge@0.6.0-rc.5`, or `npx @curatelabs/graphforge-cli@0.6.0-rc.5`",
+          "producing_core_version": "0.6.0-rc.5",
+          "running_core_version": "0.6.0-rc.6"
+        }
+      ]
+    },
+    "openedWithReader": true
+  },
+  "consumer": {
+    "repository": "opendata/openalex",
+    "immutableVersion": "sha256:07a0beb91567217d4b0f44f27879ab268630b02575527eb32a6a173a11b3bf38",
+    "packageDigest": "sha256:07a0beb91567217d4b0f44f27879ab268630b02575527eb32a6a173a11b3bf38",
+    "generationUuid": "8eddb929-fd8d-5126-a922-98b48f4bbe97",
+    "warnings": [
+      {
+        "code": "GF_CORE_VERSION_MISMATCH",
+        "message": "data was produced by GraphForge Core 0.6.0-rc.5, but this is Core 0.6.0-rc.6; it may not read correctly. Use a matching runtime: `python -m pip install graphforge==0.6.0-rc.5`, `npm install @curatelabs/graphforge@0.6.0-rc.5`, or `npx @curatelabs/graphforge-cli@0.6.0-rc.5`",
+        "producingCoreVersion": "0.6.0-rc.5",
+        "runningCoreVersion": "0.6.0-rc.6",
+        "nextAction": "To clone with a matching Node Core, set graphforge.engineVersion to 0.6.0-rc.5 and run GraphForge: Setup Native Binding. To open the cloned project with Python, select a matching Python environment."
+      }
+    ]
+  },
+  "packagedUri": {
+    "uri": "vscode://curatelabsai.graphforge/clone?repository=opendata%2Fopenalex",
+    "entrypoint": "Actual click in built-in Markdown preview",
+    "confirmationObserved": true,
+    "parentPickerObserved": true,
+    "exitCode": 0,
+    "receipt": {
+      "contract": "graphforge-hub-clone/1",
+      "generation_uuid": "8eddb929-fd8d-5126-a922-98b48f4bbe97",
+      "immutable_version": "sha256:07a0beb91567217d4b0f44f27879ab268630b02575527eb32a6a173a11b3bf38",
+      "package_digest": "sha256:07a0beb91567217d4b0f44f27879ab268630b02575527eb32a6a173a11b3bf38",
+      "repository": "opendata/openalex",
+      "resumed_bytes": 0,
+      "warnings": [
+        {
+          "code": "GF_CORE_VERSION_MISMATCH",
+          "message": "data was produced by GraphForge Core 0.6.0-rc.5, but this is Core 0.6.0-rc.6; it may not read correctly. Use a matching runtime: `python -m pip install graphforge==0.6.0-rc.5`, `npm install @curatelabs/graphforge@0.6.0-rc.5`, or `npx @curatelabs/graphforge-cli@0.6.0-rc.5`",
+          "producing_core_version": "0.6.0-rc.5",
+          "running_core_version": "0.6.0-rc.6"
+        }
+      ]
+    },
+    "visibleMismatchNotificationObserved": true,
+    "visibleMatchingEngineAndPythonGuidanceObserved": true,
+    "projectOpened": true,
+    "query": {
+      "columns": [
+        "nodes"
+      ],
+      "rows": [
+        {
+          "nodes": "0"
+        }
+      ],
+      "rowCount": 1
+    },
+    "reopenedQuery": {
+      "columns": [
+        "nodes"
+      ],
+      "rows": [
+        {
+          "nodes": "0"
+        }
+      ],
+      "rowCount": 1
+    },
+    "closedAfterVerification": true
+  },
+  "harness": {
+    "method": "A qualification-only binding wrapper forwards all native exports, adds supported Core --hub and --protection-bypass-env flags for clone, and returns the real native result unchanged.",
+    "wrapperSha256": "54ad610f82466c08d0b5168a72a2aa842aa5e19771607d71320d8c269e22a7f0",
+    "wrapperSource": "const fs=require('node:fs');\nconst path=require('node:path');\nconst core=require('../binding');\nmodule.exports={...core,runCli(args){\n if(args[0]!=='clone')return core.runCli(args);\n const argv=[...args,'--hub','https://graphforge-nextjs-19yznb85l-curate-labs-ai.vercel.app','--protection-bypass-env','GF88_PREVIEW_PROTECTION'];\n const result=core.runCli(argv);\n const record={argv,exitCode:result.exitCode,stdout:result.stdout.toString(),stderr:result.stderr.toString()};\n if(JSON.stringify(record).includes(process.env.GF88_PREVIEW_PROTECTION))throw Error('Native output exposed the credential');\n fs.appendFileSync(path.join(__dirname,'..','extension-cli-invocations.jsonl'),JSON.stringify(record)+'\\n');\n return result;\n}};\n",
+    "existingAutomationCredentialUsed": true,
+    "credentialInEnvironmentOnly": true,
+    "productCodeModified": false,
+    "coreTransportOrStorageChecksBypassed": false
+  },
+  "limits": [
+    "Official PR candidate addon/loaders, not an ordinary installed registry-package proof.",
+    "Preview fixture, not production fixture promotion.",
+    "Markdown URI entrypoint, not browser-to-OS association or production Hub Open-tab UI.",
+    "Metadata-only fixture; zero node count is not useful-result or publish-back qualification.",
+    "Warning-before-object-download timing remains owned by Core tests; this run asserts the returned warning and consumer behavior."
+  ],
+  "previousUriReceipt": "issue-88-uri-qualification.json"
+}
