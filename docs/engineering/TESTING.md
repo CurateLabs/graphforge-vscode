@@ -30,6 +30,21 @@ own actual-host evidence. The Dev Container lane below is the qualified remote h
 SSH, and tunnel sessions use the same `remoteName` path and are covered by unit tests only.
 No runtime filesystem probe or fallback is added.
 
+### Native Linux arm64 Core reproduction
+
+The CI dispatch input `probe_core_arm64` runs the public Core `0.6.0-rc.5`
+addon directly on `ubuntu-24.04-arm`, without VS Code. It preserves a
+`core-arm64-probe` JSON artifact with the host, loaded addon hash, Core version,
+destination filesystem, and clone exit/stdout/stderr. This isolates Core #2260
+(VS Code #104) from Apple-silicon virtualization. A failing native clone fails
+the job; ordinary PR checks do not run this operator probe.
+
+The probe currently uses production's `openalex/openalex` identity because
+`opendata/openalex` is not deployed there yet (Hub #215). Reconcile that input
+with the migration before a later run; a missing repository cannot qualify
+successful networking and cloning. This Core-only probe does not replace
+the packaged native-arm64 Dev Container acceptance below.
+
 ### Remote extension host (Dev Container) lane
 
 This proves that in a remote session the extension identifies the host where Core and
