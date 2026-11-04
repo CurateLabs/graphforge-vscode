@@ -77,7 +77,10 @@ export function graphInput(
       select: selected,
     };
   }
-  return { base: { tables: [result.ipc] }, select: selected };
+  return {
+    base: { tables: [result.ipc], generation: result.generationUuid },
+    select: selected,
+  };
 }
 
 /** Explicit field binding only. XYG owns chart geometry, axes, encodings, layout and exports. */

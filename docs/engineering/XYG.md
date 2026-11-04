@@ -57,6 +57,12 @@ with explicit `intent` and a canonical `base` result. Both generation identities
 are required for joins; XYG rejects stale or incompatible inputs. The runtime
 coverage ledger in XYG is the schema authority; the editor keeps no copy.
 
+Plain graphs also retain the source generation UUID. XYG chooses captions from
+the first non-empty text `name`, `title`, `label`, or `code`, then a short UUID;
+code-only Airport entities therefore display their airport code without host
+caption rules. Typed zero-row entity results are valid empty graphs. UUIDs,
+self-loops and parallel relationships remain native XYG identities.
+
 Charts bind `mark`, `x`, `y` and optional `color`/series fields. Maps bind
 longitude/latitude and optional paired target fields, with explicit CRS,
 projection and camera. Temporal views bind offset-qualified timestamps and
@@ -104,6 +110,11 @@ interactive and that export failure is reported without changing its axis.
   illustrative rather than historical air-traffic evidence.
 - XYG's `host-ticks.test.mjs` checks byte identity with native Rust,
   cancellation, disposal and late-response rejection.
+- `node scripts/qualify-plain-cypher.mjs /path/to/@curatelabs/graphforge`
+  creates a fresh temporary Core project. It checks code-only captions,
+  nodes-only and node/relationship results, loops, parallel edges, empty
+  results, native layout, repeated export bytes and UUID/generation preservation
+  on reopen. Its report contains counts and hashes, without source rows.
 - `npm run verify:package` inventories packaged assets. A green source build
   does not establish the full platform, accessibility or large-scale release
   matrix; record those results explicitly before publication.

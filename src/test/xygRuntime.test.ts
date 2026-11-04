@@ -23,11 +23,13 @@ suite("XYG ownership and native composition", () => {
     table.schema.metadata.set("graphforge.algorithm", "pagerank");
     const ipc = Buffer.from(tableToIPC(table));
     const result = decodeTable(ipc);
+    result.generationUuid = "0190a000-0000-7000-8000-000000000006";
     const spec = createResultGraphSpec({
       name: "Graph",
       result: "results/a.json",
     });
     assert.equal(graphInput(spec, result).base.tables[0], ipc);
+    assert.equal(graphInput(spec, result).base.generation, result.generationUuid);
     assert.equal(result.algorithm, "pagerank");
     assert.deepEqual(result.rows, [{ value: 1 }, { value: 2 }]);
   });
@@ -185,20 +187,25 @@ suite("XYG ownership and native composition", () => {
       fs.readFileSync(path.join(fixture, "manifest.json"), "utf8"),
     );
     const source = manifest.bases.cyclic;
+    const result = decodeTable(
+      fs.readFileSync(path.join(fixture, "cypher-edges.arrow")),
+    );
+    result.generationUuid = source.generation;
+    const input = graphInput(
+      createResultGraphSpec({ name: "Graph", result: "results/a.json" }),
+      result,
+    );
+    const composition = xy.composeGraphForge(input);
+    assert.equal(composition.baseGeneration, source.generation);
+    assert.equal(composition.nodes.count, 4);
+    assert.equal(composition.edges.count, 5);
     const owner = new xy.GraphForgeLayoutController();
     try {
       const payload = await owner.render(
-        {
-          base: {
-            generation: source.generation,
-            tables: [source.nodes, source.edges].map((file: string) =>
-              fs.readFileSync(path.join(fixture, file + ".arrow")),
-            ),
-          },
-        },
+        input,
         { layout: "cose", iterations: 20, width: 900, height: 600 },
       );
-      assert.ok(payload.positions.uuid.length > 0);
+      assert.deepEqual(payload.positions.uuid, composition.nodes.uuid);
       assert.ok(payload.buffer.byteLength > 0);
       assert.equal(payload.phase, "complete");
     } finally {
