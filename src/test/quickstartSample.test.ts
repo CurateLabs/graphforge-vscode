@@ -175,4 +175,56 @@ suite("quickstartSample (#63)", () => {
     );
     assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), []);
   });
+
+  test("upgrades the unchanged legacy sample query with a preserved backup", () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-xyg-upgrade-"));
+    const dataset = loadQuickstartDataset(REPO_ROOT);
+    materializeQuickstartProjectFiles(projectRoot, dataset);
+    const relative = "queries/templates/routes-overview.cypher";
+    const file = path.join(projectRoot, relative);
+    const legacy = fs.readFileSync(path.join(__dirname, "fixtures/legacy-routes-overview.cypher"));
+    fs.writeFileSync(file, legacy);
+    try {
+      assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), [relative]);
+      assert.match(fs.readFileSync(file, "utf8"), /RETURN a, r, b,/);
+      assert.deepEqual(fs.readFileSync(`${file}.pre-xyg`), legacy);
+      assert.equal(scanProjectArtifacts(projectRoot).queryTemplates.length, 1);
+      assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), []);
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("preserves a customized default sample query during repair", () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-custom-query-"));
+    const dataset = loadQuickstartDataset(REPO_ROOT);
+    materializeQuickstartProjectFiles(projectRoot, dataset);
+    const file = path.join(projectRoot, "queries/templates/routes-overview.cypher");
+    const custom = "MATCH (a:Airport) RETURN a LIMIT 10\n";
+    fs.writeFileSync(file, custom);
+    try {
+      assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), []);
+      assert.equal(fs.readFileSync(file, "utf8"), custom);
+      assert.equal(fs.existsSync(`${file}.pre-xyg`), false);
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("does not overwrite a conflicting sample query backup", () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-query-backup-"));
+    const dataset = loadQuickstartDataset(REPO_ROOT);
+    materializeQuickstartProjectFiles(projectRoot, dataset);
+    const file = path.join(projectRoot, "queries/templates/routes-overview.cypher");
+    const legacy = fs.readFileSync(path.join(__dirname, "fixtures/legacy-routes-overview.cypher"));
+    fs.writeFileSync(file, legacy);
+    fs.writeFileSync(`${file}.pre-xyg`, "existing backup");
+    try {
+      assert.throws(() => repairQuickstartProjectFiles(projectRoot, dataset), /backup already exists/);
+      assert.deepEqual(fs.readFileSync(file), legacy);
+      assert.equal(fs.readFileSync(`${file}.pre-xyg`, "utf8"), "existing backup");
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });

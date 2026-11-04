@@ -28,11 +28,28 @@ suite("XYG air-routes integration", () => {
         this.skip();
       }
       assert.ok(opened?.seeded, JSON.stringify(opened));
+      // An existing sample can still contain the pre-XYG scalar-only query.
+      const queryPath = path.join(root, "queries/templates/routes-overview.cypher");
+      const legacyQuery = fs.readFileSync(path.join(__dirname, "fixtures/legacy-routes-overview.cypher"));
+      fs.writeFileSync(queryPath, legacyQuery);
+      await vscode.commands.executeCommand("graphforge.closeProject");
+      const repaired = await vscode.commands.executeCommand<any>(
+        "graphforge.openSampleProject", { path: root },
+      );
+      assert.equal(repaired.seeded, false, JSON.stringify(repaired));
+      assert.ok(repaired.repaired?.includes("queries/templates/routes-overview.cypher"));
+      assert.deepEqual(fs.readFileSync(`${queryPath}.pre-xyg`), legacyQuery);
       const query = await vscode.commands.executeCommand<any>(
         "graphforge.runProjectQuery",
         { path: "queries/templates/routes-overview.cypher" },
       );
       assert.ok(!query?.error, JSON.stringify(query));
+      const immediateGraph = await vscode.commands.executeCommand<any>(
+        "graphforge.showResultGraph", { waitForReady: true },
+      );
+      assert.equal(immediateGraph.lifecycle?.type, "graphforge/renderReady", JSON.stringify(immediateGraph));
+      assert.equal(immediateGraph.lifecycle.nodeCount, 579);
+      await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
       const entity = query.rows[0].a;
       const { node_uuid, labels, ...properties } = entity;
       assert.equal(typeof node_uuid, "string");

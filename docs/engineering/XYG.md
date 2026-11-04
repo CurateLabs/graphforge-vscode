@@ -35,6 +35,12 @@ and numeric types from the original Arrow before rendering;
 a missing or mismatched pair requires rerunning the query. Readable JSON is
 for inspection, not a replacement for canonical Arrow types or metadata.
 
+Reopening an existing air-routes sample upgrades only the exact unchanged
+pre-XYG default query to return canonical entities, preserving its original
+bytes as `routes-overview.cypher.pre-xyg`. Customized queries and saved results
+are preserved. Run the sample query again to produce its original Core Arrow;
+old JSON-only results cannot supply canonical graph types.
+
 Saved `.gfviz.json` files contain XYG-owned `xyg.intent/v1` documents. The
 contract and validator live in `@curatelabs/xyg-node/intent`, not in the editor.
 Source references remain within the project. Old documents fail without being

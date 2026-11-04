@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import {
   PROJECT_MUTATIONS_DIR,
   relativeProjectPath,
@@ -212,8 +213,8 @@ export function materializeQuickstartProjectFiles(
 }
 
 /**
- * Add sample-owned files introduced by a newer extension without replacing
- * project results or anything the analyst has already changed.
+ * Add new sample files and upgrade the unchanged pre-XYG default query.
+ * Preserve results, customized queries, and the old query's original bytes.
  */
 export function repairQuickstartProjectFiles(
   projectRoot: string,
@@ -241,6 +242,27 @@ export function repairQuickstartProjectFiles(
   };
 
   copyMissing(templateRoot, projectRoot);
+
+  // Only the exact shipped scalar query is ours to upgrade. XYG needs the
+  // canonical entities as well as the scalar bindings used by charts/maps.
+  const queryRelative = "queries/templates/routes-overview.cypher";
+  const queryPath = path.join(projectRoot, queryRelative);
+  if (fs.lstatSync(queryPath).isFile()) {
+    const original = fs.readFileSync(queryPath);
+    if (
+      createHash("sha256").update(original).digest("hex") ===
+      "a72b3213d75416c9bd70f706718d84f4edb7345fe84108203af59714b18029da"
+    ) {
+      const backup = `${queryPath}.pre-xyg`;
+      if (!fs.existsSync(backup)) {
+        fs.copyFileSync(queryPath, backup, fs.constants.COPYFILE_EXCL);
+      } else if (!fs.readFileSync(backup).equals(original)) {
+        throw new Error("Sample query backup already exists with different content.");
+      }
+      fs.copyFileSync(path.join(templateRoot, queryRelative), queryPath);
+      added.push(queryRelative);
+    }
+  }
   return added.sort();
 }
 
