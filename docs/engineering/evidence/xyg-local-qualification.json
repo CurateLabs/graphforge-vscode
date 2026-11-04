@@ -12,7 +12,7 @@
   "checks": {
     "typecheck": "passed",
     "unit": {
-      "passed": 280,
+      "passed": 282,
       "pending": 1,
       "pendingReason": "Optional sibling Python interpreter probe unavailable"
     },
@@ -57,7 +57,7 @@
   },
   "package": {
     "file": "graphforge-xyg-darwin-arm64.vsix",
-    "sha256": "1212d41e2826c6e26c50370c5045addef43d04ff5df30b2cebe1f0d041049de9",
+    "sha256": "be9b835c92f331e0a927318e12fcbfac3e7d781dde8761f985106cd8d770ac45",
     "target": "darwin-arm64",
     "rendererAssets": "XYG only",
     "sourceProvenanceClean": true
@@ -67,5 +67,25 @@
     "Other operating systems, architectures, high-contrast accessibility and large-data release matrix are not qualified by this run.",
     "Desktop capture failed with cgWindowNotFound; displayed images are actual native exports."
   ],
-  "release": "Not published or merged; issues #80 and #82 remain open."
+  "release": "Not published or merged; issues #80 and #82 remain open.",
+  "inspectionUiRegression": {
+    "caption": "MHK",
+    "uuidSeparate": true,
+    "properties": 9,
+    "nativeXygSampleCaption": "passed",
+    "unitCaptionAndLinkingTests": 9,
+    "vscodeMetadataTests": 6,
+    "resultsViewports": [
+      1280,
+      800,
+      480
+    ],
+    "horizontalScrollPositions": [
+      "start",
+      "middle",
+      "end"
+    ],
+    "stickyActionColumn": "opaque selected and hovered surfaces; table-cell layout; all actions remain inside cell",
+    "verificationSurface": "Actual compiled webview components with real query data; native composition and VS Code metadata tests run separately"
+  }
 }

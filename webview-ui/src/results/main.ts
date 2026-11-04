@@ -126,6 +126,10 @@ function renderBody(): void {
     if (Object.keys(entityLinks).length > 0) {
       const actions = document.createElement("td");
       actions.className = "inspect-actions";
+      const buttons = document.createElement("div");
+      buttons.className = "inspect-buttons";
+      buttons.setAttribute("role", "group");
+      buttons.setAttribute("aria-label", `Inspect entities in row ${rowIndex + 1}`);
       for (const link of entityLinks[String(rowIndex)] ?? []) {
         const button = document.createElement("button");
         button.className = `inspect-link inspect-${link.kind}`;
@@ -144,8 +148,9 @@ function renderBody(): void {
             shiftKey: event.shiftKey,
           });
         });
-        actions.append(button);
+        buttons.append(button);
       }
+      actions.append(buttons);
       row.append(actions);
     }
     row.addEventListener("click", (event) => {

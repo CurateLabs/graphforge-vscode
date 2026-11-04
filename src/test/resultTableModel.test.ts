@@ -1,6 +1,8 @@
 import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { nodeLabel } from "../webview/resultGraphModel";
+import { entityInspectTitle } from "../webview/entityInspectModel";
 import type { GraphPayload, QueryResult } from "../session/types";
 import {
   jsonSafeQueryResult,
@@ -121,5 +123,40 @@ suite("result table ↔ graph linking", () => {
       rowCount: 1,
     });
     assert.equal(safe.rows[0].count, "12");
+  });
+});
+
+suite("entity captions", () => {
+  test("uses the airport code instead of the class in inspector headings", () => {
+    const node = {
+      id: "018f0f4e-7b8c-7000-8000-00000000a001",
+      labels: ["Airport"],
+      properties: { code: "MHK", city: "Manhattan" },
+    };
+    assert.equal(nodeLabel(node), "MHK");
+    assert.equal(
+      entityInspectTitle({ kind: "node", item: node }),
+      "Inspect: MHK",
+    );
+    assert.equal(
+      nodeLabel({ ...node, id: "MHK", labels: ["Node"], properties: {} }),
+      "MHK",
+    );
+  });
+  test("skips blank captions and keeps class labels out of identity fallback", () => {
+    const node = {
+      id: "018f0f4e-7b8c-7000-8000-00000000a001",
+      labels: ["Node"],
+      properties: { name: " ", title: "", label: [], code: "MHK" },
+    };
+    assert.equal(nodeLabel(node), "MHK");
+    assert.equal(nodeLabel({ ...node, properties: {} }), "018f0f4e");
+    assert.equal(
+      nodeLabel({
+        ...node,
+        properties: { title: "Airport title", code: "MHK" },
+      }),
+      "Airport title",
+    );
   });
 });

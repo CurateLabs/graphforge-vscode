@@ -4,9 +4,13 @@ export type GraphSelection = EntityInspectSelection & {
   openInNewTab?: boolean;
 };
 export function nodeLabel(node: GraphNode): string {
-  const label =
-    node.properties.name ?? node.properties.label ?? node.properties.code;
-  return typeof label === "string" || typeof label === "number"
-    ? String(label)
-    : node.labels[0] || node.id.slice(0, 8);
+  for (const key of ["name", "title", "label", "code"]) {
+    const value = node.properties[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  // A class is a badge, not an entity's identity.
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(node.id)
+    ? node.id.slice(0, 8)
+    : node.id;
 }

@@ -118,3 +118,8 @@ Canonical entity inspection preserves UUIDs and native properties. Inspector
 edits save parameterized mutation JSON with Core's typed UUID tag, then apply
 that same query/parameter pair. The live test verifies an actual canonical
 node edit before repainting the sample.
+
+Inspector headings use meaningful property captions or entity identity; class
+labels remain badges. Results keeps Inspect actions within a true table cell
+and paints pinned cells over an opaque surface, including selected and hovered
+rows, so horizontally scrolled values cannot show through the controls.

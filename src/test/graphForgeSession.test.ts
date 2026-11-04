@@ -122,12 +122,60 @@ suite("GraphForgeSession.toGraphPayload styling", () => {
     rowCount: 1,
   };
 
-  test("demo styling when result has no graph-shaped rows", async () => {
+  test("empty results stay empty without fabricated graph entities", async () => {
     const session = new GraphForgeSession();
     const payload = await session.toGraphPayload({ columns: [], rows: [], rowCount: 0 });
-    assert.equal(payload.styleMode, "demo");
-    assert.ok(payload.nodes.length > 0);
+    assert.equal(payload.styleMode, "class-only");
+    assert.equal(payload.nodes.length, 0);
     session.dispose();
+  });
+
+  test("canonical entity inspection preserves airport properties and UUIDs", async () => {
+    const session = new GraphForgeSession();
+    injectForge(session, makeStubForge());
+    injectCapabilities(session, []);
+    const source = "018f0f4e-7b8c-7000-8000-00000000a001",
+      target = "018f0f4e-7b8c-7000-8000-00000000a002",
+      edge = "018f0f4e-7b8c-7000-8000-00000000a003";
+    try {
+      const payload = await session.toGraphPayload({
+        columns: ["a", "r", "b", "source", "target"],
+        rowCount: 1,
+        rows: [
+          {
+            a: {
+              node_uuid: source,
+              labels: ["Airport"],
+              code: "MHK",
+              city: "Manhattan",
+              lon: -96.6707992553711,
+            },
+            r: {
+              edge_uuid: edge,
+              src_uuid: source,
+              dst_uuid: target,
+              rel_type: "ROUTE",
+              dist: 500,
+            },
+            b: { node_uuid: target, labels: ["Airport"], code: "ORD" },
+            source: "MHK",
+            target: "ORD",
+          },
+        ],
+      });
+      assert.deepEqual(payload.nodes.map((node) => node.id).sort(), [
+        source,
+        target,
+      ]);
+      assert.deepEqual(
+        payload.nodes.find((node) => node.id === source)?.properties,
+        { code: "MHK", city: "Manhattan", lon: -96.6707992553711 },
+      );
+      assert.equal(payload.edges[0].id, edge);
+      assert.equal(payload.edges[0].properties?.dist, 500);
+    } finally {
+      session.dispose();
+    }
   });
 
   test("class-only styling with no fake statuses when knowledge capability is absent", async () => {
