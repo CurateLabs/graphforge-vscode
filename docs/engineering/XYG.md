@@ -121,8 +121,10 @@ interactive and that export failure is reported without changing its axis.
 
 Local qualification (2026-11-03, macOS arm64): the installed VSIX opened the
 air-routes project and received paint acknowledgements for all four views.
-The notebook ran all code cells using GraphForge Python 0.5.2 and this XYG
-source pin, producing CSV and HTML. This is distinct from the extension's
+The initial notebook proof ran all code cells using GraphForge Python 0.5.2
+and XYG `14e944b`, producing CSV and HTML. The source-install examples now
+track the updated extension pin; plain-Cypher Python fixture qualification
+is recorded in the [plain-Cypher qualification](evidence/plain-cypher-qualification.md). This is distinct from the extension's
 Core 0.6.0-rc.7 lane. Static time-axis export remains the known gap above.
 
 Canonical entity inspection preserves UUIDs and native properties. Inspector

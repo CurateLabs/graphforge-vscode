@@ -93,3 +93,22 @@ interactive/static presentation differences, and the pinned spec retains
 keyboard/zoom acceptance limits. This task does not qualify those gates,
 temporal export (#889), every algorithm schema, massive graphs, other platforms,
 or unpublished packages. No PR, merge, publication or issue-state change was made.
+
+## Parent integration verification
+
+Integrated as extension `b21d688` alongside the inspector/Results fixes in
+`83b4605`. The parent independently reviewed XYG `18951e62`, including
+zero-length native buffer safety and retained base-schema/endpoint guards;
+no blocking findings remained. The XYG source commit is available on the
+existing `integrate/extension-xyg-intents` branch.
+
+The combined branch passed type checks, 282 unit tests (one optional Python
+probe pending), and 53 focused native graph/layout/intent/transport tests.
+The fresh-Core qualifier was rerun using two independent layout controllers
+for each input, so repeatability does not rely on a controller's cached layout.
+The adjacent machine report contains the new run's hashes.
+
+The real VS Code host test passed in 25 seconds, including the existing four
+view kinds, canonical UUID edit and reopen, plus a new zero-row Core query
+whose empty graph received a real paint acknowledgement with zero nodes.
+The refreshed Mac VSIX keeps the original Arrow and generation binding.

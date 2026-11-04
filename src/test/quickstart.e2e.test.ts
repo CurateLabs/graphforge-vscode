@@ -129,6 +129,21 @@ suite("XYG air-routes integration", () => {
         "graphforge/renderReady",
         JSON.stringify(direct),
       );
+      const empty = await vscode.commands.executeCommand<any>(
+        "graphforge.runQuery",
+        { cypher: "MATCH (a:Airport) WHERE a.code = 'ABSENT' RETURN a" },
+      );
+      assert.equal(empty.rowCount, 0, JSON.stringify(empty));
+      const emptyGraph = await vscode.commands.executeCommand<any>(
+        "graphforge.showResultGraph",
+        { waitForReady: true },
+      );
+      assert.equal(
+        emptyGraph.lifecycle?.type,
+        "graphforge/renderReady",
+        JSON.stringify(emptyGraph),
+      );
+      assert.equal(emptyGraph.lifecycle.nodeCount, 0);
       const tabs = vscode.window.tabGroups.all
         .flatMap((g) => g.tabs)
         .filter(
@@ -138,7 +153,7 @@ suite("XYG air-routes integration", () => {
               "graphforge.xyg",
             ),
         );
-      assert.equal(tabs.length, 5);
+      assert.equal(tabs.length, 6);
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await vscode.commands.executeCommand("graphforge.closeProject");

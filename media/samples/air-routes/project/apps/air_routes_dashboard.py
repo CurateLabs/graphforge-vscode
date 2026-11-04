@@ -3,7 +3,7 @@
 Run from any terminal (VS Code is not required):
 
     uv run --with streamlit --with graphforge --with pandas \
-      --with "xyg @ git+https://github.com/CurateLabs/xyg.git@14e944b1b1e931e1e270d023c5b8fa5c5dce2d8d" \
+      --with "xyg @ git+https://github.com/CurateLabs/xyg.git@18951e621e875407d0e40c35ccddf12d4b1a8def" \
       streamlit run apps/air_routes_dashboard.py
 """
 
