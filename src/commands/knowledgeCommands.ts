@@ -148,10 +148,12 @@ export function registerKnowledgeCommands(
     ),
     vscode.commands.registerCommand(
       "graphforge.createAssertion",
-      (args?: CreateAssertionArgs) => runCreateAssertion(session, refreshTrees, args),
+      (args?: CreateAssertionArgs) =>
+        runCreateAssertion(session, refreshTrees, args),
     ),
-    vscode.commands.registerCommand("graphforge.showAssertion", (arg?: unknown) =>
-      runShowAssertion(session, arg),
+    vscode.commands.registerCommand(
+      "graphforge.showAssertion",
+      (arg?: unknown) => runShowAssertion(session, arg),
     ),
     vscode.commands.registerCommand(
       "graphforge.showAssertionOnGraph",
@@ -167,7 +169,8 @@ export function registerKnowledgeCommands(
     ),
     vscode.commands.registerCommand(
       "graphforge.recordAssertionStatus",
-      (args?: RecordAssertionStatusArgs) => runRecordAssertionStatus(session, args),
+      (args?: RecordAssertionStatusArgs) =>
+        runRecordAssertionStatus(session, args),
     ),
   );
 }
@@ -240,19 +243,29 @@ async function runCreateAssertion(
 
   const subjectKind =
     args?.subjectKind ??
-    (await pickFrom(GRAPH_KIND_OPTIONS, "Create Assertion (3/3) — Subject kind"));
+    (await pickFrom(
+      GRAPH_KIND_OPTIONS,
+      "Create Assertion (3/3) — Subject kind",
+    ));
   if (!subjectKind) {
     return { cancelled: true };
   }
 
   try {
-    const { assertionUuid } = await withEngineProgress("creating assertion…", () =>
-      session.createAssertion({
-        claim,
-        graphRefs: [
-          { graphUuid: subjectUuid, graphKind: subjectKind, role: "subject", ordinal: 0 },
-        ],
-      }),
+    const { assertionUuid } = await withEngineProgress(
+      "creating assertion…",
+      () =>
+        session.createAssertion({
+          claim,
+          graphRefs: [
+            {
+              graphUuid: subjectUuid,
+              graphKind: subjectKind,
+              role: "subject",
+              ordinal: 0,
+            },
+          ],
+        }),
     );
     refreshTrees();
     // Fire-and-forget follow-up so a programmatic caller is never blocked on
@@ -332,7 +345,37 @@ async function runShowAssertionOnGraph(
   try {
     const assertion = await session.getAssertion(assertionUuid);
     const refs = await session.assertionGraphRefs(assertionUuid);
-    const graph = assertionToGraphPayload(assertionUuid, assertion?.claim ?? "", refs);
+    const nodeIds = refs
+      .filter((ref) => (ref.graph_kind ?? ref.graphKind) === "node")
+      .map((ref) => String(ref.graph_uuid ?? ref.graphUuid));
+    const edgeIds = refs
+      .filter((ref) => (ref.graph_kind ?? ref.graphKind) === "edge")
+      .map((ref) => String(ref.graph_uuid ?? ref.graphUuid));
+    if (!nodeIds.length && !edgeIds.length)
+      throw new Error("This assertion has no graph references.");
+    // Core admits UUID tags at direct identity-equality predicates.
+    const params: Record<string, { $uuid: string }> = {};
+    const predicates: string[] = [];
+    nodeIds.forEach((id, index) => {
+      const key = `node${index}`;
+      params[key] = { $uuid: id };
+      predicates.push(
+        edgeIds.length
+          ? `a.node_uuid = $${key} OR b.node_uuid = $${key}`
+          : `n.node_uuid = $${key}`,
+      );
+    });
+    edgeIds.forEach((id, index) => {
+      const key = `edge${index}`;
+      params[key] = { $uuid: id };
+      predicates.push(`r.edge_uuid = $${key}`);
+    });
+    const cypher = edgeIds.length
+      ? `MATCH (a)-[r]->(b) WHERE ${predicates.join(" OR ")} RETURN a, r, b`
+      : `MATCH (n) WHERE ${predicates.join(" OR ")} RETURN n`;
+    const result = await session.execute(cypher, params);
+    const graph = await session.toGraphPayload(result, assertion?.claim);
+
     const commands = await vscode.commands.getCommands(true);
     if (!commands.includes("graphforge.showResultGraph")) {
       return {
@@ -341,53 +384,13 @@ async function runShowAssertionOnGraph(
         nextAction: "Enable Visualize in GraphForge: Manage Modules.",
       };
     }
-    await vscode.commands.executeCommand("graphforge.showResultGraph", { payload: graph });
+    await vscode.commands.executeCommand("graphforge.showResultGraph", {
+      title: `Assertion ${assertionUuid.slice(0, 8)}`,
+    });
     return { assertionUuid, graph };
   } catch (err) {
     return reportEngineError("Show on Graph failed", err);
   }
-}
-
-function assertionToGraphPayload(
-  assertionUuid: string,
-  claim: string,
-  refs: Array<Record<string, unknown>>,
-): GraphPayload {
-  const nodes: GraphPayload["nodes"] = [
-    {
-      id: assertionUuid,
-      labels: ["Assertion"],
-      ontologyType: "Assertion",
-      epistemicStatus: "statusless",
-      properties: { claim },
-    },
-  ];
-  const edges: GraphPayload["edges"] = [];
-  refs.forEach((ref, i) => {
-    const graphUuid = String(ref.graph_uuid ?? ref.graphUuid ?? `ref-${i}`);
-    const role = String(ref.role ?? "context");
-    nodes.push({
-      id: graphUuid,
-      labels: [String(ref.graph_kind ?? ref.graphKind ?? "Node")],
-      ontologyType: String(ref.graph_kind ?? ref.graphKind ?? "Node"),
-      epistemicStatus: "statusless",
-      properties: ref,
-    });
-    edges.push({
-      id: `${assertionUuid}-${graphUuid}`,
-      type: role.toUpperCase(),
-      source: assertionUuid,
-      target: graphUuid,
-      epistemicStatus: "statusless",
-    });
-  });
-  return {
-    nodes,
-    edges,
-    legend: { statuses: ["statusless"], types: ["Assertion"] },
-    title: `Assertion ${assertionUuid.slice(0, 8)}`,
-    styleMode: "class-only",
-  };
 }
 
 /** Advanced: attach one evidence link. Kept out of Create Assertion by design. */
@@ -407,7 +410,8 @@ async function runAttachEvidence(
     args?.sourceUuid?.trim() ||
     (await vscode.window.showInputBox({
       title: "GraphForge: Attach Evidence — Source UUID",
-      validateInput: (v) => (v && !isUuidish(v) ? "Expected a UUID" : undefined),
+      validateInput: (v) =>
+        v && !isUuidish(v) ? "Expected a UUID" : undefined,
     }));
   if (!sourceUuid) {
     return { cancelled: true };
@@ -419,7 +423,8 @@ async function runAttachEvidence(
     return { cancelled: true };
   }
   const role =
-    args?.role ?? (await pickFrom(EVIDENCE_ROLE_OPTIONS, "Attach Evidence — Role"));
+    args?.role ??
+    (await pickFrom(EVIDENCE_ROLE_OPTIONS, "Attach Evidence — Role"));
   if (!role) {
     return { cancelled: true };
   }
@@ -478,7 +483,9 @@ async function runAssessConfidence(
       value = Number(raw);
     }
     if (!Number.isFinite(value) || value < 0 || value > 1) {
-      return { error: "explicit confidence value must be a number between 0 and 1." };
+      return {
+        error: "explicit confidence value must be a number between 0 and 1.",
+      };
     }
   }
   try {
@@ -510,7 +517,8 @@ async function runRecordAssertionStatus(
     return { cancelled: true };
   }
   const status =
-    args?.status ?? (await pickFrom(EXPLICIT_STATUS_OPTIONS, "Record Status — Status"));
+    args?.status ??
+    (await pickFrom(EXPLICIT_STATUS_OPTIONS, "Record Status — Status"));
   if (!status) {
     return { cancelled: true };
   }
@@ -519,7 +527,8 @@ async function runRecordAssertionStatus(
     (await vscode.window.showInputBox({
       title: "GraphForge: Record Status — Provenance UUID",
       prompt: "Existing provenance record UUID backing this status event.",
-      validateInput: (v) => (v && !isUuidish(v) ? "Expected a UUID" : undefined),
+      validateInput: (v) =>
+        v && !isUuidish(v) ? "Expected a UUID" : undefined,
     }));
   if (!provenanceUuid) {
     return { cancelled: true };

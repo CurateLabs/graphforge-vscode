@@ -148,7 +148,7 @@ export function buildQuickstartSeedCypher(dataset: QuickstartDataset): string {
     parts.push(
       `(p${index}:Airport {` +
         `id: '${escCypherString(airport.id)}', ` +
-        `code: '${escCypherString(airport.code)}', ` +
+        `code: '${escCypherString(airport.code)}', name: '${escCypherString(airport.code)}', ` +
         `city: '${escCypherString(airport.city)}', ` +
         `region: '${escCypherString(airport.region)}', ` +
         `runways: ${airport.runways}, ` +

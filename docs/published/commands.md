@@ -53,8 +53,8 @@ Every command below is a stable ID, invokable from the Command Palette or progra
 | Command | ID | Args |
 |---|---|---|
 | Open Saved Result | `graphforge.openProjectResult` | String, URI, or `{ path }` — restores a `results/*.json` file into the Results table and session views. |
-| Open Saved Visualization | `graphforge.openProjectVisualization` | String, URI, or `{ path, waitForReady?, timeoutMs? }` — validates v1/v2, loads its referenced result/filters, opens the recorded adapter, and returns `{ path, absolutePath, kind, spec, panel?, lifecycle? }`. `waitForReady: true` explicitly waits 1–60 seconds (30 seconds by default) for `renderReady` or a structured terminal failure. |
-| Create Project Visualization | `graphforge.createProjectVisualization` | `{ name?, result, kind, renderer?, explicit bindings, filter?, open? }` — materializes and saves a complete v2 graph/chart/geospatial/temporal spec before opening; returns `{ path, spec, panel? }`. |
+| Open Saved Visualization | `graphforge.openProjectVisualization` | String, URI, or `{ path, waitForReady? }` — validates XYG intent, loads its referenced result/filters, opens the XYG engine, and returns `{ path, absolutePath, kind, spec, panel?, lifecycle? }`. `waitForReady: true` explicitly waits up to 60 seconds for `renderReady` or a structured terminal failure. |
+| Create Project Visualization | `graphforge.createProjectVisualization` | `{ name?, result, kind, explicit bindings, filter?, open? }` — materializes and saves a complete XYG intent graph/chart/geospatial/temporal spec before opening; returns `{ path, spec, panel? }`. |
 | Save Project Visualization | `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` — validates and writes under `visualizations/`; returns `{ path, spec, panel? }`. |
 | Open Project Artifact | `graphforge.openProjectArtifact` | String, URI, or `{ path }` — opens a project file in the editor. |
 | Apply Project Mutation… | `graphforge.applyProjectMutation` | `{ path, confirm: true }` for non-interactive use; confines executable `.cypher`/`.cql`/JSON specs to `mutations/`. |
@@ -62,13 +62,10 @@ Every command below is a stable ID, invokable from the Command Palette or progra
 `graphforge.createProjectVisualization` uses flattened arguments, not a nested
 bindings object. In addition to the project-relative `result` and `kind`, pass:
 
-- `result-graph`: optional `renderer` (`g6`, `cytoscape`, or `sigma`).
-- `chart`: `mark`, `x`, `y` (except histogram), optional `color`, and optional
-  `renderer` (`g2` or `plotly`).
-- `geospatial`: source `longitude` and `latitude`; optional `targetLongitude`
-  and `targetLatitude` persist an L7 link source with arc and endpoint layers.
-- `temporal`: `timestamp` and `y`, plus optional `color`, `mark`, IANA
-  `timezone`, and `granularity` (G2 is persisted).
+- `result-graph`: optional analytical `base` and XYG `intent`; source must retain original Core entity Arrow.
+- `chart`: `mark` (`bar`, `scatter`, `line`, `histogram`), `x`, required `y` except histogram, optional `color`.
+- `geospatial`: `longitude`, `latitude`, optional paired `targetLongitude`/`targetLatitude`; explicit EPSG:4326 coordinates.
+- `temporal`: `timestamp`, `y`, optional `color` and `mark`; `timezone` is UTC. Timestamps must include an offset.
 
 All kinds also accept optional `name`, `open`, and
 `filter: { column, operator: "equals" | "contains", value }`.
@@ -172,13 +169,7 @@ UUIDv7 (engine-enforced). Knowledge-ledger writes require the Node runtime.
 | GraphForge: Figure from Result… | `graphforge.figureFromResult` |
 | GraphForge: Show Project Capabilities | `graphforge.showCapabilities` |
 
-New Result Graph artifacts default to Cytoscape Canvas; Plotly is the default
-for new analytical chart artifacts. G2 remains an explicit chart option and the
-temporal adapter, while L7 renders geospatial artifacts. G6 and Sigma remain
-explicit graph adapters. `graphforge.resultGraph.renderer` and
-`graphforge.chart.renderer` choose creation templates only: a saved artifact
-continues using its recorded renderer, backend, layout, bindings, and filters.
-Unsupported configuration reports a failure and never silently switches adapter.
+See [XYG integration](../engineering/XYG.md) for the sole native engine, saved intent, explicit bindings and PNG/SVG exports.
 
 Successful Cypher and analyst-verb commands reveal **GraphForge Results** in the bottom Panel
 instead of opening a disposable JSON/Markdown editor tab. Run Query still persists
@@ -191,3 +182,5 @@ not claimed because arbitrary marks do not preserve source-row provenance.
 See [`agent-interop.md`](agent-interop.md) for which of these accept structured arguments and
 return structured results for programmatic (agent) callers, and the source-of-truth test
 (`src/test/extension.test.ts`) that asserts every command above is registered.
+
+`graphforge.exportVisualization` saves the active ready XYG view as PNG/SVG. Static time-axis export currently returns `XYG_SCENE_UNSUPPORTED_PUBLIC_AXIS`.

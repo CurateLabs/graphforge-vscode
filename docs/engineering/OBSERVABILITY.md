@@ -9,21 +9,11 @@ GraphForge for VS Code ships no product telemetry. Its current signals are local
 
 ## Visualization lifecycle (#67)
 
-Visualization adapters report the same phases to the extension host:
-
-- `renderStarted`
-- `layoutStarted` when layout applies
-- `layoutReady` when layout completes
-- `renderReady` when the view can be used
-- `renderFailed` with a stable error code and next action
-
-The same lifecycle is visible inside the panel. A full-canvas render-pipeline
-surface covers provisional output until it is usable and names renderer-specific
-work: G6/Sigma ForceAtlas2, Cytoscape CoSE, G2 mark composition, L7 scene/layer
-construction, or Plotly trace composition. It shows data, layout/composition,
-and paint as discrete states because the adapters do not expose trustworthy
-percentage completion. Screen readers receive the same status through a polite
-live region; a stable summary remains after readiness.
+XYG status distinguishes preparing, progressive layout, paint and ready/error.
+The browser sends `client-loaded`, `view-created`, `ticks-ready` and `painted`
+diagnostics. Commands optionally await `graphforge/renderReady` after a real
+paint acknowledgement, or `graphforge/renderFailed` with a stable code. Both
+bootstrap and frame acknowledgement waits are bounded. See [XYG](XYG.md).
 
 A diagnostic may include only:
 

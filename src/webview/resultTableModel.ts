@@ -313,7 +313,7 @@ export function resultRowsForGraphSelection(
 /** Webview messages cannot carry bigint values; keep the table JSON-safe. */
 export function jsonSafeQueryResult(result: QueryResult): QueryResult {
   return JSON.parse(
-    JSON.stringify(result, (_key, value) =>
+    JSON.stringify({ columns: result.columns, rows: result.rows, rowCount: result.rowCount, algorithm: result.algorithm }, (_key, value) =>
       typeof value === "bigint" ? value.toString() : value,
     ),
   ) as QueryResult;

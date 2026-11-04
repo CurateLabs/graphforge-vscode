@@ -68,7 +68,7 @@ First-run, missing-runtime, and no-project states share one **Get Started** side
   visualization files inside the sample project.
 - The sample Query node exposes **Open Python notebook** and **Open Streamlit
   app** as parallel analyst paths. They read the same copied CSVs and use Python
-  and Plotly directly: the notebook writes portable CSV/HTML exports under
+  and XYG directly: the notebook writes portable CSV/HTML exports under
   `notebooks/outputs/`, while Streamlit serves an interactive browser dashboard.
   Neither path depends on or creates VS Code result-panel or visualization
   artifacts.
@@ -76,17 +76,15 @@ First-run, missing-runtime, and no-project states share one **Get Started** side
   visualization rather than replacing the map with a feature dashboard.
 - **Home / Query / Visualize** title actions remain available. Query authors save
   `.cypher` files and reopen durable result history; visualization settings are
-  saved as `.gfviz.json` files referencing a project result. Renderer/backend,
-  layout, bindings, filters, chart encodings, geospatial coordinates/projection,
-  and temporal range/playback are project state, not hidden webview state.
+  saved as `.gfviz.json` files referencing a project result. Layout, bindings, filters, chart encodings, geospatial camera,
+  and UTC temporal bindings are project state, not hidden webview state.
 - Buttons dispatch palette commands. Sample actions name project files under
   `queries/`, `notebooks/`, and `visualizations/`; query text, notebook analysis,
   and chart bindings never live in extension constants. Result Graph does not auto-open by default; users may opt
   into that independent preference in Settings.
-- Semantic kinds remain distinct even though their adapters share one artifact
-  policy: Result Graph consumes `GraphPayload`; charts and timelines consume
-  tabular results; maps consume explicit coordinate or GeoJSON fields. Raw
-  Plotly Figure JSON remains a separate preview/interchange path.
+- Semantic kinds share XYG's native engine and browser painter. Graphs consume
+  original Core entity Arrow; charts, maps and timelines require explicit
+  field bindings. No field inference or alternate renderer runs.
 - **Check details** at the Environment node opens full JSON diagnostics — never inline stack traces in the panel or toasts
 - Status bar click and setup recovery (`offerSetupRecovery`) open Get Started; capabilities doc only when a project is already open
 
@@ -104,7 +102,7 @@ second store: reads/writes go through `workspace.getConfiguration`, and the
 panel live-syncs with edits made in the VS Code Settings UI.
 
 - Categories: **Runtime** (engine choice) / **Visualizations** (Result Graph
-  auto-open, G6/Cytoscape/Sigma and G2/Plotly creation templates) / **Advanced** (manual binding/interpreter paths). Copy is
+  auto-open) / **Advanced** (manual binding/interpreter paths). Copy is
   analyst-facing; "Project" waits until a project-scoped setting exists (no
   stub categories).
 - Accessibility is part of the contract, not a retrofit: the left nav is a
@@ -150,51 +148,31 @@ repository, come from GraphForge's catalog, or were side-loaded from a manifest.
 The manifest and provider contracts live in
 [`engineering/MODULES.md`](./engineering/MODULES.md).
 
-## Figure and analytical charts (#62 / #67)
+## XYG visualizations
 
-New saved analytical chart artifacts use Plotly by default; G2 remains an
-explicit chart option and the temporal adapter. Their complete
-encodings, transforms, filters, axes, theme, timezone, range, and playback
-configuration live in v2 JSON. The Vite-built **Figure** webview remains for raw
-Plotly JSON, v1 Plotly artifacts, and v2 Plotly charts. Agents may
-still call `showFigure({ figure })` or `figureFromResult(...)`; this preview does
-not replace the project artifact contract. Optional Plotly limits default off.
-Dash is not the IDE host—see ADR-0001.
+Graphs, charts, maps and timelines use XYG's native composition and shared
+local browser painter. `.gfviz.json` contains `xyg.intent/v1` authoring intent
+validated by XYG. The extension owns project paths, original Arrow persistence,
+instance lifecycle and host transport. Invalid or obsolete documents fail
+without rewriting files or substituting another renderer.
 
-## Result Graph workbench (#65)
+Graphs use XYG's progressive layout and canonical UUID picks. Charts bind a
+mark and fields; maps bind explicit source/target coordinates and camera;
+timelines bind offset-qualified timestamps in UTC. Fit, Re-layout and Save
+PNG + SVG are labelled controls. Results provides the accessible data companion.
+Edit and save the project intent to change durable settings; pan, zoom and
+selection are transient. Playback and the retired adapters are unavailable.
 
-Result Graph is a Vite-built interactive network canvas over the existing
-`GraphPayload` contract. New artifacts default to **Cytoscape Canvas** with an
-explicit CoSE configuration; AntV G6 Canvas and Sigma WebGL remain selectable
-adapters. All preserve epistemic/class colors, legends, empty states,
-pan, zoom, fit, re-layout, and click-to-inspect. The renderer setting chooses the
-next artifact template only. Saved configuration wins on reopen, and failures
-remain visible rather than changing renderer/layout or applying graph-size magic.
-The optional G6 creation template keeps all graph elements but explicitly starts with
-edge labels and arrowheads disabled; those optional per-edge decorations remain
-editable and saved in the artifact. Readiness requires visible Canvas output, so
-an invisible scene graph with working hit targets is reported as a render failure.
-
-## Geospatial and temporal artifacts (#67)
-
-L7 renders geospatial artifacts from explicit point coordinates, source/target
-link coordinates, or GeoJSON bindings, CRS, projection, ordered point/arc/line/polygon
-layers, explicit blank offline basemap, and viewport. Link maps materialize unique
-endpoint nodes and draw their saved arc layers without guessing field names. G2 renders
-temporal artifacts from explicit timestamp, timezone, granularity, value/series,
-range, window, and playback settings. Neither surface guesses fields or reaches
-for a remote provider. Both include a textual summary and accessible filtered
-data table. Material viewport/range changes produce visible dirty state; Save
-commits validated JSON and Revert restores the last committed artifact.
+The Python notebook and Streamlit sample use XYG's public composition API and
+portable HTML output. Source installation is explicit while XYG is unpublished.
+See [the XYG contract](engineering/XYG.md) for the supported surface and proof.
 
 ## Visual notes
 
-- Activity Bar icon: simple node/edge mark (`media/graphforge.svg`).
-- Get Started is the primary surface when the GraphForge container first opens; Projects, Ontology, and Knowledge are present but initially collapsed.
-- Result Graph: bundled G6/Cytoscape/Sigma adapters under strict CSP and the stable `GraphPayload` protocol.
-- Artifact visualization panel: bundled G2/L7 chart, map, and timeline adapters with Save/Revert and accessible rows.
-- Figure panel: retained full bundled `plotly.js` (`figure.js` / `figure.css`).
-- Prefer VS Code theme tokens in webviews; status colors are the intentional exception for belief state.
+- Activity Bar uses the GraphForge node/edge mark.
+- Get Started is primary; Projects, Ontology and Knowledge start collapsed.
+- Webviews use VS Code theme tokens, local assets and strict CSP.
+- XYG owns graph geometry, chart axes, geographic projection and static export.
 
 ## Voice
 

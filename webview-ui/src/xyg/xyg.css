@@ -1,0 +1,54 @@
+body {
+  padding: 16px;
+  margin: 0;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font: var(--vscode-font-size)/1.45 var(--vscode-font-family);
+}
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  padding-bottom: 12px;
+}
+h1 {
+  font-size: 18px;
+  margin: 0;
+}
+#status {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+nav {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+button {
+  font: inherit;
+  padding: 5px 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  cursor: pointer;
+}
+button:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+}
+#notice:empty {
+  display: none;
+}
+#notice {
+  overflow-wrap: anywhere;
+}
+#chart {
+  width: 100%;
+  height: calc(100vh - 105px);
+  min-height: 280px;
+  position: relative;
+}
+#chart canvas {
+  max-width: 100%;
+}

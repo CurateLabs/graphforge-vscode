@@ -87,17 +87,17 @@ export const AGENT_OPERATION_COMMANDS: readonly AgentCommandDescriptor[] = [
   },
   {
     id: "graphforge.openProjectVisualization",
-    args: "string | Uri | { path: string | Uri; waitForReady?: boolean; timeoutMs?: 1000..60000 }",
+    args: "string | Uri | { path: string | Uri; waitForReady?: boolean }",
     returns: "{ path, absolutePath, kind, spec, panel?, lifecycle? }",
   },
   {
     id: "graphforge.createProjectVisualization",
-    args: "{ name?, result, kind, renderer?, filter?, explicit bindings, open? }",
+    args: "{ name?, result, kind, filter?, explicit bindings, open? }",
     returns: "{ path, spec, panel? }",
   },
   {
     id: "graphforge.saveProjectVisualization",
-    args: "{ name?: string; spec: graphforge.visualization/v1|v2; open?: boolean }",
+    args: "{ name?: string; spec: xyg.intent/v1; open?: boolean }",
     returns: "{ path, spec, panel? }",
   },
 ] as const;
@@ -115,12 +115,6 @@ function effectiveSettings(): Record<string, unknown> {
     nativeModulePath: config.get("nativeModulePath"),
     pythonInterpreterPath: config.get("pythonInterpreterPath"),
     openResultGraphOnQuery: config.get("openResultGraphOnQuery"),
-    resultGraphRenderer: config.get("resultGraph.renderer"),
-    chartRenderer: config.get("chart.renderer"),
-    figureLimitsEnabled: config.get("figureLimitsEnabled"),
-    figureMaxTraces: config.get("figureMaxTraces"),
-    figureMaxPoints: config.get("figureMaxPoints"),
-    figureMaxBytes: config.get("figureMaxBytes"),
   };
 }
 
@@ -180,7 +174,7 @@ async function buildContext(
       query: ".cypher/.cql text, or JSON { cypher: string, params?: object }",
       result: "JSON { columns: string[], rows: object[], rowCount: number }",
       visualization:
-        "graphforge.visualization/v2 .gfviz.json (v1 remains readable; saved specs are authoritative)",
+        "xyg.intent/v1 .gfviz.json (explicit bindings; canonical Core Arrow source)",
       mutation: ".cypher/.cql text, applied only with explicit confirm: true",
       import: "CSV/JSON/JSONL/NDJSON objects, imported only with explicit confirm: true",
     },

@@ -123,15 +123,15 @@ suite("getStartedContent", () => {
           path: "visualizations/airports-map.gfviz.json",
           result: "results/query-result.json",
           kind: "geospatial",
-          format: "graphforge.visualization/v2",
-          renderer: "l7",
+          format: "xyg.intent/v1",
+          renderer: "xyg",
         },
         {
           path: "visualizations/route-activity-timeline.gfviz.json",
           result: "results/route-activity.json",
           kind: "temporal",
-          format: "graphforge.visualization/v2",
-          renderer: "g2",
+          format: "xyg.intent/v1",
+          renderer: "xyg",
         },
       ],
     );
@@ -151,35 +151,15 @@ suite("getStartedContent", () => {
           path: "visualizations/airports-map.gfviz.json",
           result: "results/query-result.json",
           kind: "geospatial",
-          format: "graphforge.visualization/v2",
-          renderer: "l7",
+          format: "xyg.intent/v1",
+          renderer: "xyg",
         },
-        {
-          path: "visualizations/routes-network-default.gfviz.json",
-          result: "results/query-result.json",
-          kind: "result-graph",
-          format: "graphforge.visualization/v2",
-          renderer: "cytoscape",
-        },
-        {
-          path: "visualizations/routes-network-antv.gfviz.json",
-          result: "results/query-result.json",
-          kind: "result-graph",
-          format: "graphforge.visualization/v2",
-          renderer: "g6",
-        },
-        {
-          path: "visualizations/routes-network.gfviz.json",
-          result: "results/query-result.json",
-          kind: "result-graph",
-          format: "graphforge.visualization/v1",
-          renderer: "cytoscape",
-        },
+        {path:"visualizations/routes-network.gfviz.json",result:"results/query-result.json",kind:"result-graph",format:"xyg.intent/v1",renderer:"xyg"},
       ],
     );
     assert.deepEqual(afterQuery, {
       resultPath: "results/query-result.json",
-      visualizationPath: "visualizations/airports-map.gfviz.json",
+      visualizationPath: "visualizations/routes-network.gfviz.json",
     });
   });
 

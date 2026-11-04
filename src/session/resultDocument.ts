@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { projectArtifactFileName } from "./projectArtifacts";
 import type { QueryResult } from "./types";
 
@@ -21,7 +22,9 @@ function jsonReplacer(_key: string, value: unknown): unknown {
 /** Canonical, agent-copyable result document required by FR-2. */
 export function formatQueryResultJson(result: QueryResult): string {
   return `${JSON.stringify(
-    { columns: result.columns, rows: result.rows, rowCount: result.rowCount },
+    { columns: result.columns, rows: result.rows, rowCount: result.rowCount,
+      ...(result.ipc ? { arrowSha256: createHash('sha256').update(result.ipc).digest('hex'), numericColumns: result.numericColumns, generationUuid: result.generationUuid } : {}),
+    },
     jsonReplacer,
     2,
   )}\n`;
@@ -140,6 +143,10 @@ export async function persistQueryResultDocuments(
     fs.writeFile(markdownPath, markdown, "utf8"),
     fs.writeFile(historyJsonPath, json, "utf8"),
     fs.writeFile(historyMarkdownPath, markdown, "utf8"),
+    ...(result.ipc ? [
+      fs.writeFile(jsonPath.replace(/\.json$/i, ".arrow"), result.ipc),
+      fs.writeFile(historyJsonPath.replace(/\.json$/i, ".arrow"), result.ipc),
+    ] : []),
   ]);
 
   return { jsonPath, markdownPath, historyJsonPath, historyMarkdownPath };

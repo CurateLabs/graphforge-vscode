@@ -11,16 +11,13 @@ import {
   replaceProjectVisualization,
   resolveProjectMutationPath,
   scanProjectArtifacts,
-  VISUALIZATION_SPEC_FORMAT,
-  VISUALIZATION_SPEC_FORMAT_V2,
   writeProjectMutation,
   writeProjectQuery,
   writeProjectQueryTemplate,
   writeProjectVisualization,
 } from "../session/projectArtifacts";
 import {
-  createDefaultChartSpec,
-  createDefaultResultGraphSpec,
+  createResultGraphSpec,
 } from "../session/visualizationRegistry";
 
 suite("project artifacts", () => {
@@ -42,12 +39,12 @@ suite("project artifacts", () => {
 
     const queryPath = writeProjectQuery(root, "regional routes", "MATCH (n) RETURN n");
     const visualizationPath = writeProjectVisualization(root, "regional graph", {
-      format: VISUALIZATION_SPEC_FORMAT,
+      format: "xyg.intent/v1",
       name: "Regional graph",
       kind: "result-graph",
       result: "results/routes.json",
-      filter: { column: "region", operator: "equals", value: "US-GA" },
-      graph: { renderer: "sigma", layout: { gravity: 0.8, slowDown: 4 } },
+      filters: [{ column: "region", operator: "equals", value: "US-GA" }],
+      graph: { layout: "cose", iterations: 50 },
     });
 
     const artifacts = scanProjectArtifacts(root);
@@ -74,11 +71,11 @@ suite("project artifacts", () => {
       "MATCH (n) RETURN n",
     );
     const visualizationPath = writeProjectVisualization(root, undefined, {
-      format: VISUALIZATION_SPEC_FORMAT,
+      format: "xyg.intent/v1",
       name: "",
       kind: "result-graph",
       result: "results/routes.json",
-      graph: { renderer: "cytoscape" },
+      filters: [], graph: { layout: "cose", iterations: 50 },
     });
     const artifacts = scanProjectArtifacts(root);
 
@@ -108,49 +105,35 @@ suite("project artifacts", () => {
     );
   });
 
-  test("reads existing v1 visualization JSON exactly without migration", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-artifact-v1-"));
-    fs.mkdirSync(path.join(root, "visualizations"), { recursive: true });
-    const original = {
-      format: VISUALIZATION_SPEC_FORMAT,
-      name: "Legacy routes",
-      kind: "result-graph",
-      result: "results/routes.json",
-      graph: { renderer: "cytoscape", layout: { gravity: 0.7 } },
-    };
-    const artifactPath = "visualizations/legacy.gfviz.json";
-    fs.writeFileSync(path.join(root, artifactPath), `${JSON.stringify(original, null, 2)}\n`);
-
-    const loaded = readProjectVisualization(root, artifactPath);
-
-    assert.deepEqual(loaded, original);
-    assert.equal(loaded.format, "graphforge.visualization/v1");
-    assert.equal(fs.readFileSync(path.join(root, artifactPath), "utf8"), `${JSON.stringify(original, null, 2)}\n`);
+  test("rejects old visualization documents without rewriting analyst files", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-old-viz-"));
+    fs.mkdirSync(path.join(root,"visualizations"));
+    const text = JSON.stringify({format:"graphforge.visualization/v1",kind:"result-graph",result:"results/a.json"});
+    const file=path.join(root,"visualizations/old.gfviz.json");fs.writeFileSync(file,text);
+    assert.throws(()=>readProjectVisualization(root,"visualizations/old.gfviz.json"));
+    assert.equal(fs.readFileSync(file,"utf8"),text);
   });
 
-  test("writes, scans, and reloads strict v2 graph and chart artifacts", () => {
+  test("writes, scans, and reloads XYG graph and chart intents", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-artifact-v2-"));
     fs.mkdirSync(path.join(root, "results"), { recursive: true });
     fs.writeFileSync(
       path.join(root, "results", "routes.json"),
       JSON.stringify({ columns: ["origin", "distance"], rows: [], rowCount: 0 }),
     );
-    const graph = createDefaultResultGraphSpec({
+    const graph = createResultGraphSpec({
       name: "Routes",
       result: "results/routes.json",
     });
-    const chart = createDefaultChartSpec({
+    const chart = { format:"xyg.intent/v1" as const,kind:"chart" as const,filters:[],chart:{mark:"bar" as const,x:"origin",y:"distance"},
       name: "Distances",
       result: "results/routes.json",
-      mark: "bar",
-      x: "origin",
-      y: "distance",
-    });
+    };
 
     const graphPath = writeProjectVisualization(root, graph.name, graph);
     const chartPath = writeProjectVisualization(root, chart.name, chart);
 
-    assert.equal(readProjectVisualization(root, graphPath).format, VISUALIZATION_SPEC_FORMAT_V2);
+    assert.equal(readProjectVisualization(root, graphPath).format, "xyg.intent/v1");
     assert.equal(readProjectVisualization(root, chartPath).kind, "chart");
     assert.deepEqual(
       scanProjectArtifacts(root).visualizations.map((item) => item.kind).sort(),
@@ -161,7 +144,7 @@ suite("project artifacts", () => {
   test("rejects invalid v2 renderer, remote result, and executable values", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-artifact-v2-invalid-"));
     fs.mkdirSync(path.join(root, "visualizations"), { recursive: true });
-    const graph = createDefaultResultGraphSpec({
+    const graph = createResultGraphSpec({
       name: "Routes",
       result: "results/routes.json",
     });
@@ -195,6 +178,7 @@ suite("project artifacts", () => {
 
   test("filters durable result rows without mutating the source", () => {
     const source = {
+      ipc: Uint8Array.of(1,2,3),
       columns: ["region"],
       rows: [{ region: "US-GA" }, { region: "US-TX" }],
       rowCount: 2,
@@ -207,6 +191,8 @@ suite("project artifacts", () => {
     assert.equal(filtered.rowCount, 1);
     assert.equal(filtered.rows[0]?.region, "US-GA");
     assert.equal(source.rowCount, 2);
+    assert.equal(filtered.ipc,undefined);
+    assert.deepEqual([...source.ipc!],[1,2,3]);
   });
 
   test("persists edit mutations without overwriting an existing record", () => {
@@ -251,7 +237,7 @@ suite("project artifacts", () => {
     const outsideArtifact = path.join(outside, "routes.gfviz.json");
     const original = "outside content\n";
     fs.writeFileSync(outsideArtifact, original);
-    const spec = createDefaultResultGraphSpec({
+    const spec = createResultGraphSpec({
       name: "Routes",
       result: "results/routes.json",
     });

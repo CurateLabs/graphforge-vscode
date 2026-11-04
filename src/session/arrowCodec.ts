@@ -1,4 +1,4 @@
-import { tableFromIPC, type Table } from "apache-arrow";
+import { DataType, tableFromIPC, type Table } from "apache-arrow";
 import type { QueryResult, TableRow } from "./types";
 
 /**
@@ -24,6 +24,8 @@ export function decodeTable(buf: Buffer): QueryResult {
     rows,
     rowCount: table.numRows,
     algorithm: algorithm ?? undefined,
+    ipc: buf,
+    numericColumns: table.schema.fields.filter(f => DataType.isInt(f.type) || DataType.isFloat(f.type)).map(f => f.name),
   };
 }
 
@@ -39,6 +41,14 @@ export function normalizeCell(value: unknown): unknown {
   }
   if (typeof value === "bigint") {
     return value.toString();
+  }
+  if (Array.isArray(value)) return value.map(normalizeCell);
+  if (ArrayBuffer.isView(value)) return Array.from(value as unknown as ArrayLike<unknown>, normalizeCell);
+  if (value && typeof value === "object") {
+    const row = typeof (value as { toJSON?: unknown }).toJSON === "function"
+      ? (value as { toJSON(): unknown }).toJSON() : value;
+    if (Array.isArray(row)) return row.map(normalizeCell);
+    return Object.fromEntries(Object.entries(row as Record<string, unknown>).map(([key, cell]) => [key, normalizeCell(cell)]));
   }
   return value;
 }

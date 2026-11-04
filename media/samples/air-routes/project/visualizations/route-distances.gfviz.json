@@ -1,13 +1,13 @@
 {
-  "format": "graphforge.visualization/v1",
-  "name": "Route distances by origin region",
-  "kind": "plotly",
+  "format": "xyg.intent/v1",
+  "filters": [],
+  "name": "US route distances by origin region",
+  "kind": "chart",
   "result": "results/query-result.json",
-  "plotly": {
-    "chartType": "scatter",
-    "x": "label",
+  "chart": {
+    "mark": "scatter",
+    "x": "sourceLongitude",
     "y": "dist",
-    "color": "region",
-    "title": "US route distances by origin region"
+    "color": "region"
   }
 }

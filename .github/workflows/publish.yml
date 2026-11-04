@@ -40,6 +40,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -65,7 +67,7 @@ jobs:
       - name: Package extension
         id: package
         run: |
-          npx vsce package --no-dependencies
+          npm run package -- --no-dependencies
           vsix_name="$(ls -1 ./*.vsix | head -n1)"
           echo "Packaged $vsix_name"
           echo "vsix_name=$(basename "$vsix_name")" >> "$GITHUB_OUTPUT"
@@ -91,6 +93,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up Node
         uses: actions/setup-node@v7

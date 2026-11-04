@@ -68,7 +68,7 @@ export function selectJourneyArtifacts(
   isSampleProject: boolean,
   results: readonly JourneyResultArtifact[],
   visualizations: readonly JourneyVisualizationArtifact[],
-  preferredGraphRenderer = "cytoscape",
+  preferredGraphRenderer = "xyg",
 ): { resultPath?: string; visualizationPath?: string } {
   const resultPath = isSampleProject
     ? results.find((item) => item.path === "results/query-result.json")?.path
@@ -76,33 +76,9 @@ export function selectJourneyArtifacts(
   const matchingVisualizations = resultPath
     ? visualizations.filter((item) => item.result === resultPath)
     : [];
-  const visualizationPath =
-    (isSampleProject
-      ? matchingVisualizations.find(
-          (item) =>
-            item.kind === "geospatial" &&
-            item.renderer === "l7" &&
-            item.format === "graphforge.visualization/v2",
-        )?.path
-      : undefined) ??
-    matchingVisualizations.find(
-      (item) =>
-        item.kind === "result-graph" &&
-        item.renderer === preferredGraphRenderer &&
-        item.format === "graphforge.visualization/v2",
-    )?.path ??
-    matchingVisualizations.find(
-      (item) =>
-        item.kind === "result-graph" &&
-        item.renderer === preferredGraphRenderer,
-    )?.path ??
-    matchingVisualizations.find(
-      (item) =>
-        item.kind === "result-graph" &&
-        item.format === "graphforge.visualization/v2",
-    )?.path ??
-    matchingVisualizations.find((item) => item.kind === "result-graph")?.path ??
-    matchingVisualizations[0]?.path;
+  const visualizationPath = matchingVisualizations.find(item => item.kind === "result-graph" && item.renderer === preferredGraphRenderer)?.path
+    ?? matchingVisualizations.find(item => item.kind === "result-graph")?.path
+    ?? matchingVisualizations[0]?.path;
   return { resultPath, visualizationPath };
 }
 

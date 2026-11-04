@@ -101,63 +101,6 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         default: false,
       },
       {
-        key: "resultGraph.renderer",
-        label: "Result Graph renderer",
-        description:
-          "Choose the template used for new Result Graph artifacts. Saved artifacts keep their recorded renderer.",
-        type: "enum",
-        default: "cytoscape",
-        options: [
-          {
-            value: "cytoscape",
-            label: "Cytoscape (recommended)",
-            description:
-              "Canvas rendering with force layout, pan, zoom, fit, and node or edge inspection.",
-          },
-          {
-            value: "g6",
-            label: "AntV G6",
-            description:
-              "Canvas rendering with an explicit worker ForceAtlas2 layout, pan, zoom, fit, and inspection.",
-          },
-          {
-            value: "sigma",
-            label: "Sigma",
-            description:
-              "WebGL rendering with ForceAtlas2 layout, suited to larger and denser result graphs.",
-          },
-        ],
-      },
-      {
-        key: "chart.renderer",
-        label: "Chart renderer",
-        description:
-          "Choose the template used for new chart artifacts. Saved artifacts keep their recorded renderer.",
-        type: "enum",
-        default: "plotly",
-        options: [
-          {
-            value: "plotly",
-            label: "Plotly (recommended)",
-            description:
-              "Retains the existing Plotly figure renderer and Python/JavaScript JSON interchange.",
-          },
-          {
-            value: "g2",
-            label: "AntV G2",
-            description:
-              "Declarative charts generated from explicit project-artifact field bindings.",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "advanced",
-    label: "Advanced",
-    blurb: "Manual runtime paths, limits, and explicitly dangerous module permissions.",
-    settings: [
-      {
         key: "nativeModulePath",
         label: "Node binding path",
         description:
@@ -175,36 +118,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         default: "",
         placeholder: "Auto-detect (Python extension, .venv, PATH)",
       },
-      {
-        key: "figureLimitsEnabled",
-        label: "Enforce Figure size limits",
-        description:
-          "When on, reject Plotly figures that exceed max traces, points, or JSON bytes. Off by default so agents are not capped unless you opt in.",
-        type: "boolean",
-        default: false,
-      },
-      {
-        key: "figureMaxTraces",
-        label: "Figure max traces",
-        description: "Maximum number of Plotly traces when Figure size limits are enabled.",
-        type: "number",
-        default: 50,
-      },
-      {
-        key: "figureMaxPoints",
-        label: "Figure max points",
-        description:
-          "Approximate maximum x/y points across traces when Figure size limits are enabled.",
-        type: "number",
-        default: 100000,
-      },
-      {
-        key: "figureMaxBytes",
-        label: "Figure max JSON bytes",
-        description: "Maximum serialized figure JSON size when Figure size limits are enabled.",
-        type: "number",
-        default: 10000000,
-      },
+
       {
         key: "modules.dangerouslyAllowWorkspaceJavaScript",
         label: "Dangerously allow workspace JavaScript modules",

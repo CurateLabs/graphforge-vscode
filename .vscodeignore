@@ -31,3 +31,5 @@ agent-transcripts/**
 design-qa.md
 onboarding-design-qa/**
 graphforge-quickstart/**
+
+vendor/**

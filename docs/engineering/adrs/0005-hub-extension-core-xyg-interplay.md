@@ -71,3 +71,5 @@ Before the shared decision, the extension had drifted in several ways:
 | Native-only packages and the preview channel | CurateLabs/graphforge#1768 |
 | Producing-version declaration and future data fix-up | CurateLabs/graphforge#1769 |
 | Publish native data plus selected previews | #91 |
+
+ADR-0006 supersedes only the retained-renderer publication prerequisite above. All other component ownership boundaries remain in effect.

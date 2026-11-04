@@ -198,9 +198,7 @@ export async function buildGetStartedState(
     isSampleProject,
     artifacts.results,
     artifacts.visualizations,
-    vscode.workspace
-      .getConfiguration("graphforge")
-      .get<string>("resultGraph.renderer", "cytoscape"),
+    "xyg",
   );
 
   const nodeLine = nodeAvailable ? "Node binding ready" : "Node binding not linked";

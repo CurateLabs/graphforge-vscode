@@ -25,10 +25,8 @@ User-facing docs: [`docs/published/`](docs/published/) ([overview](docs/publishe
 | **Projects** | Activity-bar explorer for folders with a valid `FORMAT` marker |
 | **Ontology** | Mode badge + entity/relation tree; Ontology Viewer webview with a helpful exploratory empty state, **Load Ontology…**, and an Advanced section (open `ontology.json`, explain mode) |
 | **Knowledge** | Inspect and create assertions: list/empty states, **Create Assertion…** (minimal fields), **Show Assertion** / **Show on Graph**, plus Advanced attach-evidence / assess-confidence / record-status commands |
-| **Result Graph** | Cytoscape Canvas by default, with optional AntV G6 and Sigma adapters; explicit artifact-owned layout, styling, interactions, and optional time configuration |
-| **Charts, maps, and timelines** | Plotly analytical charts by default; optional AntV G2 charts, G2 timelines, and L7 geospatial views from saved project artifacts |
 | **Results** | Interactive table in the bottom Panel; expandable nested JSON and row/cell selection linked to matching Result Graph nodes/edges |
-| **Python analysis** | A notebook and Streamlit dashboard over the same air-routes sample: pandas inspection, native GraphForge PageRank, Plotly output, and portable CSV/HTML/browser views that do not require VS Code panels |
+| **XYG visualizations** | Native graph, chart, map and timeline composition, one shared painter, explicit saved intent, and PNG/SVG exports |
 | **Modules** | One Module Bay for default, non-removable Query/Visualize/Import modules, future GraphForge-catalog modules, and advanced side-loads |
 
 ## Requirements
@@ -43,27 +41,18 @@ User-facing docs: [`docs/published/`](docs/published/) ([overview](docs/publishe
 ## Develop
 
 ```bash
-npm install
+git submodule update --init vendor/xyg
+npm ci
 npm run compile
 ```
 
 Press **F5** (`Run Extension`) to open an Extension Development Host.
 
-For one-off renderer-adapter evidence, run
-`npm run benchmark:visualizations -- --layout-tier all --output /tmp/graphforge-viz.json`.
-It uses the same small, real-sample medium, and generated large graph tiers for
-G6, Cytoscape, and Sigma. Layouts run in isolated Node workers with an explicit
-60-second per-layout evidence budget. This is opt-in and does not claim browser
-paint, interaction, accessibility, or peak-memory performance; it is intentionally
-absent from CI and release gates.
+See [the XYG visualization contract](docs/engineering/XYG.md) for the native engine, saved intent, build and qualification details.
 
 ### Benchmarks (CodSpeed)
 
-`npm run bench` builds `src/bench/` into an ESM bundle (`dist/bench/index.mjs`)
-and runs the tinybench suites: Arrow IPC decoding, Result Table ↔ Result Graph
-cross-linking, Result Graph styling and renderer option resolution, and Plotly
-figure building and validation. All of it is host-side, `vscode`-free code on
-the path of every query result.
+Benchmarks cover Arrow decoding and Results table preparation. XYG maintains its engine benchmarks upstream.
 
 CI runs the same suites on every pull request through
 [CodSpeed](https://app.codspeed.io/CurateLabs/graphforge-vscode) in CPU
@@ -77,14 +66,7 @@ codspeed run --mode simulation -- npm run bench:run
 
 ### Runtimes: Node (default) and Python (alternative)
 
-The extension can run Cypher and analyst verbs through either engine binding:
-
-- **Node (`@curatelabs/graphforge`)** — the default. Fast, in-process, no subprocess.
-- **Python (`graphforge` on PyPI)** — a first-class alternative for analysts already living in
-  a Python/notebook workflow, or when a native Node binding isn't available for your platform.
-  In the air-routes sample, choose **Open Python notebook** for exploratory analysis or
-  **Open Streamlit app** for a browser dashboard. Both run the same data through pandas,
-  PyArrow, GraphForge, and Plotly without using VS Code result or visualization artifacts.
+The extension runs Cypher and analyst verbs through either the Node or Python Core binding. XYG is bundled independently for native visualization.
 
 The command bridge preserves runtime parity, but the primary Python experience is
 analyst-authored scripts and notebooks in the selected environment. GraphForge opens and
@@ -208,35 +190,9 @@ Run **GraphForge: Check Environment** any time to see where things stand — a 3
 - **Ontology** — `Show Ontology Viewer`, `Load Ontology…`, `Open ontology.json`, `Explain Ontology Mode`
 - **Knowledge ledger** — `List Assertions`, `Create Assertion…`, `Show Assertion…`, `Show Assertion on Graph…`, `Attach Evidence…` / `Assess Confidence…` / `Record Assertion Status…` (Advanced)
 - **Result views** — `Show Result Graph` (+ `Show Result Graph (Advanced)…`), `Show Project Capabilities`
-- **Visualization artifacts** — `Create Project Visualization` (`graphforge.createProjectVisualization`) creates a complete v2 graph, chart, geospatial, or temporal artifact from explicit bindings; `Save Project Visualization` and `Open Saved Visualization` return the saved `path` and `spec` (plus panel status when opened)
+- **Visualization artifacts** — `Create Project Visualization` (`graphforge.createProjectVisualization`) creates a complete `xyg.intent/v1` graph, chart, geospatial, or temporal artifact from explicit bindings; `Save Project Visualization` and `Open Saved Visualization` return the saved `path` and `spec` (plus panel status when opened)
 
-Get Started's **Home / Query / Visualize** pages are an editor over durable
-project files: `queries/*.cypher`, `notebooks/*.ipynb`, `apps/*.py`, `results/*`,
-`visualizations/*.gfviz.json`, and `mutations/*.cypher`. New visualizations use the strict
-`graphforge.visualization/v2` contract; existing v1 Cytoscape/Sigma/Plotly files
-remain readable and are not rewritten on open. The graph/chart renderer settings are creation
-templates only: the resolved renderer, backend, layout, bindings, filters,
-coordinates, time settings, and presentation are saved into the artifact and
-remain authoritative when global defaults change. Missing or unsupported
-configuration fails visibly—there is no hidden field inference, size threshold,
-renderer substitution, or layout fallback.
-
-G2/L7/temporal panels expose the filtered rows in an accessible companion table.
-Material viewport or temporal-range changes become visibly dirty and require an
-explicit **Save**; **Revert** restores the committed artifact. The air-routes
-sample copies its source data, query, notebook, Streamlit app, supporting
-result, and v1/v2 visualization specs into this layout and generates its seed
-mutation there before execution. The notebook writes portable PageRank CSV and
-self-contained Plotly HTML under `notebooks/outputs/`; the Streamlit app serves
-the same Python analysis in a browser. Neither Python path depends on VS Code
-result or visualization fixtures.
-
-Selecting a Results cell that contains a node/edge identity (including airport-style codes)
-highlights that element in an open Result Graph. Selecting a metric cell or whole row falls back
-to graph identities and `source`/`target` endpoints in that row. Graph clicks also reveal matching
-table rows. Chart/map/timeline panels expose their filtered rows as a companion
-surface, but point-to-row linking is not claimed because arbitrary G2/Plotly/L7
-marks do not yet retain a stable source-row identity contract.
+See [the XYG visualization contract](docs/engineering/XYG.md) for the native engine, saved intent, build and qualification details.
 
 See [`docs/published/commands.md`](docs/published/commands.md) for the full command-ID table.
 The module manifest, catalog-first distribution path, and side-load security

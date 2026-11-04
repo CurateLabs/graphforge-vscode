@@ -5,7 +5,7 @@ import type { GraphPayload, QueryResult } from "../session/types";
 import type { ResultDocumentPaths } from "../session/resultDocument";
 import type { HostToWebview, WebviewToHost } from "../webview/protocol";
 import { EntityInspectPanel } from "../webview/entityInspectPanel";
-import { ResultGraphPanel } from "../webview/resultGraphPanel";
+import { XygVisualizationPanel } from "../webview/xygPanel";
 import {
   jsonSafeQueryResult,
   resolveResultEntitySelection,
@@ -19,6 +19,7 @@ export const RESULTS_VIEW_ID = "graphforge.results";
 interface ResultTableState {
   title: string;
   result: QueryResult;
+  source: QueryResult;
   persisted?: ResultDocumentPaths;
   graphPayload?: GraphPayload;
 }
@@ -35,8 +36,8 @@ export class ResultTableViewProvider
     private readonly extensionUri: vscode.Uri,
     private readonly session: GraphForgeSession,
   ) {
-    this.graphSelectionDisposable = ResultGraphPanel.onDidSelect((selection) => {
-      if (!this.state) return;
+    this.graphSelectionDisposable = XygVisualizationPanel.onDidSelect((selection) => {
+      if (!this.state || this.state.source !== selection.source) return;
       const rowIndices = resultRowsForGraphSelection(this.state.result, selection);
       if (rowIndices.length === 0) return;
       void this.reveal();
@@ -90,6 +91,7 @@ export class ResultTableViewProvider
     this.state = {
       title,
       result: safeResult,
+      source: result,
       persisted,
       graphPayload,
     };
@@ -113,9 +115,9 @@ export class ResultTableViewProvider
 
   private selectResult(rowIndex: number, column?: string): void {
     if (!this.state) return;
-    const graphPanel = ResultGraphPanel.active();
+    const graphPanel = XygVisualizationPanel.active();
     const highlight = graphPanel?.highlightFromResult(
-      this.state.result,
+      this.state.source,
       rowIndex,
       column,
     );

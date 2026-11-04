@@ -82,3 +82,5 @@ spec behave differently across sessions.
   saving the explicit style fields in their artifact.
 - ADR-0001 still governs the retained raw Plotly path and its CSP. This record
   changes the default for new analytical artifacts without weakening that CSP.
+
+The renderer paths described here were subsequently removed by [ADR-0006](0006-xyg-only-visualization.md).

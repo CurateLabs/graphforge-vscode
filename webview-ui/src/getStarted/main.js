@@ -12,7 +12,7 @@ document.body.innerHTML = `
   <div id="home-page" class="page">
 <section id="ready-summary" class="ready-summary" hidden>
   <p class="ready-kicker">Project ready</p>
-  <p class="ready-copy">Open any saved view. The map leads because it explains this dataset fastest; the force-directed graphs remain available.</p>
+  <p class="ready-copy">Open an XYG graph, chart, map, or timeline from the saved results.</p>
   <label>Saved view<select id="home-visualization"></select></label>
   <button class="primary full" type="button" id="open-home-visualization">Open selected view</button>
   <div class="actions compact-actions">
@@ -59,10 +59,8 @@ document.body.innerHTML = `
     <option value="temporal">Temporal chart</option>
   </select></label>
   <div id="graph-settings">
-    <label>Renderer<select id="viz-renderer"><option value="">Cytoscape (default)</option><option value="cytoscape">Cytoscape</option><option value="g6">AntV G6</option><option value="sigma">Sigma</option></select></label>
   </div>
   <div id="chart-settings" hidden>
-    <label>Renderer<select id="viz-chart-renderer"><option value="">Plotly (default)</option><option value="plotly">Plotly</option><option value="g2">AntV G2</option></select></label>
     <label>Chart type<select id="viz-chart-type">
       <option>scatter</option><option>bar</option><option>line</option><option>histogram</option>
     </select></label>
@@ -81,10 +79,9 @@ document.body.innerHTML = `
       <label>Target longitude (optional)<select id="viz-target-longitude"></select></label>
       <label>Target latitude (optional)<select id="viz-target-latitude"></select></label>
     </div>
-    <p class="muted">Choose both target fields to draw explicit L7 arcs between source and target points. Coordinates remain EPSG:4326 on an offline blank map.</p>
+    <p class="muted">Choose both target fields to draw XYG route geometry between source and target points. Coordinates remain EPSG:4326 on an offline blank map.</p>
   </div>
   <div id="temporal-settings" hidden>
-    <label>Renderer<select id="viz-temporal-renderer"><option value="g2">AntV G2</option></select></label>
     <div class="form-row">
       <label>Timestamp field<select id="viz-timestamp"></select></label>
       <label>Value field<select id="viz-temporal-value"></select></label>
@@ -143,9 +140,8 @@ function renderArtifacts(artifacts) {
   const availableResults = new Set(results.map((item) => item.path));
   const visualizationPriority = (item) => {
     if (item.kind === 'geospatial') return 0;
-    if (item.kind === 'result-graph' && item.renderer === 'cytoscape') return 1;
+    if (item.kind === 'result-graph' && item.renderer === 'xyg') return 1;
     if (item.kind === 'result-graph') return 2;
-    if (item.kind === 'plotly') return 3;
     if (item.kind === 'chart') return 4;
     if (item.kind === 'temporal') return 5;
     return 6;
@@ -286,24 +282,20 @@ byId('visualization-form').addEventListener('submit', (event) => {
   };
   const args = kind === 'result-graph' ? {
     ...common,
-    renderer: byId('viz-renderer').value || undefined,
   } : kind === 'chart' ? {
     ...common,
-    renderer: byId('viz-chart-renderer').value || undefined,
     mark: byId('viz-chart-type').value,
     x: byId('viz-x').value,
     y: byId('viz-chart-type').value === 'histogram' ? undefined : byId('viz-y').value,
     color: byId('viz-color').value || undefined,
   } : kind === 'geospatial' ? {
     ...common,
-    renderer: 'l7',
     longitude: byId('viz-longitude').value,
     latitude: byId('viz-latitude').value,
     targetLongitude: byId('viz-target-longitude').value || undefined,
     targetLatitude: byId('viz-target-latitude').value || undefined,
   } : {
     ...common,
-    renderer: byId('viz-temporal-renderer').value,
     mark: 'line',
     timestamp: byId('viz-timestamp').value,
     y: byId('viz-temporal-value').value,

@@ -163,7 +163,7 @@ export function registerOpenSampleProject(
           presentError(`GraphForge: ${error}`);
           return { error, code: "SAMPLE_STREAMLIT_MISSING", nextAction: "graphforge.openSampleProject" };
         }
-        const command = `uv run --with streamlit --with graphforge --with pandas --with plotly streamlit run ${appPath}`;
+        const command = `uv run --with streamlit --with graphforge --with pandas --with xyg streamlit run ${appPath}`;
         await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(appPath));
         void vscode.window.showInformationMessage(
           `Opened Streamlit app: ${appPath}. Run: ${command}`,

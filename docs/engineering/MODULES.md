@@ -15,16 +15,7 @@ by default, and can be disabled without reloading the extension host. They canno
 through the module lifecycle; modifying or deleting their packaged code is outside the supported
 module contract and breaks the extension installation.
 
-The first-party Visualize module owns Studio's visualization command and adapter
-surface. New graph/chart artifacts default to Cytoscape/Plotly through one
-extension-owned registry; G2 remains the temporal adapter and L7 the geospatial adapter;
-Cytoscape, Sigma, and Plotly remain adapters. This module reads v1 compatibility
-files and creates strict v2 project artifacts. It does not move layout, chart,
-map, or temporal presentation into GraphForge Core: Core continues to return
-graph/query results, while Studio validates and renders their explicit saved
-presentation. External modules may add commands through the normal lifecycle,
-but they do not gain implicit renderer registration, network access, or authority
-to reinterpret an existing visualization artifact.
+The Visualize module registers graph/chart commands backed by XYG. Query and Import retain the same module lifecycle and permissions. See [XYG integration](XYG.md).
 
 ## Manifest
 
