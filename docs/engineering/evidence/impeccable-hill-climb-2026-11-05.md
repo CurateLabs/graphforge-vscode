@@ -1,21 +1,21 @@
 # Impeccable workbench hill climb — 2026-11-05
 
-**Result: 20/20 in the scoped desktop workbench audit, up from 11/20.** This is a provisional engineering assessment of the stated surfaces and regression matrix, not an independent WCAG certificate or the complete XYG release matrix.
+**Result: the ten original audit findings have recorded repairs and regression evidence. The previously reported 20/20 score is withdrawn.** Closing known findings does not establish maximum quality across the original five-dimension rubric. This report records bounded engineering verification; it is not WCAG conformance or the complete XYG release matrix.
 
 Baseline: extension `49e7d7a`. XYG remains pinned, unchanged, at `18951e621e875407d0e40c35ccddf12d4b1a8def`.
 
-## Reassessment
+## Regression evidence by dimension
 
-| Dimension | Before | After | Basis |
+| Dimension | Baseline | Current score | Recorded evidence |
 | --- | ---: | ---: | --- |
-| Accessibility | 2 | 4 | Native Enter/Space activation, row navigation, focus/draft recovery, selected/expanded text contrast, motion preference and semantic status/labels pass the scoped checks. |
-| Performance | 2 | 4 | Every Results page stays at 500 rows or fewer, including linked selection; link-key enumeration is once per render. |
-| Theming | 2 | 4 | Token-controlled selected values, Inspect buttons, code surfaces and inputs; correct native-control color scheme; all four actual VS Code theme modes paint. |
-| Responsive design | 3 | 4 | 320/768/1280 CSS-pixel checks, 200% CSS zoom stress, long keys/labels/filenames, CJK/emoji values and errors stay contained. |
-| Implementation integrity | 2 | 4 | Offered controls match supported operations; graph admission is validated by XYG before save, readiness distinguishes Arrow from table-only data, recovery navigates safely to a source query. |
-| **Total** | **11/20** | **20/20** | **Excellent within this matrix; no open scoped P0–P3 findings.** |
+| Accessibility | 2 | Not reassessed | Native Enter/Space activation, row navigation, focus/draft recovery, selected/expanded text contrast, motion preference and semantic status/labels pass the scoped checks. |
+| Performance | 2 | Not reassessed | Every Results page stays at 500 rows or fewer, including linked selection; link-key enumeration is once per render. |
+| Theming | 2 | Not reassessed | Token-controlled selected values, Inspect buttons, code surfaces and inputs; correct native-control color scheme; all four actual VS Code theme modes paint. |
+| Responsive design | 3 | Not reassessed | 320/768/1280 CSS-pixel checks, 200% CSS zoom stress, long keys/labels/filenames, CJK/emoji values and errors stay contained. |
+| Implementation integrity | 2 | Not reassessed | Offered controls match supported operations; graph admission is validated by XYG before save, readiness distinguishes Arrow from table-only data, recovery navigates safely to a source query. |
+| **Total** | **11/20** | **Not reassessed** | **All ten known findings have repair evidence; this does not establish the absence of further findings.** |
 
-## Original findings resolved
+## Original findings and recorded repairs
 
 | Finding | Repair | Proof |
 | --- | --- | --- |
@@ -63,6 +63,8 @@ The original public sample remains open in a fresh isolated installed host. Pers
 
 Physical screen-reader/touch testing and an independent WCAG conformance assessment remain outside this evidence. CSS zoom is a stress check, not OS/browser zoom certification. Native painter presentation parity, every algorithm, massive data, other OS/architectures and upstream time-axis image export retain their separate qualification requirements. The UI makes the time-axis export limitation explicit.
 
-This score applies to the audited desktop workbench surface and the stated regression matrix. It must not be used as global XYG release acceptance.
+The original audit already excluded native painter requalification, touch and screen-reader qualification. The main correction is to the scoring inference, rather than a newly reduced scope. Theme paint acknowledgements prove successful rendering, not native pixel contrast or presentation correctness. The detailed JSON component/theme matrix covers three surfaces at 320 CSS pixels; wider layouts and CSS zoom are summarized checks rather than per-case records.
+
+A future scored reassessment must define the applicable desktop criteria and coverage before testing, map evidence and unassessed cases to each dimension, and retain the original rubric or explicitly identify a replacement. This regression report must not be used as global XYG release acceptance.
 
 See the adjacent JSON for the recorded component/theme measurements, and the 2026-11-04 audit for the original findings.

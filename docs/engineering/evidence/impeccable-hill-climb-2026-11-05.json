@@ -3,35 +3,43 @@
   "scope": "Desktop workbench UI; compiled component fixtures plus installed macOS arm64 VS Code integration.",
   "score": {
     "before": 11,
-    "after": 20,
+    "after": null,
     "total": 20,
-    "provisional": true
+    "provisional": true,
+    "status": "withdrawn pending rubric-based reassessment",
+    "previouslyReportedAfter": 20,
+    "reason": "Known-finding closure does not establish maximum scores under the original five-dimension rubric."
   },
   "dimensions": [
     {
       "name": "Accessibility",
       "before": 2,
-      "after": 4
+      "after": null,
+      "status": "not reassessed"
     },
     {
       "name": "Performance",
       "before": 2,
-      "after": 4
+      "after": null,
+      "status": "not reassessed"
     },
     {
       "name": "Theming",
       "before": 2,
-      "after": 4
+      "after": null,
+      "status": "not reassessed"
     },
     {
       "name": "Responsive design",
       "before": 3,
-      "after": 4
+      "after": null,
+      "status": "not reassessed"
     },
     {
       "name": "Implementation integrity",
       "before": 2,
-      "after": 4
+      "after": null,
+      "status": "not reassessed"
     }
   ],
   "componentThemeMatrix": [
@@ -220,7 +228,9 @@
   },
   "boundaries": [
     "No independent WCAG conformance certification or physical screen-reader/touch qualification.",
-    "XYG full scene parity, upstream time-axis export, scale beyond this fixture and other OS/architectures are outside this score.",
-    "Final CSS wrapping-only changes received rendered checks and a new installed-package smoke; the preceding full installed integration used identical host/client JavaScript."
+    "XYG full scene parity, upstream time-axis export, scale beyond this fixture and other OS/architectures are outside this regression evidence.",
+    "Final CSS wrapping-only changes received rendered checks and a new installed-package smoke; the preceding full installed integration used identical host/client JavaScript.",
+    "Native theme paint readiness does not establish pixel contrast or presentation correctness.",
+    "The detailed componentThemeMatrix records three surfaces at 320 CSS pixels; other widths and CSS zoom have summary evidence only."
   ]
 }
