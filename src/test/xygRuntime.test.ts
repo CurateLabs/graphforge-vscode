@@ -1,4 +1,5 @@
 import * as assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
@@ -206,6 +207,37 @@ suite("XYG ownership and native composition", () => {
       xy.sceneBrowserPainter(new Uint8Array(compiled.scene)).byteLength > 0,
     );
   });
+  test("native force batching preserves settled positions and cancellation", async function () {
+    this.timeout(30000);
+    const xy = await loadXyg(root);
+    const fixture = path.join(root, "vendor/xyg/tests/fixtures/graphforge/results");
+    const manifest = JSON.parse(fs.readFileSync(path.join(fixture, "manifest.json"), "utf8"));
+    const input = { base: { tables: [fs.readFileSync(path.join(fixture, "cypher-edges.arrow"))],
+      generation: manifest.bases.cyclic.generation }, select: [] };
+    for (const layout of ["cose", "force"]) for (const iterations of [250, 1000]) {
+      const hashes: string[] = [];
+      for (const chunkSteps of [10, 50]) {
+        const owner = new xy.GraphForgeLayoutController();
+        try {
+          const payload = await owner.render(input, { layout, iterations, chunkSteps, width: 900, height: 600 });
+          const hash = createHash("sha256").update(JSON.stringify(payload.positions.uuid));
+          for (const values of [payload.positions.x, payload.positions.y])
+            hash.update(new Uint8Array(values.buffer, values.byteOffset, values.byteLength));
+          hashes.push(hash.digest("hex"));
+        } finally { await owner.dispose(); }
+      }
+      assert.equal(hashes[0], hashes[1], `${layout}/${iterations} retains exact native positions`);
+    }
+    const owner = new xy.GraphForgeLayoutController();
+    const abort = new AbortController();
+    try {
+      await assert.rejects(owner.render(input, { layout: "cose", iterations: 250, chunkSteps: 50,
+        signal: abort.signal, onPayload: (payload: { phase: string }) => {
+          if (payload.phase === "initial") abort.abort();
+        } }), (error: unknown) => (error as { code?: string }).code === "GF_LAYOUT_ABORTED");
+    } finally { await owner.dispose(); }
+  });
+
   test("native XYG composes canonical Core entity Arrow without host graph reconstruction", async function () {
     this.timeout(30000);
     const xy = await loadXyg(root);

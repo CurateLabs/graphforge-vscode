@@ -128,9 +128,10 @@ container dimensions so split-editor resizes recompose the native scene.
 Reopening an unchanged saved graph retains its completed paint or pending render
 when its intent, exact Arrow bytes and generation identities still match. This
 avoids restarting a theme render solely to wait for readiness. Re-layout remains
-an explicit operation, and changed sources or failed views render again. Native
-scheduling includes startup and paint acknowledgements within a 55-second bound;
-the panel retains its 60-second readiness deadline with cleanup time reserved.
+an explicit operation, and changed sources or failed views render again. Reduced-motion rendering batches native force steps to avoid packing unused
+intermediate scenes. Final positions and cancellation stay native-owned. The
+engine retains its default 30-second layout bound and the panel retains its
+60-second readiness deadline.
 
 Result saves prepare JSON, Markdown and Arrow in a private staging directory,
 then publish their files without yielding to other reads or writers in the same

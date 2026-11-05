@@ -431,9 +431,9 @@ export class XygVisualizationPanel implements VisualizationController {
           this.selected,
         );
         this.payload = await this.owner.render(input, {
-          // Native scheduling includes worker startup and paint ACKs. Keep
-          // it within the panel deadline, reserving cancellation/cleanup time.
-          maxWallMs: READY_TIMEOUT_MS - 5000,
+          // Intermediate scenes are not painted under reduced motion. Batch
+          // native steps so their packing does not dominate the force work.
+          ...(this.reducedMotion ? { chunkSteps: 50 } : {}),
           width: width,
           height: height,
           theme,
