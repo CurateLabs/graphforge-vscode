@@ -4,6 +4,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { serializeEntityMutation } from "../webview/entityMutation";
+import { buildGetStartedState } from "../views/getStartedView";
+import type { GraphForgeSession } from "../session/graphForgeSession";
 import {
   scanProjectArtifacts,
   writeProjectMutation,
@@ -39,16 +41,32 @@ suite("XYG air-routes integration", () => {
       assert.equal(repaired.seeded, false, JSON.stringify(repaired));
       assert.ok(repaired.repaired?.includes("queries/templates/routes-overview.cypher"));
       assert.deepEqual(fs.readFileSync(`${queryPath}.pre-xyg`), legacyQuery);
+      fs.writeFileSync(path.join(root, "queries/templates/aaa-analysis.cypher"), "RETURN 1 AS value");
+      const onboarding = await buildGetStartedState({
+        project: { rootPath: root, name: "Sample" }, hasLastResult: false,
+        hasUsableRuntime: async () => true,
+        environmentSnapshot: async () => ({ node: { available: true }, python: { available: false }, projectKind: "node" }),
+      } as unknown as GraphForgeSession);
+      assert.deepEqual(onboarding.steps.find(step => step.id === "query")?.primaryAction?.args,
+        [{ path: "queries/templates/routes-overview.cypher" }]);
       const query = await vscode.commands.executeCommand<any>(
         "graphforge.runProjectQuery",
         { path: "queries/templates/routes-overview.cypher" },
       );
       assert.ok(!query?.error, JSON.stringify(query));
+      assert.equal(query.sourceQuery, "queries/templates/routes-overview.cypher");
+      const invalidFilter = await vscode.commands.executeCommand<any>("graphforge.createProjectVisualization", {
+        name: "rejected-filter", kind: "result-graph", result: "results/query-result.json",
+        filter: { column: "region", operator: "equals", value: "US-TX" },
+      });
+      assert.match(invalidFilter.error, /XYG_GRAPH_FILTER_REQUIRED/);
+      assert.equal(fs.existsSync(path.join(root, "visualizations/rejected-filter.gfviz.json")), false);
       const immediateGraph = await vscode.commands.executeCommand<any>(
         "graphforge.showResultGraph", { waitForReady: true },
       );
       assert.equal(immediateGraph.lifecycle?.type, "graphforge/renderReady", JSON.stringify(immediateGraph));
       assert.equal(immediateGraph.lifecycle.nodeCount, 579);
+      if (process.env.GRAPHFORGE_REDUCED_MOTION_REQUIRED) assert.equal(immediateGraph.lifecycle.reducedMotion, true);
       await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
       const entity = query.rows[0].a;
       const { node_uuid, labels, ...properties } = entity;
@@ -137,6 +155,26 @@ suite("XYG air-routes integration", () => {
         4,
         "distinct artifacts retain independent instances",
       );
+      // The isolated test profile owns these settings; leave the user's profile untouched.
+      const graphSpec = specs.find(spec => spec.kind === "result-graph")!;
+      for (const [theme, kind] of [
+        ["Default High Contrast Light", vscode.ColorThemeKind.HighContrastLight],
+        ["Default High Contrast", vscode.ColorThemeKind.HighContrast],
+        ["Light+", vscode.ColorThemeKind.Light],
+        ["Dark+", vscode.ColorThemeKind.Dark],
+      ] as const) {
+        const changed = new Promise<void>(resolve => {
+          if (vscode.window.activeColorTheme.kind === kind) return resolve();
+          const listener = vscode.window.onDidChangeActiveColorTheme(() => {
+            if (vscode.window.activeColorTheme.kind === kind) { listener.dispose(); resolve(); }
+          });
+        });
+        await vscode.workspace.getConfiguration("workbench").update("colorTheme", theme, vscode.ConfigurationTarget.Global);
+        await changed;
+        const themed = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", { path: graphSpec.path, waitForReady: true });
+        assert.equal(themed.lifecycle?.type, "graphforge/renderReady", JSON.stringify(themed));
+        assert.equal(themed.lifecycle.nodeCount, 579);
+      }
       const direct = await vscode.commands.executeCommand<any>(
         "graphforge.showResultGraph",
         { waitForReady: true },

@@ -25,6 +25,7 @@ nav {
   display: flex;
   gap: 6px;
   margin-left: auto;
+  flex-wrap: wrap;
 }
 button {
   font: inherit;
@@ -48,7 +49,11 @@ button:focus-visible {
   height: calc(100vh - 105px);
   min-height: 280px;
   position: relative;
+  background: var(--vscode-editor-background);
 }
 #chart canvas {
   max-width: 100%;
 }
+
+body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
+body.vscode-dark, body.vscode-high-contrast { color-scheme: dark; }

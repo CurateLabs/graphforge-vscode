@@ -26,6 +26,8 @@ export interface ProjectArtifactEntry {
 export interface ProjectResultEntry extends ProjectArtifactEntry {
   columns: string[];
   rowCount: number;
+  hasArrow: boolean;
+  sourceQuery?: string;
 }
 
 export interface ProjectVisualizationEntry extends ProjectArtifactEntry {
@@ -165,6 +167,7 @@ function parseQueryResult(value: unknown, source: string): QueryResult {
       typeof record.generationUuid === "string"
         ? record.generationUuid
         : undefined,
+    sourceQuery: typeof record.sourceQuery === "string" ? record.sourceQuery : undefined,
   };
 }
 
@@ -191,6 +194,7 @@ export function readProjectResult(
     return {
       ...decodeTable(Buffer.from(result.ipc)),
       generationUuid: result.generationUuid,
+      sourceQuery: result.sourceQuery,
     };
   }
   return result;
@@ -235,7 +239,15 @@ export function readProjectVisualization(
       `Invalid GraphForge visualization spec: ${visualizationPath}`,
     );
   }
+  assertSupportedVisualization(parsed);
   return parsed;
+}
+
+/** Validate capabilities the editor can host before saving or applying filters. */
+function assertSupportedVisualization(spec: ProjectVisualizationSpec): void {
+  if (spec.kind === "result-graph" && spec.filters.length) {
+    throw new Error("XYG_GRAPH_FILTER_REQUIRED: Filter graph entities in the Cypher query, then run it again.");
+  }
 }
 
 export function filterQueryResult(
@@ -312,6 +324,11 @@ export function scanProjectArtifacts(
           ...artifactEntry(projectRoot, file),
           columns: result.columns,
           rowCount: result.rowCount,
+          hasArrow: !!result.ipc,
+          // Only offer navigation to an existing query, never execute metadata.
+          sourceQuery: result.sourceQuery && queryFiles.some(file =>
+            relativeProjectPath(projectRoot, file) === result.sourceQuery)
+            ? result.sourceQuery : undefined,
         },
       ];
     } catch {
@@ -477,6 +494,7 @@ export function writeProjectVisualization(
   if (!isVisualizationSpec(resolvedSpec)) {
     throw new Error("Visualization settings are incomplete.");
   }
+  assertSupportedVisualization(resolvedSpec);
   resolveProjectArtifactPath(projectRoot, resolvedSpec.result);
   const filePath = path.join(
     projectRoot,
@@ -501,6 +519,7 @@ export function replaceProjectVisualization(
   if (!isVisualizationSpec(spec)) {
     throw new Error("Visualization settings are incomplete or unsafe.");
   }
+  assertSupportedVisualization(spec);
   resolveProjectArtifactPath(projectRoot, spec.result);
   const filePath = resolveProjectArtifactPath(projectRoot, visualizationPath);
   const visualizationRoot = path.join(projectRoot, PROJECT_VISUALIZATIONS_DIR);

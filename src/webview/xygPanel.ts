@@ -53,8 +53,10 @@ export class XygVisualizationPanel implements VisualizationController {
   ready: Promise<Record<string, unknown>>;
   private readyTimer: ReturnType<typeof setTimeout> | undefined;
   private isReady = false;
+  private readySettled = false;
   private disposed = false;
   private initialized = false;
+  private reducedMotion = false;
   private width = 1100;
   private height = 650;
   private readonly listeners: vscode.Disposable[] = [];
@@ -100,6 +102,9 @@ export class XygVisualizationPanel implements VisualizationController {
         code: "XYG_DISPOSED",
       });
     });
+    this.listeners.push(vscode.window.onDidChangeActiveColorTheme(() => {
+      if (this.initialized && !this.disposed) void this.render();
+    }));
     panel.webview.html = this.html(panel.webview);
   }
 
@@ -181,10 +186,16 @@ export class XygVisualizationPanel implements VisualizationController {
     if (!message || typeof message.type !== "string") return;
     if (message.type === "ready" && !this.initialized) {
       this.initialized = true;
+      this.reducedMotion = message.reducedMotion === true;
       await this.render();
       return;
     }
     if (!this.lifecycle.accepts(message)) return;
+    if (message.type === "motionPreference" && typeof message.reducedMotion === "boolean") {
+      this.reducedMotion = message.reducedMotion;
+      await this.render();
+      return;
+    }
     if (
       message.type === "ticks" &&
       Number.isInteger(message.requestId) &&
@@ -345,12 +356,10 @@ export class XygVisualizationPanel implements VisualizationController {
     this.rejectFrames();
     this.isReady = false;
     this.acceptedFrame = 0;
-    if (this.renderGeneration > 0) {
-      this.settleReady({
-        type: "graphforge/renderFailed",
-        renderer: "xyg",
-        code: "XYG_RENDER_SUPERSEDED",
-      });
+    // A theme/re-layout can supersede work while a caller waits. Keep that
+    // pending waiter until the current generation paints or fails.
+    if (this.readySettled) {
+      this.readySettled = false;
       this.ready = new Promise((resolve) => {
         this.readyResolve = resolve;
       });
@@ -363,12 +372,15 @@ export class XygVisualizationPanel implements VisualizationController {
       type: "status",
       message: "Preparing XYG…",
       title: this.spec.name,
+      ready: false,
+      exportAvailable: this.spec.kind !== "temporal",
     });
     try {
       this.xy = await loadXyg(this.extensionUri.fsPath);
       if (signal.aborted || this.disposed) return;
       const theme =
-        vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Light
+        vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Light ||
+          vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrastLight
           ? "light"
           : "dark";
       if (this.spec.kind === "result-graph") {
@@ -387,7 +399,10 @@ export class XygVisualizationPanel implements VisualizationController {
           layout: this.spec.graph!.layout,
           iterations: this.spec.graph!.iterations,
           signal,
-          onPayload: (payload: any) => this.paint(payload, generation),
+          onPayload: (payload: any) => {
+            if (!this.reducedMotion || payload.phase === "complete")
+              return this.paint(payload, generation);
+          },
         });
       } else if (this.spec.kind === "geospatial") {
         this.figure = composeMap(
@@ -444,10 +459,13 @@ export class XygVisualizationPanel implements VisualizationController {
         renderGeneration: generation,
         nodeCount: this.payload?.positions?.uuid.length ?? 0,
         rowCount: this.result.rowCount,
+        reducedMotion: this.reducedMotion,
       };
       this.post({
         type: "status",
         message: `XYG ready · ${this.result.rowCount.toLocaleString()} result rows`,
+        ready: true,
+        exportAvailable: this.spec.kind !== "temporal",
       });
       this.isReady = true;
       this.settleReady(lifecycle);
@@ -469,6 +487,7 @@ export class XygVisualizationPanel implements VisualizationController {
   }
   private settleReady(value: Record<string, unknown>) {
     clearTimeout(this.readyTimer);
+    this.readySettled = true;
     this.readyResolve(value);
   }
   private fail(error: unknown) {
@@ -570,6 +589,6 @@ export class XygVisualizationPanel implements VisualizationController {
     const config = JSON.stringify({
       clientUri: uri("xyg", "client", "index.js"),
     }).replace(/</g, "\\u003c");
-    return `<!doctype html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'; worker-src ${webview.cspSource} blob:; connect-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${uri("webview-ui", "xyg.css")}"></head><body><header><h1 id="title"></h1><span id="status" role="status">Loading XYG…</span><nav aria-label="Visualization controls"><button id="fit">Fit</button><button id="relayout">Re-layout</button><button id="export">Save PNG + SVG</button></nav></header><p id="notice" role="status"></p><main id="chart" aria-label="XYG visualization"></main><script id="xyg-config" type="application/json" nonce="${nonce}">${config}</script><script type="module" nonce="${nonce}" src="${uri("webview-ui", "xyg.js")}"></script></body></html>`;
+    return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'; worker-src ${webview.cspSource} blob:; connect-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${uri("webview-ui", "xyg.css")}"></head><body><header><h1 id="title"></h1><span id="status" role="status">Loading XYG…</span><nav aria-label="Visualization controls"><button id="fit" disabled>Fit</button><button id="relayout" disabled>Re-layout</button><button id="export" disabled>Save PNG + SVG</button></nav></header><p id="notice" role="status"></p><main id="chart" aria-label="XYG visualization"></main><script id="xyg-config" type="application/json" nonce="${nonce}">${config}</script><script type="module" nonce="${nonce}" src="${uri("webview-ui", "xyg.js")}"></script></body></html>`;
   }
 }

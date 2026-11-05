@@ -251,7 +251,10 @@ export class ResultTableViewProvider
     </section>
     <footer id="footer" hidden>
       <span id="render-count"></span>
-      <button id="load-more" type="button" hidden>Show more rows</button>
+      <div class="actions" aria-label="Result pages">
+        <button id="previous-rows" type="button" hidden>Previous rows</button>
+        <button id="load-more" type="button" hidden>Next rows</button>
+      </div>
     </footer>
   </main>
   <script type="module" nonce="${nonce}" src="${scriptUri}"></script>

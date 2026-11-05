@@ -23,6 +23,7 @@ function jsonReplacer(_key: string, value: unknown): unknown {
 export function formatQueryResultJson(result: QueryResult): string {
   return `${JSON.stringify(
     { columns: result.columns, rows: result.rows, rowCount: result.rowCount,
+      ...(result.sourceQuery ? { sourceQuery: result.sourceQuery } : {}),
       ...(result.ipc ? { arrowSha256: createHash('sha256').update(result.ipc).digest('hex'), numericColumns: result.numericColumns, generationUuid: result.generationUuid } : {}),
     },
     jsonReplacer,

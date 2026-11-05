@@ -48,13 +48,13 @@ export function graphInput(
   base?: QueryResult,
   selected: string[] = [],
 ) {
-  if (!result.ipc)
-    throw new Error(
-      "XYG_ARROW_REQUIRED: Run the query again to save original Core Arrow results.",
-    );
   if (spec.filters.length)
     throw new Error(
       "XYG_GRAPH_FILTER_REQUIRED: Express graph filters in the Cypher query.",
+    );
+  if (!result.ipc)
+    throw new Error(
+      "XYG_ARROW_REQUIRED: Open the source query and run it again to save original Core Arrow results. The JSON result remains available as a table.",
     );
   if (spec.intent) {
     if (!base?.ipc)

@@ -104,6 +104,25 @@ project's `visualizations/exports/` directory. XYG currently rejects static
 time-axis export (`XYG_SCENE_UNSUPPORTED_PUBLIC_AXIS`); the timeline remains
 interactive and that export failure is reported without changing its axis.
 
+The workbench keeps Results pages bounded to 500 rows, including selection of
+later rows. Previous/Next retain original row numbers; row arrow keys and native
+Inspect/expand activation remain available. Selected text uses selection
+foreground tokens. Inspector editing preserves focus and drafts on failure.
+
+Result metadata distinguishes original Arrow from table-only JSON and retains
+an optional project query path for navigation. Recovery opens that file for an
+explicit rerun; result metadata never executes a query. Graph creation validates
+composition through XYG before saving, and rejects host row filters before they
+can discard the graph's Arrow. Temporal granularity is not offered. The UI
+disables time-axis image export while that pinned XYG capability is unavailable.
+
+Theme changes regenerate native scenes, including both VS Code high-contrast
+variants, while browser chrome uses host tokens and the matching native-control
+color scheme. Reduced motion paints the completed native graph layout rather
+than its intermediate frames, disables animated Fit, and reveals linked result
+rows without smooth scrolling. Pending readiness follows the current render
+generation through theme and motion updates.
+
 ## Proof
 
 - `npm run check` checks host, browser and benchmark types.

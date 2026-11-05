@@ -1,0 +1,226 @@
+{
+  "baseline": "49e7d7a",
+  "scope": "Desktop workbench UI; compiled component fixtures plus installed macOS arm64 VS Code integration.",
+  "score": {
+    "before": 11,
+    "after": 20,
+    "total": 20,
+    "provisional": true
+  },
+  "dimensions": [
+    {
+      "name": "Accessibility",
+      "before": 2,
+      "after": 4
+    },
+    {
+      "name": "Performance",
+      "before": 2,
+      "after": 4
+    },
+    {
+      "name": "Theming",
+      "before": 2,
+      "after": 4
+    },
+    {
+      "name": "Responsive design",
+      "before": 3,
+      "after": 4
+    },
+    {
+      "name": "Implementation integrity",
+      "before": 2,
+      "after": 4
+    }
+  ],
+  "componentThemeMatrix": [
+    {
+      "surface": "results",
+      "theme": "dark",
+      "bodyClass": "vscode-dark",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 5.43,
+      "overflow": false,
+      "textPairs": 226,
+      "title": "GraphForge results hill climb",
+      "width": 320
+    },
+    {
+      "surface": "entityInspect",
+      "theme": "dark",
+      "bodyClass": "vscode-dark",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 4.99,
+      "overflow": false,
+      "textPairs": 34,
+      "title": "GraphForge entityInspect hill climb",
+      "width": 320
+    },
+    {
+      "surface": "getStarted",
+      "theme": "dark",
+      "bodyClass": "vscode-dark",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 4.99,
+      "overflow": false,
+      "textPairs": 13,
+      "title": "GraphForge getStarted hill climb",
+      "width": 320
+    },
+    {
+      "surface": "results",
+      "theme": "light",
+      "bodyClass": "vscode-light",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 5.68,
+      "overflow": false,
+      "textPairs": 226,
+      "title": "GraphForge results hill climb",
+      "width": 320
+    },
+    {
+      "surface": "entityInspect",
+      "theme": "light",
+      "bodyClass": "vscode-light",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 5.12,
+      "overflow": false,
+      "textPairs": 34,
+      "title": "GraphForge entityInspect hill climb",
+      "width": 320
+    },
+    {
+      "surface": "getStarted",
+      "theme": "light",
+      "bodyClass": "vscode-light",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 5.12,
+      "overflow": false,
+      "textPairs": 13,
+      "title": "GraphForge getStarted hill climb",
+      "width": 320
+    },
+    {
+      "surface": "results",
+      "theme": "hc-dark",
+      "bodyClass": "vscode-high-contrast",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 6.84,
+      "overflow": false,
+      "textPairs": 226,
+      "title": "GraphForge results hill climb",
+      "width": 320
+    },
+    {
+      "surface": "entityInspect",
+      "theme": "hc-dark",
+      "bodyClass": "vscode-high-contrast",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 6.84,
+      "overflow": false,
+      "textPairs": 34,
+      "title": "GraphForge entityInspect hill climb",
+      "width": 320
+    },
+    {
+      "surface": "getStarted",
+      "theme": "hc-dark",
+      "bodyClass": "vscode-high-contrast",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 6.84,
+      "overflow": false,
+      "textPairs": 13,
+      "title": "GraphForge getStarted hill climb",
+      "width": 320
+    },
+    {
+      "surface": "results",
+      "theme": "hc-light",
+      "bodyClass": "vscode-high-contrast-light",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 8.98,
+      "overflow": false,
+      "textPairs": 226,
+      "title": "GraphForge results hill climb",
+      "width": 320
+    },
+    {
+      "surface": "entityInspect",
+      "theme": "hc-light",
+      "bodyClass": "vscode-high-contrast-light",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 8.98,
+      "overflow": false,
+      "textPairs": 34,
+      "title": "GraphForge entityInspect hill climb",
+      "width": 320
+    },
+    {
+      "surface": "getStarted",
+      "theme": "hc-light",
+      "bodyClass": "vscode-high-contrast-light",
+      "failureCount": 0,
+      "failures": [],
+      "minContrast": 8.98,
+      "overflow": false,
+      "textPairs": 13,
+      "title": "GraphForge getStarted hill climb",
+      "width": 320
+    }
+  ],
+  "performance": {
+    "method": "Single-run diagnostic, synthetic 7430-row two-column fixture; synchronous handler time, not a performance SLA.",
+    "before": {
+      "rows": 7430,
+      "elements": 81761,
+      "ms": 3081.5
+    },
+    "after": {
+      "rows": 430,
+      "elements": 4763,
+      "ms": 57.8
+    }
+  },
+  "contrast": {
+    "selectedNumericBefore": 1.33,
+    "selectedNumericAfter": 6.11,
+    "minimumSampledText": 4.99
+  },
+  "verification": {
+    "unitPassed": 289,
+    "optionalProbePending": 1,
+    "types": "passed",
+    "nativeSourceIntegration": "passed",
+    "installedVsixIntegration": "passed; four actual theme modes and forced reduced-motion assertion",
+    "finalInstalledSmoke": "passed; original sample 579 nodes, 7430 source rows; no query rerun",
+    "packageFiles": 160,
+    "packageUnpackedBytes": 10259196,
+    "vsixSha256": "eb60988bc9761f1a4f455a642f6326196a2191dbe7b12d42469a023802d1d91d"
+  },
+  "responsive": {
+    "widths": [
+      320,
+      768,
+      1280
+    ],
+    "cssZoom": "200 percent stress check; not OS/browser zoom certification",
+    "longContent": "192-character property keys, long labels, CJK/emoji values, long filenames and error tokens; no document overflow in checked cases"
+  },
+  "boundaries": [
+    "No independent WCAG conformance certification or physical screen-reader/touch qualification.",
+    "XYG full scene parity, upstream time-axis export, scale beyond this fixture and other OS/architectures are outside this score.",
+    "Final CSS wrapping-only changes received rendered checks and a new installed-package smoke; the preceding full installed integration used identical host/client JavaScript."
+  ]
+}

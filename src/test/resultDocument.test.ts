@@ -126,11 +126,13 @@ suite("query result documents", () => {
         ipc,
         numericColumns: ["count"],
         generationUuid: "generation",
+        sourceQuery: "queries/templates/original.cypher",
       });
       const reopened = readProjectResult(root, docs.jsonPath);
       assert.deepEqual([...reopened.ipc!], [...ipc]);
       assert.deepEqual(reopened.numericColumns, ["count"]);
       assert.equal(reopened.generationUuid, "generation");
+      assert.equal(reopened.sourceQuery, "queries/templates/original.cypher");
       const readable = JSON.parse(fs.readFileSync(docs.jsonPath, "utf8"));
       readable.rows = [{ count: "forged" }];
       readable.numericColumns = ["fake"];

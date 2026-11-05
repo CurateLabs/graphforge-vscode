@@ -96,7 +96,7 @@ h1 { font-size: 15px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--gf-accent) 22%, transparent);
 }
 .journey-content { min-width: 0; padding-top: 2px; }
-.journey-step.done .journey-content { opacity: 0.74; }
+.journey-step.done .journey-content { color: var(--vscode-foreground); }
 .step-title { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
 .journey-step.current .step-title { color: var(--vscode-textLink-foreground); }
 .step-detail {
@@ -165,7 +165,7 @@ label, legend { font-size: 10px; font-weight: 600; color: var(--vscode-descripti
 input, select, textarea {
   box-sizing: border-box; width: 100%; margin-top: 3px; padding: 5px 6px;
   color: var(--vscode-input-foreground); background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-input-border, transparent); border-radius: 3px;
+  border: 1px solid var(--vscode-input-border, var(--vscode-descriptionForeground)); border-radius: 3px;
   font-family: var(--vscode-font-family); font-size: 11px;
 }
 textarea { min-height: 116px; resize: vertical; font-family: var(--vscode-editor-font-family); }
@@ -182,6 +182,7 @@ button.link {
   text-decoration: underline; padding: 4px;
 }
 .action-status {
+  overflow-wrap: anywhere;
   margin: 8px 0 0; padding: 7px 8px; border-radius: 4px;
   font-size: 10px; line-height: 1.4;
   color: var(--vscode-descriptionForeground);
@@ -192,3 +193,6 @@ button.link {
   color: var(--vscode-errorForeground);
   border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
 }
+
+body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
+body.vscode-dark, body.vscode-high-contrast { color-scheme: dark; }

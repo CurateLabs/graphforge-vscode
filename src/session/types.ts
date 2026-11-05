@@ -40,6 +40,8 @@ export interface QueryResult {
   ipc?: Uint8Array;
   numericColumns?: string[];
   generationUuid?: string;
+  /** Project query file to open for explicit rerun; never executed on reopen. */
+  sourceQuery?: string;
 }
 
 export interface GraphNode {

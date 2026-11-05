@@ -14,6 +14,7 @@ export const QUICKSTART_MARKER_BYTES = "graphforge-quickstart/air-routes-us/v1\n
 
 /** Default folder name when materializing a visible quickstart project. */
 export const QUICKSTART_DIR_NAME = "graphforge-quickstart";
+export const QUICKSTART_QUERY_REL = "queries/templates/routes-overview.cypher";
 
 /** Analyst-facing Python path copied into every air-routes sample project. */
 export const QUICKSTART_NOTEBOOK_REL = path.join(
@@ -245,7 +246,7 @@ export function repairQuickstartProjectFiles(
 
   // Only the exact shipped scalar query is ours to upgrade. XYG needs the
   // canonical entities as well as the scalar bindings used by charts/maps.
-  const queryRelative = "queries/templates/routes-overview.cypher";
+  const queryRelative = QUICKSTART_QUERY_REL;
   const queryPath = path.join(projectRoot, queryRelative);
   if (fs.lstatSync(queryPath).isFile()) {
     const original = fs.readFileSync(queryPath);

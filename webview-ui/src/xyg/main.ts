@@ -4,6 +4,7 @@ const config = JSON.parse(document.getElementById("xyg-config")!.textContent!);
 const chart = document.getElementById("chart")!;
 const status = document.getElementById("status")!;
 const notice = document.getElementById("notice")!;
+const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
 let context: { instanceId: string; renderGeneration: number } | undefined;
 let frame = 0;
 let view: any;
@@ -19,6 +20,8 @@ const tickRequests = new Map<
 const client = import(/* @vite-ignore */ config.clientUri);
 const post = (type: string, extra: Record<string, unknown> = {}) =>
   vscode.postMessage({ type, ...context, ...extra });
+const motionChanged = () => post("motionPreference", { reducedMotion: motionPreference.matches });
+motionPreference.addEventListener("change", motionChanged);
 const nextFrame = () =>
   new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 window.addEventListener("message", async (event: MessageEvent) => {
@@ -53,6 +56,14 @@ window.addEventListener("message", async (event: MessageEvent) => {
   }
   if (message.type === "status") {
     status.textContent = message.message;
+    status.setAttribute("role", "status");
+    chart.setAttribute("aria-busy", String(!message.ready));
+    (document.getElementById("fit") as HTMLButtonElement).disabled = !message.ready;
+    (document.getElementById("relayout") as HTMLButtonElement).disabled = !message.ready;
+    const exportButton = document.getElementById("export") as HTMLButtonElement;
+    exportButton.disabled = !message.ready || !message.exportAvailable;
+    exportButton.title = message.exportAvailable ? "Save this view as PNG and SVG"
+      : "Time-axis image export is not available in this XYG build.";
     if (message.title)
       document.getElementById("title")!.textContent = message.title;
     return;
@@ -64,6 +75,8 @@ window.addEventListener("message", async (event: MessageEvent) => {
   if (message.type === "error") {
     status.textContent = `${message.code}: ${message.message}`;
     status.setAttribute("role", "alert");
+    chart.setAttribute("aria-busy", "false");
+    (document.getElementById("relayout") as HTMLButtonElement).disabled = false;
     return;
   }
   if (
@@ -140,11 +153,6 @@ window.addEventListener("message", async (event: MessageEvent) => {
       await xy.attachRustTicks(view, { worker: host, workerOwnership: "own" });
       post("diagnostic", { phase: "ticks-ready" });
     }
-    chart.style.backgroundColor = document.body.classList.contains(
-      "vscode-light",
-    )
-      ? "white"
-      : "#111827";
     await nextFrame();
     await nextFrame();
     if (
@@ -179,7 +187,7 @@ document
   .getElementById("fit")!
   .addEventListener("click", () =>
     view?.resetView({
-      animate: !matchMedia("(prefers-reduced-motion: reduce)").matches,
+      animate: !motionPreference.matches,
     }),
   );
 document
@@ -190,9 +198,10 @@ document
   .addEventListener("click", () => post("export"));
 window.addEventListener("pagehide", () => {
   disposed = true;
+  motionPreference.removeEventListener("change", motionChanged);
   view?.destroy();
   for (const request of tickRequests.values())
     request.reject(new Error("XYG_DISPOSED"));
   tickRequests.clear();
 });
-post("ready");
+post("ready", { reducedMotion: motionPreference.matches });

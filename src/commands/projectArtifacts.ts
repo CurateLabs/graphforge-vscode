@@ -25,6 +25,7 @@ import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { ResultTableViewProvider } from "../views/resultTableView";
 import { presentError } from "./shared";
 import { XygVisualizationPanel } from "../webview/xygPanel";
+import { graphInput, loadXyg } from "../webview/xygRuntime";
 
 interface ArtifactPathArgs {
   path?: string | vscode.Uri;
@@ -275,6 +276,10 @@ export function registerProjectArtifacts(
           return vscode.commands.executeCommand("graphforge.runQuery", {
             ...query,
             resultName: resultNameFromInput(args),
+            sourceQuery: relativeProjectPath(
+              activeProjectRoot(session),
+              resolveProjectArtifactPath(activeProjectRoot(session), queryPath),
+            ),
           });
         } catch (error) {
           return errorOutcome(error);
@@ -441,7 +446,15 @@ export function registerProjectArtifacts(
           if (!args?.spec) {
             throw new Error("Visualization settings are required.");
           }
+          if (!isVisualizationSpec(args.spec)) throw new Error("Visualization settings are incomplete.");
           const projectRoot = activeProjectRoot(session);
+          if (args.spec.kind === "result-graph") {
+            const source = readProjectResult(projectRoot, args.spec.result);
+            const base = args.spec.base ? readProjectResult(projectRoot, args.spec.base) : undefined;
+            const input = graphInput(args.spec, source, base);
+            const xy = await loadXyg(context.extensionUri.fsPath);
+            xy.composeGraphForge(input);
+          }
           const artifactPath = writeProjectVisualization(
             projectRoot,
             args.name,

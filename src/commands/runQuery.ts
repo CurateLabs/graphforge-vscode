@@ -28,6 +28,7 @@ export interface RunQueryArgs {
   params?: Record<string, unknown>;
   /** Optional durable result name; defaults to results-YYYYMMDD-HHMMSS-mmm. */
   resultName?: string;
+  sourceQuery?: string;
 }
 
 type RunQueryOutcome = SetupRecovery | QueryResult | { error: string; code?: string };
@@ -58,6 +59,7 @@ export function registerRunQuery(
           cypher,
           args?.params,
           args?.resultName,
+          args?.sourceQuery,
         );
       },
     ),
@@ -113,6 +115,7 @@ export function registerRunQuery(
           cypher,
           params,
           args?.resultName,
+          args?.sourceQuery,
         );
       },
     ),
@@ -142,6 +145,7 @@ async function executeAndShowResult(
   cypher: string,
   params?: Record<string, unknown>,
   resultName?: string,
+  sourceQuery?: string,
 ): Promise<QueryResult | { error: string; code?: string }> {
   try {
     // #31: lightweight in-flight indicator (status-bar spinner) so slow
@@ -156,6 +160,7 @@ async function executeAndShowResult(
     if (!projectRoot) {
       throw new Error("Query completed without an open GraphForge project.");
     }
+    if (sourceQuery) result.sourceQuery = sourceQuery;
     const documents = await persistQueryResultDocuments(projectRoot, result, resultName);
     // Refresh project-backed query/result lists after files are durable.
     session.notifyChanged();

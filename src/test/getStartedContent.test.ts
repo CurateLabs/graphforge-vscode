@@ -143,7 +143,7 @@ suite("getStartedContent", () => {
     const afterQuery = selectJourneyArtifacts(
       true,
       [
-        { path: "results/query-result.json" },
+        { path: "results/query-result.json", hasArrow: true },
         { path: "results/route-activity.json" },
       ],
       [
@@ -161,6 +161,20 @@ suite("getStartedContent", () => {
       resultPath: "results/query-result.json",
       visualizationPath: "visualizations/routes-network.gfviz.json",
     });
+  });
+
+  test("keeps JSON-only graph results inspectable without claiming a ready graph", () => {
+    const result = selectJourneyArtifacts(true,
+      [{ path: "results/query-result.json", hasArrow: false }],
+      [{ path: "visualizations/graph.gfviz.json", result: "results/query-result.json", kind: "result-graph" }]);
+    assert.equal(result.resultPath, "results/query-result.json");
+    assert.equal(result.visualizationPath, undefined);
+  });
+
+  test("a missing sample template offers repair instead of a different query", () => {
+    const step = buildChecklistSteps({ ...base, sampleQueryPath: undefined }).find(step => step.id === "query");
+    assert.equal(step?.primaryAction?.command, "graphforge.openSampleProject");
+    assert.match(step?.detail ?? "", /missing/);
   });
 
   suite("runtimeStepActions", () => {

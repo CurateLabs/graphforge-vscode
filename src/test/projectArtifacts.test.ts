@@ -43,7 +43,7 @@ suite("project artifacts", () => {
       name: "Regional graph",
       kind: "result-graph",
       result: "results/routes.json",
-      filters: [{ column: "region", operator: "equals", value: "US-GA" }],
+      filters: [],
       graph: { layout: "cose", iterations: 50 },
     });
 
@@ -103,6 +103,22 @@ suite("project artifacts", () => {
       scanProjectArtifacts(root).results.map((item) => item.path),
       ["results/query-result.json", "results/route-activity.json"],
     );
+  });
+
+  test("indexes table-only availability and only offers existing source query navigation", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-source-query-"));
+    try {
+      const queryPath = writeProjectQueryTemplate(root, "original", "MATCH (n) RETURN n");
+      fs.mkdirSync(path.join(root, "results"));
+      const file = path.join(root, "results/table.json");
+      const result = { columns: ["x"], rows: [{ x: 1 }], rowCount: 1, sourceQuery: queryPath };
+      fs.writeFileSync(file, JSON.stringify(result));
+      const entry = scanProjectArtifacts(root).results[0];
+      assert.equal(entry.hasArrow, false);
+      assert.equal(entry.sourceQuery, queryPath);
+      fs.writeFileSync(file, JSON.stringify({ ...result, sourceQuery: "../outside.cypher" }));
+      assert.equal(scanProjectArtifacts(root).results[0].sourceQuery, undefined);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
   test("rejects old visualization documents without rewriting analyst files", () => {
@@ -193,6 +209,20 @@ suite("project artifacts", () => {
     assert.equal(source.rowCount, 2);
     assert.equal(filtered.ipc,undefined);
     assert.deepEqual([...source.ipc!],[1,2,3]);
+  });
+
+  test("rejects graph filters before creating or replacing an artifact", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-graph-filter-"));
+    const spec = createResultGraphSpec({ name: "Graph", result: "results/a.json" });
+    const filtered = { ...spec, filters: [{ column: "region", operator: "equals" as const, value: "US-TX" }] };
+    try {
+      assert.throws(() => writeProjectVisualization(root, "bad", filtered), /XYG_GRAPH_FILTER_REQUIRED/);
+      assert.equal(fs.existsSync(path.join(root, "visualizations/bad.gfviz.json")), false);
+      const file = writeProjectVisualization(root, "good", spec);
+      const original = fs.readFileSync(path.join(root, file));
+      assert.throws(() => replaceProjectVisualization(root, file, filtered), /XYG_GRAPH_FILTER_REQUIRED/);
+      assert.deepEqual(fs.readFileSync(path.join(root, file)), original);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
   test("persists edit mutations without overwriting an existing record", () => {
