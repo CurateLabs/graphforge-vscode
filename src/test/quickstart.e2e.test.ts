@@ -13,7 +13,9 @@ import {
 
 suite("XYG air-routes integration", () => {
   test("Core query → persisted Arrow → independent XYG graph/chart/map/timeline", async function () {
-    this.timeout(180000);
+    // The retained-view/theme matrix contains multiple independently bounded
+    // 60-second readiness phases, plus Core seeding, edits and exports.
+    this.timeout(600000);
     const extension = vscode.extensions.getExtension(
       "CurateLabsAI.graphforge",
     )!;
