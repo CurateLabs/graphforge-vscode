@@ -195,6 +195,28 @@ suite("quickstartSample (#63)", () => {
     }
   });
 
+  for (const hasLegacyQuery of [true, false]) {
+    test(`rejects an escaping query directory before repair writes (existing query: ${hasLegacyQuery})`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-symlink-"));
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-outside-"));
+      const dataset = loadQuickstartDataset(REPO_ROOT);
+      const legacy = fs.readFileSync(path.join(__dirname, "fixtures/legacy-routes-overview.cypher"));
+      const externalQuery = path.join(outside, "routes-overview.cypher");
+      fs.mkdirSync(path.join(root, "queries"));
+      fs.symlinkSync(outside, path.join(root, "queries/templates"), process.platform === "win32" ? "junction" : "dir");
+      if (hasLegacyQuery) fs.writeFileSync(externalQuery, legacy);
+      try {
+        assert.throws(() => repairQuickstartProjectFiles(root, dataset), /must stay inside the project/);
+        assert.equal(fs.existsSync(`${externalQuery}.pre-xyg`), false);
+        if (hasLegacyQuery) assert.deepEqual(fs.readFileSync(externalQuery), legacy);
+        else assert.deepEqual(fs.readdirSync(outside), []);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+  }
+
   test("preserves a customized default sample query during repair", () => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-custom-query-"));
     const dataset = loadQuickstartDataset(REPO_ROOT);

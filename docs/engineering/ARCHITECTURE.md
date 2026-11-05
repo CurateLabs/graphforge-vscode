@@ -149,7 +149,7 @@ small, versioned, newline-delimited JSON protocol:
 
 Ops: `open`, `execute`, `verb` (`{"verb": "rank"|"cluster"|"paths"|"analyze"|"similar"|"find", "args": {...}}`),
 `labels`, `relationship_types`, `ontology_mode`, `load_ontology`, `list_assertions`, `close`.
-Every table-shaped result is returned as `{"arrow_ipc_base64": <str>}` (an Arrow IPC stream,
+Every table-shaped result is returned as `{"arrow_ipc_base64": <str>, "generation_uuid": <optional UUID string>}` (an Arrow IPC stream,
 base64-encoded) so the extension's existing `apache-arrow` decode path — shared with the Node
 binding — consumes it unchanged; non-table results are returned as `{"json": ...}` or bespoke
 fields (e.g. `{"labels": [...]}`). Every request is a **thin marshal** straight to a
@@ -197,6 +197,8 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 | Visualization artifact | Reproducible presentation of a durable result | Studio project file; never GraphForge Core computation |
 
 ## Key flows
+
+Node and Python backends capture generation identity with each read and associate it with that exact returned Buffer. Session reads reject a backend replacement before remembering the result. Python hosts without the Core identity capability omit the field rather than inventing an identity.
 
 ### Run Cypher
 

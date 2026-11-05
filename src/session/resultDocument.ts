@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import { renameSync } from "node:fs";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { projectArtifactFileName } from "./projectArtifacts";
@@ -139,16 +140,28 @@ export async function persistQueryResultDocuments(
   const markdown = formatQueryResultMarkdown(result);
 
   await fs.mkdir(resultDir, { recursive: true });
-  await Promise.all([
-    fs.writeFile(jsonPath, json, "utf8"),
-    fs.writeFile(markdownPath, markdown, "utf8"),
-    fs.writeFile(historyJsonPath, json, "utf8"),
-    fs.writeFile(historyMarkdownPath, markdown, "utf8"),
+  const publications: Array<[string, string | Uint8Array]> = [
     ...(result.ipc ? [
-      fs.writeFile(jsonPath.replace(/\.json$/i, ".arrow"), result.ipc),
-      fs.writeFile(historyJsonPath.replace(/\.json$/i, ".arrow"), result.ipc),
-    ] : []),
-  ]);
+      [jsonPath.replace(/\.json$/i, ".arrow"), result.ipc],
+      [historyJsonPath.replace(/\.json$/i, ".arrow"), result.ipc],
+    ] as Array<[string, Uint8Array]> : []),
+    [markdownPath, markdown],
+    [historyMarkdownPath, markdown],
+    [historyJsonPath, json],
+    [jsonPath, json],
+  ];
+  const staging = await fs.mkdtemp(path.join(resultDir, ".publish-"));
+  try {
+    await Promise.all(publications.map(([, contents], index) =>
+      fs.writeFile(path.join(staging, String(index)), contents),
+    ));
+    // No await in publication: concurrent writers and synchronous result readers
+    // cannot interleave a JSON/Arrow pair in this extension host. JSON is last;
+    // the digest still fails closed for external reads or interrupted publication.
+    publications.forEach(([target], index) => renameSync(path.join(staging, String(index)), target));
+  } finally {
+    await fs.rm(staging, { recursive: true, force: true });
+  }
 
   return { jsonPath, markdownPath, historyJsonPath, historyMarkdownPath };
 }

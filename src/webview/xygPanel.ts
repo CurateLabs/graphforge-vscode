@@ -17,7 +17,7 @@ import {
   type VisualizationController,
   type VisualizationKind,
 } from "./visualizationInstanceRegistry";
-import { loadXyg, graphInput, composeChart, composeMap } from "./xygRuntime";
+import { loadXyg, graphInput, composeChart, composeMap, resultEntitySelection } from "./xygRuntime";
 import { resultRowsForGraphSelection } from "./resultTableModel";
 
 export class XygVisualizationPanel implements VisualizationController {
@@ -182,15 +182,32 @@ export class XygVisualizationPanel implements VisualizationController {
     }
     this.acknowledgements.clear();
   }
+  private updateViewport(message: { width?: unknown; height?: unknown }): boolean {
+    if (
+      typeof message.width !== "number" || !Number.isFinite(message.width) || message.width <= 0 ||
+      typeof message.height !== "number" || !Number.isFinite(message.height) || message.height <= 0
+    ) return false;
+    const width = Math.min(4096, Math.max(1, Math.round(message.width)));
+    const height = Math.min(4096, Math.max(1, Math.round(message.height)));
+    if (width === this.width && height === this.height) return false;
+    this.width = width;
+    this.height = height;
+    return true;
+  }
   private async receive(message: any) {
     if (!message || typeof message.type !== "string") return;
     if (message.type === "ready" && !this.initialized) {
       this.initialized = true;
       this.reducedMotion = message.reducedMotion === true;
+      this.updateViewport(message);
       await this.render();
       return;
     }
     if (!this.lifecycle.accepts(message)) return;
+    if (message.type === "viewport") {
+      if (this.updateViewport(message)) await this.render();
+      return;
+    }
     if (message.type === "motionPreference" && typeof message.reducedMotion === "boolean") {
       this.reducedMotion = message.reducedMotion;
       await this.render();
@@ -374,6 +391,8 @@ export class XygVisualizationPanel implements VisualizationController {
       title: this.spec.name,
       ready: false,
       exportAvailable: this.spec.kind !== "temporal",
+      width: this.width,
+      height: this.height,
     });
     try {
       this.xy = await loadXyg(this.extensionUri.fsPath);
@@ -460,12 +479,16 @@ export class XygVisualizationPanel implements VisualizationController {
         nodeCount: this.payload?.positions?.uuid.length ?? 0,
         rowCount: this.result.rowCount,
         reducedMotion: this.reducedMotion,
+        width: this.width,
+        height: this.height,
       };
       this.post({
         type: "status",
         message: `XYG ready · ${this.result.rowCount.toLocaleString()} result rows`,
         ready: true,
         exportAvailable: this.spec.kind !== "temporal",
+        width: this.width,
+        height: this.height,
       });
       this.isReady = true;
       this.settleReady(lifecycle);
@@ -517,26 +540,13 @@ export class XygVisualizationPanel implements VisualizationController {
       this.spec.kind !== "result-graph"
     )
       return { nodeIds: [], edgeIds: [] };
-    const row = result.rows[rowIndex];
-    const values = column ? [row[column]] : Object.values(row);
-    const ids: string[] = [];
-    const visit = (v: unknown) => {
-      if (v && typeof v === "object") {
-        for (const [key, value] of Object.entries(v)) {
-          if (
-            (key === "node_uuid" || key === "edge_uuid") &&
-            typeof value === "string"
-          )
-            ids.push(value);
-          else visit(value);
-        }
-      }
-    };
-    values.forEach(visit);
-    this.selected = ids;
-    if (ids.length) void this.render();
-    return { nodeIds: ids, edgeIds: [] };
+    const selection = resultEntitySelection(result.rows[rowIndex], column);
+    const hadSelection = this.selected.length > 0;
+    this.selected = [...selection.nodeIds, ...selection.edgeIds];
+    if (this.selected.length || hadSelection) void this.render();
+    return selection;
   }
+
   rowsForSelection(selection: EntityInspectSelection) {
     return resultRowsForGraphSelection(this.result, selection);
   }

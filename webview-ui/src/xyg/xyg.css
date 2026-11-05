@@ -49,6 +49,8 @@ button:focus-visible {
   height: calc(100vh - 105px);
   min-height: 280px;
   position: relative;
+  min-width: 0;
+  overflow: hidden;
   background: var(--vscode-editor-background);
 }
 #chart canvas {

@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import {
-  bufferToUuid,
   decodeTable,
   resolveIpcBuffer,
   stringField,
@@ -319,7 +318,7 @@ export class GraphForgeSession implements vscode.Disposable {
     const backend = this.requireBackend();
     const buf = await backend.execute(cypher, params);
     const result = decodeTable(buf);
-    result.generationUuid = await this.resultGeneration();
+    result.generationUuid = this.resultGeneration(backend, buf);
     this.rememberResult(result, "Cypher result");
     return result;
   }
@@ -416,7 +415,7 @@ export class GraphForgeSession implements vscode.Disposable {
         throw new Error(`Unknown verb: ${verb}`);
     }
     const result = decodeTable(buf);
-    result.generationUuid = await this.resultGeneration();
+    result.generationUuid = this.resultGeneration(backend, buf);
     this.rememberResult(result, verb);
     return result;
   }
@@ -1494,10 +1493,13 @@ export class GraphForgeSession implements vscode.Disposable {
     this._onDidChange.fire();
   }
 
-  private async resultGeneration(): Promise<string | undefined> {
-    if (!(this.backend instanceof NodeEngineBackend)) return undefined;
-    const identity = this.backend.native.committedGenerationIdentity?.();
-    return identity ? bufferToUuid(identity.generationUuid) : undefined;
+  private resultGeneration(backend: EngineBackend, ipc: Buffer): string | undefined {
+    if (backend !== this.backend) {
+      throw Object.assign(new Error("The project session changed while reading. Run the query again."), {
+        code: "SESSION_CHANGED",
+      });
+    }
+    return backend.resultGeneration?.(ipc);
   }
 
   private rememberResult(result: QueryResult, title?: string): void {

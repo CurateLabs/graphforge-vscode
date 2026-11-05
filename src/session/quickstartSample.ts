@@ -226,11 +226,26 @@ export function repairQuickstartProjectFiles(
     throw new Error(`Quickstart project template missing under ${templateRoot}.`);
   }
 
+  const canonicalRoot = fs.realpathSync(projectRoot);
+  const assertContained = (target: string): void => {
+    let existing = target;
+    try {
+      fs.lstatSync(target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      existing = path.dirname(target);
+    }
+    const relative = path.relative(canonicalRoot, fs.realpathSync(existing));
+    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error("Sample repair paths must stay inside the project; remove the escaping symlink.");
+    }
+  };
   const added: string[] = [];
   const copyMissing = (sourceDir: string, targetDir: string): void => {
     for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
       const source = path.join(sourceDir, entry.name);
       const target = path.join(targetDir, entry.name);
+      assertContained(target);
       if (entry.isDirectory()) {
         fs.mkdirSync(target, { recursive: true });
         copyMissing(source, target);
@@ -248,6 +263,7 @@ export function repairQuickstartProjectFiles(
   // canonical entities as well as the scalar bindings used by charts/maps.
   const queryRelative = QUICKSTART_QUERY_REL;
   const queryPath = path.join(projectRoot, queryRelative);
+  assertContained(queryPath);
   if (fs.lstatSync(queryPath).isFile()) {
     const original = fs.readFileSync(queryPath);
     if (
@@ -255,6 +271,7 @@ export function repairQuickstartProjectFiles(
       "a72b3213d75416c9bd70f706718d84f4edb7345fe84108203af59714b18029da"
     ) {
       const backup = `${queryPath}.pre-xyg`;
+      assertContained(backup);
       if (!fs.existsSync(backup)) {
         fs.copyFileSync(queryPath, backup, fs.constants.COPYFILE_EXCL);
       } else if (!fs.readFileSync(backup).equals(original)) {

@@ -155,6 +155,28 @@ suite("query result documents", () => {
     }
   });
 
+  test("concurrent saves publish coherent current and history Arrow pairs", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-concurrent-results-"));
+    try {
+      const results = Array.from({ length: 12 }, (_, value) => {
+        const ipc = tableToIPC(tableFromArrays({ value: Int32Array.from({ length: 1000 }, () => value) }));
+        return { columns: ["value"], rows: Array.from({ length: 1000 }, () => ({ value })), rowCount: 1000, ipc };
+      });
+      const saved = await Promise.all(results.map((result, index) =>
+        persistQueryResultDocuments(root, result, `result-${index}`),
+      ));
+      const latest = readProjectResult(root, saved[0].jsonPath);
+      const currentValue = latest.rows[0].value;
+      assert.ok(latest.rows.every(row => row.value === currentValue));
+      for (let index = 0; index < saved.length; index++) {
+        const reopened = readProjectResult(root, saved[index].historyJsonPath!);
+        assert.deepEqual(reopened.rows, results[index].rows);
+        assert.deepEqual([...reopened.ipc!], [...results[index].ipc]);
+      }
+      assert.ok(!fs.readdirSync(path.join(root, "results")).some(file => file.startsWith(".publish-")));
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
   test("uses and sanitizes an optional result name", async () => {
     const projectRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), "gf-named-result-"),

@@ -24,6 +24,29 @@ const motionChanged = () => post("motionPreference", { reducedMotion: motionPref
 motionPreference.addEventListener("change", motionChanged);
 const nextFrame = () =>
   new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+let viewportTimer: ReturnType<typeof setTimeout> | undefined;
+let hostWidth = 0;
+let hostHeight = 0;
+let reportedViewport = "";
+const viewport = () => ({
+  width: Math.min(4096, chart.clientWidth),
+  height: Math.min(4096, chart.clientHeight),
+});
+const queueViewport = () => {
+  clearTimeout(viewportTimer);
+  viewportTimer = setTimeout(() => {
+    if (disposed || !context) return;
+    const size = viewport();
+    if (size.width <= 0 || size.height <= 0 ||
+        (size.width === hostWidth && size.height === hostHeight)) return;
+    const key = `${context.renderGeneration}:${size.width}:${size.height}`;
+    if (key === reportedViewport) return;
+    reportedViewport = key;
+    post("viewport", size);
+  }, 100);
+};
+const resizeObserver = new ResizeObserver(queueViewport);
+resizeObserver.observe(chart);
 window.addEventListener("message", async (event: MessageEvent) => {
   const message = event.data;
   if (!message || typeof message.type !== "string") return;
@@ -55,6 +78,9 @@ window.addEventListener("message", async (event: MessageEvent) => {
     return;
   }
   if (message.type === "status") {
+    hostWidth = message.width;
+    hostHeight = message.height;
+    queueViewport();
     status.textContent = message.message;
     status.setAttribute("role", "status");
     chart.setAttribute("aria-busy", String(!message.ready));
@@ -198,10 +224,12 @@ document
   .addEventListener("click", () => post("export"));
 window.addEventListener("pagehide", () => {
   disposed = true;
+  clearTimeout(viewportTimer);
+  resizeObserver.disconnect();
   motionPreference.removeEventListener("change", motionChanged);
   view?.destroy();
   for (const request of tickRequests.values())
     request.reject(new Error("XYG_DISPOSED"));
   tickRequests.clear();
 });
-post("ready", { reducedMotion: motionPreference.matches });
+post("ready", { reducedMotion: motionPreference.matches, ...viewport() });

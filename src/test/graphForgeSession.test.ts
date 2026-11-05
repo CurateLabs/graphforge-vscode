@@ -46,6 +46,42 @@ function injectCapabilities(session: GraphForgeSession, capabilities: string[]):
   session.capabilities = () => ({ capabilities });
 }
 
+suite("GraphForgeSession result generation", () => {
+  for (const method of ["execute", "rank"] as const) {
+    test(`${method} retains the read generation across a concurrent mutation`, async () => {
+      const session = new GraphForgeSession();
+      const first = Buffer.from("0190a000000070008000000000000001", "hex");
+      const second = Buffer.from("0190a000000070008000000000000002", "hex");
+      let generation = first;
+      const ipc = () => encodeSimpleTable(["name"], [{ name: "fixture" }]);
+      injectForge(session, makeStubForge({
+        execute: (query) => { if (query === "mutate") generation = second; return ipc(); },
+        rank: ipc,
+        committedGenerationIdentity: () => ({ generationUuid: generation, manifestSha256: Buffer.alloc(32) }),
+      }));
+      try {
+        const pending = method === "execute" ? session.execute("read") : session.invokeVerb("rank", {});
+        await session.executeMutation("mutate");
+        const result = await pending;
+        assert.equal(result.generationUuid, "0190a000-0000-7000-8000-000000000001");
+        assert.equal(session.getLastResult(), result);
+      } finally { session.dispose(); }
+    });
+
+    test(`${method} rejects a read from a replaced backend without remembering it`, async () => {
+      const session = new GraphForgeSession();
+      const ipc = () => encodeSimpleTable(["name"], [{ name: "fixture" }]);
+      injectForge(session, makeStubForge({ execute: ipc, rank: ipc }));
+      try {
+        const pending = method === "execute" ? session.execute("read") : session.invokeVerb("rank", {});
+        injectForge(session, makeStubForge());
+        await assert.rejects(pending, (error: unknown) => (error as { code?: string }).code === "SESSION_CHANGED");
+        assert.equal(session.getLastResult(), undefined);
+      } finally { session.dispose(); }
+    });
+  }
+});
+
 suite("GraphForgeSession.algorithmCatalog", () => {
   test("falls back to static list when binding has no forge open", () => {
     const session = new GraphForgeSession();

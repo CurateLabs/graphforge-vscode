@@ -535,6 +535,8 @@ export interface EngineBackend {
   ontologyMode(): Promise<string>;
   execute(cypher: string, params?: Record<string, unknown>): Promise<Buffer>;
   moduleCatalog?(): Promise<unknown[]>;
+  /** Generation captured with this exact read, before another operation can advance it. */
+  resultGeneration?(ipc: Buffer): string | undefined;
   rank(
     label: string,
     by: string,

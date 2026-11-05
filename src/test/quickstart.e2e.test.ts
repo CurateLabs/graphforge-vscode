@@ -61,11 +61,34 @@ suite("XYG air-routes integration", () => {
       });
       assert.match(invalidFilter.error, /XYG_GRAPH_FILTER_REQUIRED/);
       assert.equal(fs.existsSync(path.join(root, "visualizations/rejected-filter.gfviz.json")), false);
+      for (const bindings of [
+        { kind: "chart", mark: "scatter", x: "missing", y: "dist" },
+        { kind: "geospatial", longitude: "missing", latitude: "lat" },
+        { kind: "temporal", timestamp: "missing", y: "dist" },
+        { kind: "chart", mark: "scatter", x: "dist", y: "dist", filter: { column: "missing", operator: "equals", value: "x" } },
+      ]) {
+        const rejected = await vscode.commands.executeCommand<any>("graphforge.createProjectVisualization", {
+          name: "rejected-binding", result: "results/query-result.json", open: false, ...bindings,
+        });
+        assert.match(rejected.error, /XYG_FIELD_MISSING/);
+        assert.equal(fs.existsSync(path.join(root, "visualizations/rejected-binding.gfviz.json")), false);
+      }
+      const chartPath = path.join(root, "visualizations/route-distances.gfviz.json");
+      const savedChart = fs.readFileSync(chartPath, "utf8");
+      const invalidChart = JSON.parse(savedChart);
+      invalidChart.chart.x = "missing";
+      const rejectedReplacement = await vscode.commands.executeCommand<any>("graphforge.saveProjectVisualization", {
+        name: "route-distances", spec: invalidChart, open: false,
+      });
+      assert.match(rejectedReplacement.error, /XYG_FIELD_MISSING/);
+      assert.equal(fs.readFileSync(chartPath, "utf8"), savedChart);
       const immediateGraph = await vscode.commands.executeCommand<any>(
         "graphforge.showResultGraph", { waitForReady: true },
       );
       assert.equal(immediateGraph.lifecycle?.type, "graphforge/renderReady", JSON.stringify(immediateGraph));
       assert.equal(immediateGraph.lifecycle.nodeCount, 579);
+      assert.ok(immediateGraph.lifecycle.width > 0 && immediateGraph.lifecycle.width <= 4096);
+      assert.ok(immediateGraph.lifecycle.height > 0 && immediateGraph.lifecycle.height <= 4096);
       if (process.env.GRAPHFORGE_REDUCED_MOTION_REQUIRED) assert.equal(immediateGraph.lifecycle.reducedMotion, true);
       await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
       const entity = query.rows[0].a;

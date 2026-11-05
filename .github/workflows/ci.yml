@@ -70,7 +70,9 @@ jobs:
         run: npm run check
 
       - name: Qualification runner regression tests
-        run: node --test scripts/qualify-hub-clone.test.cjs
+        run: |
+          node --test scripts/qualify-hub-clone.test.cjs
+          PYTHONDONTWRITEBYTECODE=1 python3 src/test/fixtures/pythonHostGeneration.test.py
 
       - name: Compile
         run: npm run compile

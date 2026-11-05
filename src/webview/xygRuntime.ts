@@ -210,3 +210,34 @@ export function composeMap(
     },
   );
 }
+
+/** Validate the same native composition used on open before publishing a saved intent. */
+export function validateVisualization(
+  xy: any,
+  spec: ProjectVisualizationSpec,
+  result: QueryResult,
+  base?: QueryResult,
+): void {
+  if (spec.kind === "result-graph") xy.composeGraphForge(graphInput(spec, result, base));
+  else if (spec.kind === "geospatial") composeMap(xy, spec, result, 1100, 650).compile();
+  else composeChart(xy, spec, result, 1100, 650, "light").buildPayload();
+}
+
+/** Canonical cell identity wins; scalar cells coordinate with their entire source row. */
+export function resultEntitySelection(row: Record<string, unknown>, column?: string) {
+  const nodes = new Set<string>();
+  const edges = new Set<string>();
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object") return;
+    for (const [key, cell] of Object.entries(value)) {
+      if (key === "node_uuid" && typeof cell === "string") nodes.add(cell);
+      else if (key === "edge_uuid" && typeof cell === "string") edges.add(cell);
+      else visit(cell);
+    }
+  };
+  if (column === "node_uuid" && typeof row[column] === "string") nodes.add(row[column]);
+  else if (column === "edge_uuid" && typeof row[column] === "string") edges.add(row[column]);
+  else if (column) visit(row[column]);
+  if (!nodes.size && !edges.size) visit(row);
+  return { nodeIds: [...nodes], edgeIds: [...edges] };
+}

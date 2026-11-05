@@ -7,6 +7,8 @@ import {
   loadXyg,
   composeChart,
   composeMap,
+  validateVisualization,
+  resultEntitySelection,
 } from "../webview/xygRuntime";
 import {
   createResultGraphSpec,
@@ -18,6 +20,17 @@ import { tableFromArrays, tableToIPC } from "apache-arrow";
 
 const root = path.resolve(__dirname, "../..");
 suite("XYG ownership and native composition", () => {
+  test("scalar cells fall back to canonical row identities while entity cells stay specific", () => {
+    const row = {
+      a: { node_uuid: "a" }, r: { edge_uuid: "r" }, b: { node_uuid: "b" },
+      source: "ABC", dist: 12,
+    };
+    assert.deepEqual(resultEntitySelection(row, "dist"), { nodeIds: ["a", "b"], edgeIds: ["r"] });
+    assert.deepEqual(resultEntitySelection(row, "source"), { nodeIds: ["a", "b"], edgeIds: ["r"] });
+    assert.deepEqual(resultEntitySelection(row, "a"), { nodeIds: ["a"], edgeIds: [] });
+    assert.deepEqual(resultEntitySelection({ dist: 12 }, "dist"), { nodeIds: [], edgeIds: [] });
+    assert.deepEqual(resultEntitySelection({ node_uuid: "a", edge_uuid: "r" }, "node_uuid"), { nodeIds: ["a"], edgeIds: [] });
+  });
   test("preserves Core Arrow metadata and bytes for XYG", () => {
     const table = tableFromArrays({ value: Float64Array.of(1, 2) });
     table.schema.metadata.set("graphforge.algorithm", "pagerank");
@@ -172,6 +185,12 @@ suite("XYG ownership and native composition", () => {
         zoom: 3,
       },
     };
+    for (const spec of [chart, time, map]) validateVisualization(xy, spec, data);
+    for (const spec of [
+      { ...chart, chart: { ...chart.chart!, x: "missing" } },
+      { ...time, temporal: { ...time.temporal!, timestamp: "missing" } },
+      { ...map, geospatial: { ...map.geospatial!, longitude: "missing" } },
+    ]) assert.throws(() => validateVisualization(xy, spec, data), /XYG_FIELD_MISSING/);
     const compiled = composeMap(xy, map, data, 900, 600).compile();
     assert.ok(
       xy.sceneBrowserPainter(new Uint8Array(compiled.scene)).byteLength > 0,

@@ -25,7 +25,7 @@ import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { ResultTableViewProvider } from "../views/resultTableView";
 import { presentError } from "./shared";
 import { XygVisualizationPanel } from "../webview/xygPanel";
-import { graphInput, loadXyg } from "../webview/xygRuntime";
+import { loadXyg, validateVisualization } from "../webview/xygRuntime";
 
 interface ArtifactPathArgs {
   path?: string | vscode.Uri;
@@ -448,13 +448,17 @@ export function registerProjectArtifacts(
           }
           if (!isVisualizationSpec(args.spec)) throw new Error("Visualization settings are incomplete.");
           const projectRoot = activeProjectRoot(session);
-          if (args.spec.kind === "result-graph") {
-            const source = readProjectResult(projectRoot, args.spec.result);
-            const base = args.spec.base ? readProjectResult(projectRoot, args.spec.base) : undefined;
-            const input = graphInput(args.spec, source, base);
-            const xy = await loadXyg(context.extensionUri.fsPath);
-            xy.composeGraphForge(input);
+          const source = readProjectResult(projectRoot, args.spec.result);
+          for (const filter of args.spec.filters) {
+            if (!source.columns.includes(filter.column))
+              throw new Error(`XYG_FIELD_MISSING: ${filter.column}`);
           }
+          // Graph admission rejects filters through graphInput before they can discard Arrow.
+          const result = args.spec.kind === "result-graph"
+            ? source : filterQueryResultMany(source, args.spec.filters);
+          const base = args.spec.base ? readProjectResult(projectRoot, args.spec.base) : undefined;
+          const xy = await loadXyg(context.extensionUri.fsPath);
+          validateVisualization(xy, args.spec, result, base);
           const artifactPath = writeProjectVisualization(
             projectRoot,
             args.name,

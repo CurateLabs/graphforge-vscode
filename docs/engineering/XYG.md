@@ -111,17 +111,24 @@ foreground tokens. Inspector editing preserves focus and drafts on failure.
 
 Result metadata distinguishes original Arrow from table-only JSON and retains
 an optional project query path for navigation. Recovery opens that file for an
-explicit rerun; result metadata never executes a query. Graph creation validates
-composition through XYG before saving, and rejects host row filters before they
-can discard the graph's Arrow. Temporal granularity is not offered. The UI
-disables time-axis image export while that pinned XYG capability is unavailable.
+explicit rerun; result metadata never executes a query. All visualization kinds
+validate their source fields, filters and native XYG composition before saving
+or replacing an artifact. Graphs reject host row filters before they can discard
+the graph's Arrow. Temporal granularity is not offered. The UI disables time-axis
+image export while that pinned XYG capability is unavailable.
 
 Theme changes regenerate native scenes, including both VS Code high-contrast
 variants, while browser chrome uses host tokens and the matching native-control
 color scheme. Reduced motion paints the completed native graph layout rather
 than its intermediate frames, disables animated Fit, and reveals linked result
 rows without smooth scrolling. Pending readiness follows the current render
-generation through theme and motion updates.
+generation through theme and motion updates. The browser reports bounded
+container dimensions so split-editor resizes recompose the native scene.
+
+Result saves prepare JSON, Markdown and Arrow in a private staging directory,
+then publish their files without yielding to other reads or writers in the same
+extension host. The digest still rejects mismatches caused by interrupted
+publication or external processes; this is not a filesystem-wide transaction.
 
 ## Proof
 
