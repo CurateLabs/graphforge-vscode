@@ -124,6 +124,10 @@ than its intermediate frames, disables animated Fit, and reveals linked result
 rows without smooth scrolling. Pending readiness follows the current render
 generation through theme and motion updates. The browser reports bounded
 container dimensions so split-editor resizes recompose the native scene.
+Reopening an unchanged saved graph retains its completed paint or pending render
+when its intent, exact Arrow bytes and generation identities still match. This
+avoids restarting a theme render solely to wait for readiness. Re-layout remains
+an explicit operation, and changed sources or failed views render again.
 
 Result saves prepare JSON, Markdown and Arrow in a private staging directory,
 then publish their files without yielding to other reads or writers in the same

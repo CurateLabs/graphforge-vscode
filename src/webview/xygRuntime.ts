@@ -83,6 +83,12 @@ export function graphInput(
   };
 }
 
+/** Exact Arrow bytes and generation identify an unchanged saved graph source. */
+export function sameArrowResult(left?: QueryResult, right?: QueryResult): boolean {
+  return left === right || Boolean(left?.ipc && right?.ipc &&
+    left.generationUuid === right.generationUuid && Buffer.compare(left.ipc, right.ipc) === 0);
+}
+
 /** Explicit field binding only. XYG owns chart geometry, axes, encodings, layout and exports. */
 export function composeChart(
   xy: any,

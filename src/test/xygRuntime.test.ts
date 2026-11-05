@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+  sameArrowResult,
   graphInput,
   numericColumn,
   loadXyg,
@@ -30,6 +31,15 @@ suite("XYG ownership and native composition", () => {
     assert.deepEqual(resultEntitySelection(row, "a"), { nodeIds: ["a"], edgeIds: [] });
     assert.deepEqual(resultEntitySelection({ dist: 12 }, "dist"), { nodeIds: [], edgeIds: [] });
     assert.deepEqual(resultEntitySelection({ node_uuid: "a", edge_uuid: "r" }, "node_uuid"), { nodeIds: ["a"], edgeIds: [] });
+  });
+  test("reuses only matching Arrow content and generation", () => {
+    const result = { columns: [], rows: [], rowCount: 0, ipc: Uint8Array.of(1, 2), generationUuid: "g1" };
+    assert.equal(sameArrowResult(result, { ...result, ipc: Uint8Array.of(1, 2) }), true);
+    assert.equal(sameArrowResult(result, { ...result, generationUuid: "g2" }), false);
+    assert.equal(sameArrowResult(result, { ...result, ipc: Uint8Array.of(1, 3) }), false);
+    assert.equal(sameArrowResult({ ...result, ipc: undefined }, { ...result, ipc: undefined }), false);
+    assert.equal(sameArrowResult(result, undefined), false);
+    assert.equal(sameArrowResult(), true);
   });
   test("preserves Core Arrow metadata and bytes for XYG", () => {
     const table = tableFromArrays({ value: Float64Array.of(1, 2) });

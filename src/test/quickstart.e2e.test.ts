@@ -180,6 +180,10 @@ suite("XYG air-routes integration", () => {
       );
       // The isolated test profile owns these settings; leave the user's profile untouched.
       const graphSpec = specs.find(spec => spec.kind === "result-graph")!;
+      const firstOpen = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", { path: graphSpec.path, waitForReady: true });
+      const sameOpen = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", { path: graphSpec.path, waitForReady: true });
+      assert.equal(sameOpen.lifecycle?.renderGeneration, firstOpen.lifecycle?.renderGeneration,
+        "an unchanged saved graph reuses completed paint");
       for (const [theme, kind] of [
         ["Default High Contrast Light", vscode.ColorThemeKind.HighContrastLight],
         ["Default High Contrast", vscode.ColorThemeKind.HighContrast],

@@ -17,7 +17,7 @@ import {
   type VisualizationController,
   type VisualizationKind,
 } from "./visualizationInstanceRegistry";
-import { loadXyg, graphInput, composeChart, composeMap, resultEntitySelection } from "./xygRuntime";
+import { loadXyg, graphInput, composeChart, composeMap, resultEntitySelection, sameArrowResult } from "./xygRuntime";
 import { resultRowsForGraphSelection } from "./resultTableModel";
 
 export class XygVisualizationPanel implements VisualizationController {
@@ -125,13 +125,20 @@ export class XygVisualizationPanel implements VisualizationController {
     const existing =
       visualizationInstances.get<XygVisualizationPanel>(instanceId);
     if (existing) {
+      // A readiness wait after a theme change must not cancel the same work.
+      // Retain completed paint as well; explicit Re-layout still starts a job.
+      const reuse = spec.kind === "result-graph" && existing.spec.kind === spec.kind &&
+        existing.projectRoot === projectRoot && existing.selected.length === 0 &&
+        (existing.isReady || !existing.readySettled) &&
+        JSON.stringify(existing.spec) === JSON.stringify(spec) &&
+        sameArrowResult(existing.result, result) && sameArrowResult(existing.base, base);
       existing.spec = spec;
       existing.result = result;
       existing.projectRoot = projectRoot;
       existing.base = base;
       existing.selected = [];
       existing.reveal();
-      if (existing.initialized) void existing.render();
+      if (existing.initialized && !reuse) void existing.render();
       return { panel: existing, status: "updated" as const };
     }
     const panel = vscode.window.createWebviewPanel(
