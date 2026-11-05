@@ -8,7 +8,7 @@ import {
 } from "../session/arrowCodec";
 
 import {
-  Field, FixedSizeBinary, Float64, Int64, List, Struct, Table, Utf8,
+  Field, FixedSizeBinary, Float16, Float32, Float64, Int64, List, Struct, Table, Utf8,
   tableFromArrays, tableToIPC, vectorFromArray,
 } from "apache-arrow";
 
@@ -46,6 +46,18 @@ suite("decodeTable", () => {
     assert.equal(result.algorithm, "test");
     assert.deepEqual(JSON.parse(JSON.stringify(result.rows)), result.rows);
     assert.equal(Object.getPrototypeOf(result.rows[1].entity), Object.prototype);
+  });
+
+  test("preserves half-float decoding and offsets across non-null numeric chunks", () => {
+    const table = new Table({
+      half: vectorFromArray([1.5, 2.25, 3.5], new Float16()),
+      single: vectorFromArray([10, 20, 30], new Float32()),
+    });
+    const ipc = Buffer.from(tableToIPC(table.concat(table).slice(1, 5)));
+    assert.deepEqual(decodeTable(ipc).rows, [
+      { half: 2.25, single: 20 }, { half: 3.5, single: 30 },
+      { half: 1.5, single: 10 }, { half: 2.25, single: 20 },
+    ]);
   });
 
   test("keeps scalar numeric columns and nulls unchanged", () => {

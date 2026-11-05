@@ -1,4 +1,4 @@
-import { DataType, tableFromIPC, type Table, type Vector } from "apache-arrow";
+import { DataType, Precision, tableFromIPC, type Table, type Vector } from "apache-arrow";
 import type { QueryResult, TableRow } from "./types";
 
 /**
@@ -35,7 +35,16 @@ function cellReader(vector: Vector | null): (index: number) => unknown {
   if (
     DataType.isFloat(vector.type) ||
     (DataType.isInt(vector.type) && vector.type.bitWidth < 64)
-  ) return vector.get.bind(vector);
+  ) {
+    // Arrow exposes primitive non-null columns as typed arrays. Half floats
+    // need Arrow's accessor to decode their 16-bit representation.
+    if (vector.nullCount === 0 &&
+        (!DataType.isFloat(vector.type) || vector.type.precision !== Precision.HALF)) {
+      const values = vector.toArray();
+      return (index) => values[index];
+    }
+    return vector.get.bind(vector);
+  }
   if (DataType.isStruct(vector.type)) {
     const fields = vector.type.children.map((field, index) => ({
       name: field.name,
