@@ -20,6 +20,8 @@ import {
 import { loadXyg, graphInput, composeChart, composeMap, resultEntitySelection, sameArrowResult } from "./xygRuntime";
 import { resultRowsForGraphSelection } from "./resultTableModel";
 
+const READY_TIMEOUT_MS = 60000;
+
 export class XygVisualizationPanel implements VisualizationController {
   private static readonly selection = new vscode.EventEmitter<
     EntityInspectSelection & { source: QueryResult; projectRoot: string }
@@ -418,6 +420,9 @@ export class XygVisualizationPanel implements VisualizationController {
           this.selected,
         );
         this.payload = await this.owner.render(input, {
+          // Native scheduling includes worker startup and paint ACKs. Keep
+          // it within the panel deadline, reserving cancellation/cleanup time.
+          maxWallMs: READY_TIMEOUT_MS - 5000,
           width: this.width,
           height: this.height,
           theme,
@@ -512,7 +517,7 @@ export class XygVisualizationPanel implements VisualizationController {
             code: "XYG_READY_TIMEOUT",
           }),
         ),
-      60000,
+      READY_TIMEOUT_MS,
     );
   }
   private settleReady(value: Record<string, unknown>) {
