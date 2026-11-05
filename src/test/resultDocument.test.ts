@@ -10,6 +10,8 @@ import {
   QUERY_RESULT_MARKDOWN,
   RESULT_DOCUMENTS_DIR,
 } from "../session/resultDocument";
+import { tableFromArrays, tableToIPC } from "apache-arrow";
+import { readProjectResult } from "../session/projectArtifacts";
 import type { QueryResult } from "../session/types";
 
 suite("query result documents", () => {
@@ -70,7 +72,9 @@ suite("query result documents", () => {
   });
 
   test("persists JSON and readable Markdown under the project root", async () => {
-    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-result-doc-"));
+    const projectRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "gf-result-doc-"),
+    );
     const result: QueryResult = {
       columns: ["source", "target", "dist"],
       rows: [{ source: "ATL", target: "AUS", dist: 813 }],
@@ -97,7 +101,10 @@ suite("query result documents", () => {
       rows: result.rows,
       rowCount: result.rowCount,
     });
-    assert.match(fs.readFileSync(documents.markdownPath, "utf8"), /\| ATL \| AUS \| 813 \|/);
+    assert.match(
+      fs.readFileSync(documents.markdownPath, "utf8"),
+      /\| ATL \| AUS \| 813 \|/,
+    );
     assert.ok(documents.historyJsonPath);
     assert.ok(documents.historyMarkdownPath);
     assert.ok(fs.existsSync(documents.historyJsonPath));
@@ -108,14 +115,84 @@ suite("query result documents", () => {
     );
   });
 
+  test("reopens matching Arrow and rejects replacement bytes", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-arrow-pair-"));
+    try {
+      const ipc = tableToIPC(tableFromArrays({ count: BigInt64Array.of(12n) }));
+      const docs = await persistQueryResultDocuments(root, {
+        columns: ["count"],
+        rows: [{ count: "12" }],
+        rowCount: 1,
+        ipc,
+        numericColumns: ["count"],
+        generationUuid: "generation",
+        sourceQuery: "queries/templates/original.cypher",
+      });
+      const reopened = readProjectResult(root, docs.jsonPath);
+      assert.deepEqual([...reopened.ipc!], [...ipc]);
+      assert.deepEqual(reopened.numericColumns, ["count"]);
+      assert.equal(reopened.generationUuid, "generation");
+      assert.equal(reopened.sourceQuery, "queries/templates/original.cypher");
+      const readable = JSON.parse(fs.readFileSync(docs.jsonPath, "utf8"));
+      readable.rows = [{ count: "forged" }];
+      readable.numericColumns = ["fake"];
+      fs.writeFileSync(docs.jsonPath, JSON.stringify(readable));
+      assert.deepEqual(readProjectResult(root, docs.jsonPath).rows, [
+        { count: "12" },
+      ]);
+      fs.writeFileSync(
+        docs.jsonPath.replace(/\.json$/, ".arrow"),
+        Uint8Array.of(5, 6),
+      );
+      assert.throws(
+        () => readProjectResult(root, docs.jsonPath),
+        /XYG_RESULT_MISMATCH/,
+      );
+      fs.unlinkSync(docs.jsonPath.replace(/\.json$/, ".arrow"));
+      assert.throws(() => readProjectResult(root, docs.jsonPath), /ENOENT/);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("concurrent saves publish coherent current and history Arrow pairs", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-concurrent-results-"));
+    try {
+      const results = Array.from({ length: 12 }, (_, value) => {
+        const ipc = tableToIPC(tableFromArrays({ value: Int32Array.from({ length: 1000 }, () => value) }));
+        return { columns: ["value"], rows: Array.from({ length: 1000 }, () => ({ value })), rowCount: 1000, ipc };
+      });
+      const saved = await Promise.all(results.map((result, index) =>
+        persistQueryResultDocuments(root, result, `result-${index}`),
+      ));
+      const latest = readProjectResult(root, saved[0].jsonPath);
+      const currentValue = latest.rows[0].value;
+      assert.ok(latest.rows.every(row => row.value === currentValue));
+      for (let index = 0; index < saved.length; index++) {
+        const reopened = readProjectResult(root, saved[index].historyJsonPath!);
+        assert.deepEqual(reopened.rows, results[index].rows);
+        assert.deepEqual([...reopened.ipc!], [...results[index].ipc]);
+      }
+      assert.ok(!fs.readdirSync(path.join(root, "results")).some(file => file.startsWith(".publish-")));
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
   test("uses and sanitizes an optional result name", async () => {
-    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-named-result-"));
+    const projectRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "gf-named-result-"),
+    );
     const documents = await persistQueryResultDocuments(
       projectRoot,
       { columns: [], rows: [], rowCount: 0 },
       "Regional Routes",
     );
-    assert.equal(path.basename(documents.historyJsonPath!), "regional-routes.json");
-    assert.equal(path.basename(documents.historyMarkdownPath!), "regional-routes.md");
+    assert.equal(
+      path.basename(documents.historyJsonPath!),
+      "regional-routes.json",
+    );
+    assert.equal(
+      path.basename(documents.historyMarkdownPath!),
+      "regional-routes.md",
+    );
   });
 });

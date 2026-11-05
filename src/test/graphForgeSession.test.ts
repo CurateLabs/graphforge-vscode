@@ -46,6 +46,42 @@ function injectCapabilities(session: GraphForgeSession, capabilities: string[]):
   session.capabilities = () => ({ capabilities });
 }
 
+suite("GraphForgeSession result generation", () => {
+  for (const method of ["execute", "rank"] as const) {
+    test(`${method} retains the read generation across a concurrent mutation`, async () => {
+      const session = new GraphForgeSession();
+      const first = Buffer.from("0190a000000070008000000000000001", "hex");
+      const second = Buffer.from("0190a000000070008000000000000002", "hex");
+      let generation = first;
+      const ipc = () => encodeSimpleTable(["name"], [{ name: "fixture" }]);
+      injectForge(session, makeStubForge({
+        execute: (query) => { if (query === "mutate") generation = second; return ipc(); },
+        rank: ipc,
+        committedGenerationIdentity: () => ({ generationUuid: generation, manifestSha256: Buffer.alloc(32) }),
+      }));
+      try {
+        const pending = method === "execute" ? session.execute("read") : session.invokeVerb("rank", {});
+        await session.executeMutation("mutate");
+        const result = await pending;
+        assert.equal(result.generationUuid, "0190a000-0000-7000-8000-000000000001");
+        assert.equal(session.getLastResult(), result);
+      } finally { session.dispose(); }
+    });
+
+    test(`${method} rejects a read from a replaced backend without remembering it`, async () => {
+      const session = new GraphForgeSession();
+      const ipc = () => encodeSimpleTable(["name"], [{ name: "fixture" }]);
+      injectForge(session, makeStubForge({ execute: ipc, rank: ipc }));
+      try {
+        const pending = method === "execute" ? session.execute("read") : session.invokeVerb("rank", {});
+        injectForge(session, makeStubForge());
+        await assert.rejects(pending, (error: unknown) => (error as { code?: string }).code === "SESSION_CHANGED");
+        assert.equal(session.getLastResult(), undefined);
+      } finally { session.dispose(); }
+    });
+  }
+});
+
 suite("GraphForgeSession.algorithmCatalog", () => {
   test("falls back to static list when binding has no forge open", () => {
     const session = new GraphForgeSession();
@@ -122,12 +158,60 @@ suite("GraphForgeSession.toGraphPayload styling", () => {
     rowCount: 1,
   };
 
-  test("demo styling when result has no graph-shaped rows", async () => {
+  test("empty results stay empty without fabricated graph entities", async () => {
     const session = new GraphForgeSession();
     const payload = await session.toGraphPayload({ columns: [], rows: [], rowCount: 0 });
-    assert.equal(payload.styleMode, "demo");
-    assert.ok(payload.nodes.length > 0);
+    assert.equal(payload.styleMode, "class-only");
+    assert.equal(payload.nodes.length, 0);
     session.dispose();
+  });
+
+  test("canonical entity inspection preserves airport properties and UUIDs", async () => {
+    const session = new GraphForgeSession();
+    injectForge(session, makeStubForge());
+    injectCapabilities(session, []);
+    const source = "018f0f4e-7b8c-7000-8000-00000000a001",
+      target = "018f0f4e-7b8c-7000-8000-00000000a002",
+      edge = "018f0f4e-7b8c-7000-8000-00000000a003";
+    try {
+      const payload = await session.toGraphPayload({
+        columns: ["a", "r", "b", "source", "target"],
+        rowCount: 1,
+        rows: [
+          {
+            a: {
+              node_uuid: source,
+              labels: ["Airport"],
+              code: "MHK",
+              city: "Manhattan",
+              lon: -96.6707992553711,
+            },
+            r: {
+              edge_uuid: edge,
+              src_uuid: source,
+              dst_uuid: target,
+              rel_type: "ROUTE",
+              dist: 500,
+            },
+            b: { node_uuid: target, labels: ["Airport"], code: "ORD" },
+            source: "MHK",
+            target: "ORD",
+          },
+        ],
+      });
+      assert.deepEqual(payload.nodes.map((node) => node.id).sort(), [
+        source,
+        target,
+      ]);
+      assert.deepEqual(
+        payload.nodes.find((node) => node.id === source)?.properties,
+        { code: "MHK", city: "Manhattan", lon: -96.6707992553711 },
+      );
+      assert.equal(payload.edges[0].id, edge);
+      assert.equal(payload.edges[0].properties?.dist, 500);
+    } finally {
+      session.dispose();
+    }
   });
 
   test("class-only styling with no fake statuses when knowledge capability is absent", async () => {

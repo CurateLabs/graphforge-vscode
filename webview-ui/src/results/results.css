@@ -4,6 +4,7 @@
   --muted: var(--vscode-descriptionForeground);
   --accent: var(--vscode-focusBorder, #4c6ef5);
   --row-hover: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
+  --sticky-surface: var(--vscode-editor-background, #1e1e1e);
   --row-selected: var(--vscode-list-activeSelectionBackground, rgba(76, 110, 245, 0.24));
 }
 
@@ -178,15 +179,18 @@ thead .inspect-actions {
 }
 
 tbody .inspect-actions {
-  display: flex;
-  gap: 4px;
   padding-block: 3px;
-  overflow-x: auto;
+}
+
+.inspect-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .inspect-link {
   flex: 0 0 auto;
-  color: var(--vscode-textLink-foreground);
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
 }
 
 .inspect-link::before {
@@ -207,11 +211,9 @@ tbody tr:hover .row-number {
   background: var(--row-hover);
 }
 
-tbody tr:hover .inspect-actions {
-  background: var(
-    --vscode-list-hoverBackground,
-    var(--vscode-editorGroupHeader-tabsBackground)
-  );
+tbody tr:hover .inspect-actions,
+tbody tr:hover .row-number {
+  background: linear-gradient(var(--row-hover), var(--row-hover)), var(--sticky-surface);
 }
 
 tbody tr.selected td,
@@ -219,13 +221,32 @@ tbody tr.selected .row-number {
   background: var(--row-selected);
 }
 
-tbody tr.selected .inspect-actions {
-  background: var(--row-selected);
+tbody tr.selected td,
+tbody tr.selected .value,
+tbody tr.selected .missing,
+tbody tr.selected .structured summary {
+  color: var(--vscode-list-activeSelectionForeground, HighlightText);
+}
+
+button:disabled { opacity: 0.6; cursor: default; }
+
+@media (max-width: 420px) {
+  header, footer { flex-wrap: wrap; gap: 6px; }
+}
+
+@media (forced-colors: active) {
+  tbody tr.selected td { background: Highlight; color: HighlightText; }
+  tbody tr.selected .value, tbody tr.selected .structured summary { color: HighlightText; }
+}
+
+tbody tr.selected .inspect-actions,
+tbody tr.selected .row-number {
+  background: linear-gradient(var(--row-selected), var(--row-selected)), var(--sticky-surface);
 }
 
 tbody tr.selected .row-number {
   box-shadow: 3px 0 0 var(--accent) inset;
-  color: var(--vscode-list-activeSelectionForeground, var(--vscode-foreground));
+  color: var(--vscode-list-activeSelectionForeground, HighlightText);
 }
 
 .value {
@@ -235,12 +256,11 @@ tbody tr.selected .row-number {
 
 .value-number,
 .value-bigint {
-  color: var(--vscode-debugTokenExpression-number, #b5cea8);
   font-variant-numeric: tabular-nums;
 }
 
 .value-boolean {
-  color: var(--vscode-debugTokenExpression-boolean, #569cd6);
+  color: inherit;
 }
 
 .missing {
@@ -267,6 +287,7 @@ tbody tr.selected .row-number {
   overflow: auto;
   border: 1px solid var(--border);
   background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+  color: var(--vscode-foreground);
   font-family: var(--vscode-editor-font-family);
   font-size: 11px;
   white-space: pre;
@@ -299,3 +320,6 @@ footer {
   color: var(--muted);
   font-size: 11px;
 }
+
+body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
+body.vscode-dark, body.vscode-high-contrast { color-scheme: dark; }

@@ -25,9 +25,7 @@ export default defineConfig({
       input: {
         getStarted: resolve(here, "src/getStarted/main.js"),
         settings: resolve(here, "src/settings/main.ts"),
-        figure: resolve(here, "src/figure/main.ts"),
-        resultGraph: resolve(here, "src/resultGraph/main.ts"),
-        artifactVisualization: resolve(here, "src/artifactVisualization/main.ts"),
+        xyg: resolve(here, "src/xyg/main.ts"),
         results: resolve(here, "src/results/main.ts"),
         entityInspect: resolve(here, "src/entityInspect/main.ts"),
         modules: resolve(here, "src/modules/main.ts"),

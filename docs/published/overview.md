@@ -27,31 +27,18 @@ graph.
 | **Ontology** | A mode badge (exploratory/advisory/strict) plus an entity/relation tree and an Ontology Viewer webview, including a **Load Ontology…** action. |
 | **Knowledge** | List, inspect, and create knowledge-ledger assertions, with Advanced commands for attaching evidence, assessing confidence, and recording status. |
 | **Results** | A tabular `WebviewView` in VS Code's bottom Panel. Scalar values stay compact, nested values expand as JSON, and row/cell selections highlight matching nodes or edges in an open Result Graph. |
-| **Result Graph** | Cytoscape Canvas is the current creation default; AntV G6 Canvas and Sigma WebGL remain explicit adapters. Saved renderer/layout/style choices remain authoritative on reopen. |
-| **Charts, maps, and timelines** | Plotly analytical charts by default; explicit AntV G2 charts and timelines plus L7 geospatial views—including explicit source/target arc layers—from v2 artifacts, with Save/Revert and an accessible filtered-data companion. |
-| **Plotly Figure** | Raw Plotly interchange plus v1/v2 Plotly artifacts (`showFigure` / `figureFromResult`) use the retained Figure adapter. |
+| **XYG visualization** | Graphs, charts, maps and timelines with native composition, canonical UUID picks and PNG/SVG export |
 
 ## Project workbench files
 
-GraphForge keeps durable exploration state with the project:
+Queries, source data, Python notebooks/apps, durable JSON/Markdown plus original
+Arrow results, and `xyg.intent/v1` visualizations live in the open project.
+The air-routes sample contains four XYG views over 586 airports/7,430 routes.
+The route graph contains 579 connected airports; the timeline is illustrative.
 
-- `queries/` — editable `.cypher` queries
-- `notebooks/` — project-owned Python/Jupyter analysis; the air-routes notebook writes portable CSV and self-contained HTML under `notebooks/outputs/`
-- `apps/` — portable Python apps, exposed with absolute paths in the agent artifact index; the air-routes Streamlit dashboard runs in a browser with `uv run … streamlit run apps/air_routes_dashboard.py`
-- `results/` — latest JSON/Markdown plus timestamped result history
-- `visualizations/` — strict v2 graph/chart/geospatial/temporal `.gfviz.json`
-  specs plus readable, unchanged v1 Cytoscape/Sigma/Plotly specs
-- `mutations/` and `data/` — project-backed graph changes and source material
-
-The air-routes starter uses this same layout; its query, Python notebook,
-Streamlit dashboard, and visualization settings are sample files, not hidden
-extension presets. The notebook and dashboard read the same copied CSVs, run
-native GraphForge PageRank, and render Plotly through Python. The notebook's
-CSV and HTML outputs are portable; neither Python path writes extension-only
-result or visualization artifacts. Global renderer settings choose only the
-next extension artifact template; saved files explicitly own behavior.
-Invalid or unsupported configuration fails visibly without field inference,
-renderer substitution, or network fallback.
+XYG owns composition, layout, ticks, painting and PNG/SVG export. The editor
+owns explicit bindings, project paths and view lifecycle. Unsupported data or
+intent fails visibly. See [XYG integration](../engineering/XYG.md).
 
 ## Two runtimes, one extension
 

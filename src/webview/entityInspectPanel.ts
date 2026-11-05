@@ -98,7 +98,9 @@ export class EntityInspectPanel {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(extensionUri, "dist", "webview-ui")],
+        localResourceRoots: [
+          vscode.Uri.joinPath(extensionUri, "dist", "webview-ui"),
+        ],
       },
     );
     const inspectPanel = new EntityInspectPanel(
@@ -124,10 +126,7 @@ export class EntityInspectPanel {
   }
 
   private reveal(): void {
-    this.panel.reveal(
-      this.column() ?? EntityInspectPanel.inspectColumn,
-      true,
-    );
+    this.panel.reveal(this.column() ?? EntityInspectPanel.inspectColumn, true);
   }
 
   private column(): vscode.ViewColumn | undefined {
@@ -154,7 +153,8 @@ export class EntityInspectPanel {
       this.post({
         type: "graphforge/entityEditState",
         state: "error",
-        message: "The inspected entity changed before this edit could be saved.",
+        message:
+          "The inspected entity changed before this edit could be saved.",
       });
       return;
     }
@@ -178,12 +178,16 @@ export class EntityInspectPanel {
         projectRoot,
         `edit-${kind}-${id.slice(0, 40)}-${artifactTimestamp()}`,
         mutation.cypher,
+        mutation.params,
       );
 
       let applied = false;
       let warning: string | undefined;
       try {
-        const result = await session.executeMutation(mutation.cypher);
+        const result = await session.executeMutation(
+          mutation.cypher,
+          mutation.params,
+        );
         const updated = Number(result.rows[0]?.updated);
         applied = Number.isNaN(updated) || updated > 0;
         if (!applied) {
@@ -204,8 +208,7 @@ export class EntityInspectPanel {
         mutationPath,
         applied,
         message:
-          warning ??
-          `Applied to the live graph and saved ${mutationPath}.`,
+          warning ?? `Applied to the live graph and saved ${mutationPath}.`,
       });
     } catch (error) {
       this.post({

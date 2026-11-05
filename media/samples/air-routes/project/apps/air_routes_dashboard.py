@@ -2,7 +2,8 @@
 
 Run from any terminal (VS Code is not required):
 
-    uv run --with streamlit --with graphforge --with pandas --with plotly \
+    uv run --with streamlit --with graphforge --with pandas \
+      --with "xyg @ git+https://github.com/CurateLabs/xyg.git@18951e621e875407d0e40c35ccddf12d4b1a8def" \
       streamlit run apps/air_routes_dashboard.py
 """
 
@@ -12,7 +13,8 @@ from pathlib import Path
 
 import graphforge as gf
 import pandas as pd
-import plotly.express as px
+import xyg
+import streamlit.components.v1 as components
 import streamlit as st
 
 
@@ -75,17 +77,14 @@ visible = ranked[ranked["region"].isin(selected_regions)].head(limit)
 
 left, right = st.columns([3, 2])
 with left:
-    chart = px.bar(
-        visible,
-        x="code",
-        y="score",
-        color="region",
-        hover_data=["city", "rank"],
-        title="Top US airports by PageRank",
-        labels={"code": "Airport", "score": "PageRank", "region": "Region"},
+    chart = xyg.bar_chart(
+        xyg.bar(list(range(len(visible))), visible["score"].tolist()),
+        xyg.x_axis(label="Airport", tick_values=list(range(len(visible))), tick_labels=visible["code"].tolist()),
+        xyg.y_axis(label="PageRank"),
+        title="Top US airports by PageRank", width=900, height=500,
     )
-    chart.update_layout(xaxis_categoryorder="array", xaxis_categoryarray=visible["code"])
-    st.plotly_chart(chart, use_container_width=True)
+    components.html(chart.to_html(), height=520, scrolling=False)
+
 with right:
     st.metric("Airports ranked", f"{len(ranked):,}")
     st.metric("Routes loaded", "7,430")

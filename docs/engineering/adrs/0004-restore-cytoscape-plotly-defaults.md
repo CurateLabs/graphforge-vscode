@@ -1,6 +1,6 @@
 # ADR-0004: Restore Cytoscape and Plotly creation defaults
 
-- Status: Accepted
+- Status: Superseded by [ADR-0006](0006-xyg-only-visualization.md)
 - Date: 2026-08-02
 - Supersedes: ADR-0003 default selections only
 

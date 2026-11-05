@@ -1,5 +1,9 @@
 import * as vscode from "vscode";
-import { decodeTable, resolveIpcBuffer, stringField } from "./arrowCodec";
+import {
+  decodeTable,
+  resolveIpcBuffer,
+  stringField,
+} from "./arrowCodec";
 import { NodeOnlyFeatureError, UnsupportedByBindingError } from "./errors";
 import { aggregateStatusCounts } from "./knowledgeStatus";
 import { NodeEngineBackend } from "./nodeEngineBackend";
@@ -9,7 +13,10 @@ import {
   readManifestCapabilities,
   readWorkspaceOntology,
 } from "./projectDetector";
-import { detectWorkspaceProjectKind, type ProjectKind } from "./projectKindDetector";
+import {
+  detectWorkspaceProjectKind,
+  type ProjectKind,
+} from "./projectKindDetector";
 import {
   chooseRuntime,
   describeRuntimeUnavailable,
@@ -83,7 +90,10 @@ const ALL_EPISTEMIC_STATUSES: EpistemicStatus[] = [
 ];
 
 function isEpistemicStatus(value: unknown): value is EpistemicStatus {
-  return typeof value === "string" && (ALL_EPISTEMIC_STATUSES as string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (ALL_EPISTEMIC_STATUSES as string[]).includes(value)
+  );
 }
 
 // Defined in `errors.ts` (vscode-free) so error-presentation logic can be
@@ -144,7 +154,12 @@ export class GraphForgeSession implements vscode.Disposable {
   async hasUsableRuntime(): Promise<boolean> {
     const snapshot = await this.environmentSnapshot();
     return (
-      chooseRuntime(snapshot.preference, snapshot.node, snapshot.python, snapshot.projectKind) !== undefined
+      chooseRuntime(
+        snapshot.preference,
+        snapshot.node,
+        snapshot.python,
+        snapshot.projectKind,
+      ) !== undefined
     );
   }
 
@@ -153,8 +168,17 @@ export class GraphForgeSession implements vscode.Disposable {
     const preference = runtimePreference();
     const node = nodeBindingStatus();
     const python = await pythonRuntimeStatus();
-    const projectKind = await detectWorkspaceProjectKind(vscode.workspace.workspaceFolders, python.available);
-    return { preference, node, python, projectKind, active: this.backend?.runtime };
+    const projectKind = await detectWorkspaceProjectKind(
+      vscode.workspace.workspaceFolders,
+      python.available,
+    );
+    return {
+      preference,
+      node,
+      python,
+      projectKind,
+      active: this.backend?.runtime,
+    };
   }
 
   async listProjects(): Promise<DetectedProject[]> {
@@ -238,14 +262,14 @@ export class GraphForgeSession implements vscode.Disposable {
     this.lastResultTitle = undefined;
     // Write-mode coordination is Node-only; a Python-backed session always
     // reports the (only meaningful) single-writer default.
-    this.activeWriteMode = backend.runtime === "node" ? writeMode : "single_writer";
+    this.activeWriteMode =
+      backend.runtime === "node" ? writeMode : "single_writer";
 
     const projects = await discoverProjects();
-    this.activeProject =
-      projects.find((p) => p.rootPath === rootPath) ?? {
-        rootPath,
-        name: rootPath.split(/[\\/]/).pop() ?? rootPath,
-      };
+    this.activeProject = projects.find((p) => p.rootPath === rootPath) ?? {
+      rootPath,
+      name: rootPath.split(/[\\/]/).pop() ?? rootPath,
+    };
 
     this.refreshStatus();
     this._onDidChange.fire();
@@ -267,7 +291,9 @@ export class GraphForgeSession implements vscode.Disposable {
 
   private requireBackend(): EngineBackend {
     if (!this.backend) {
-      throw new Error("No GraphForge session open. Run GraphForge: Open Project.");
+      throw new Error(
+        "No GraphForge session open. Run GraphForge: Open Project.",
+      );
     }
     return this.backend;
   }
@@ -285,10 +311,14 @@ export class GraphForgeSession implements vscode.Disposable {
     return backend.native;
   }
 
-  async execute(cypher: string, params?: Record<string, unknown>): Promise<QueryResult> {
+  async execute(
+    cypher: string,
+    params?: Record<string, unknown>,
+  ): Promise<QueryResult> {
     const backend = this.requireBackend();
     const buf = await backend.execute(cypher, params);
     const result = decodeTable(buf);
+    result.generationUuid = this.resultGeneration(backend, buf);
     this.rememberResult(result, "Cypher result");
     return result;
   }
@@ -362,7 +392,12 @@ export class GraphForgeSession implements vscode.Disposable {
         );
         break;
       case "analyze":
-        buf = await backend.analyze(args.label, args.by ?? "spanning_tree", args.via, args.directed);
+        buf = await backend.analyze(
+          args.label,
+          args.by ?? "spanning_tree",
+          args.via,
+          args.directed,
+        );
         break;
       case "similar":
         buf = await backend.similar(
@@ -380,6 +415,7 @@ export class GraphForgeSession implements vscode.Disposable {
         throw new Error(`Unknown verb: ${verb}`);
     }
     const result = decodeTable(buf);
+    result.generationUuid = this.resultGeneration(backend, buf);
     this.rememberResult(result, verb);
     return result;
   }
@@ -393,7 +429,10 @@ export class GraphForgeSession implements vscode.Disposable {
    * `note` in the UI.
    */
   algorithmCatalog(verb: Exclude<AnalystVerb, "find">): AlgorithmCatalog {
-    const fallback: AlgorithmCatalog = { items: [...FALLBACK_BY[verb]], source: "fallback" };
+    const fallback: AlgorithmCatalog = {
+      items: [...FALLBACK_BY[verb]],
+      source: "fallback",
+    };
     if (!(this.backend instanceof NodeEngineBackend)) {
       return fallback;
     }
@@ -413,7 +452,10 @@ export class GraphForgeSession implements vscode.Disposable {
         ),
       ];
       if (!items.length) {
-        return { ...fallback, note: "Engine returned no contracts for this verb." };
+        return {
+          ...fallback,
+          note: "Engine returned no contracts for this verb.",
+        };
       }
       return { items, source: "contracts" };
     } catch (err) {
@@ -492,7 +534,10 @@ export class GraphForgeSession implements vscode.Disposable {
   // Checkpoints (#9 / ADR 0014) — Node-only
   // ======================================================================
 
-  async createCheckpoint(name: string, description?: string): Promise<QueryResult> {
+  async createCheckpoint(
+    name: string,
+    description?: string,
+  ): Promise<QueryResult> {
     const forge = this.requireNodeForge("checkpoint");
     if (typeof forge.checkpoint !== "function") {
       throw new UnsupportedByBindingError("checkpoint");
@@ -632,7 +677,11 @@ export class GraphForgeSession implements vscode.Disposable {
     if (typeof forge.bindEmbeddingSpaceAlias !== "function") {
       throw new UnsupportedByBindingError("bindEmbeddingSpaceAlias");
     }
-    const result = forge.bindEmbeddingSpaceAlias(name, compatibilityId, replace);
+    const result = forge.bindEmbeddingSpaceAlias(
+      name,
+      compatibilityId,
+      replace,
+    );
     this._onDidChange.fire();
     return result;
   }
@@ -697,7 +746,11 @@ export class GraphForgeSession implements vscode.Disposable {
   // Find + index management (#8) — Node-only
   // ======================================================================
 
-  buildTextIndex(label: string, properties?: string[], rebuild?: boolean): unknown {
+  buildTextIndex(
+    label: string,
+    properties?: string[],
+    rebuild?: boolean,
+  ): unknown {
     const forge = this.requireNodeForge("index");
     if (typeof forge.index !== "function") {
       throw new UnsupportedByBindingError("index");
@@ -730,7 +783,10 @@ export class GraphForgeSession implements vscode.Disposable {
     if (typeof forge.inspectTextIndex !== "function") {
       throw new UnsupportedByBindingError("inspectTextIndex");
     }
-    return forge.inspectTextIndex(label, properties?.length ? properties : null);
+    return forge.inspectTextIndex(
+      label,
+      properties?.length ? properties : null,
+    );
   }
 
   buildAdjacencyIndex(): unknown {
@@ -793,7 +849,12 @@ export class GraphForgeSession implements vscode.Disposable {
         if (typeof forge.prepareRankInvocation !== "function") {
           throw new UnsupportedByBindingError("prepareRankInvocation");
         }
-        return forge.prepareRankInvocation(args.label ?? "", args.by, args.via, args.directed);
+        return forge.prepareRankInvocation(
+          args.label ?? "",
+          args.by,
+          args.via,
+          args.directed,
+        );
       case "cluster":
         if (typeof forge.prepareClusterInvocation !== "function") {
           throw new UnsupportedByBindingError("prepareClusterInvocation");
@@ -821,7 +882,12 @@ export class GraphForgeSession implements vscode.Disposable {
         if (typeof forge.prepareAnalyzeInvocation !== "function") {
           throw new UnsupportedByBindingError("prepareAnalyzeInvocation");
         }
-        return forge.prepareAnalyzeInvocation(args.by, args.label, args.via, args.directed);
+        return forge.prepareAnalyzeInvocation(
+          args.by,
+          args.label,
+          args.via,
+          args.directed,
+        );
       case "similar":
         if (typeof forge.prepareSimilarInvocation !== "function") {
           throw new UnsupportedByBindingError("prepareSimilarInvocation");
@@ -847,7 +913,10 @@ export class GraphForgeSession implements vscode.Disposable {
     return decodeTable(buf);
   }
 
-  async listAlgorithmRuns(algorithm?: string, limit?: number): Promise<QueryResult> {
+  async listAlgorithmRuns(
+    algorithm?: string,
+    limit?: number,
+  ): Promise<QueryResult> {
     const forge = this.requireNodeForge("listAlgorithmRuns");
     if (typeof forge.listAlgorithmRuns !== "function") {
       throw new UnsupportedByBindingError("listAlgorithmRuns");
@@ -911,9 +980,9 @@ export class GraphForgeSession implements vscode.Disposable {
         assertions: [],
         note:
           this.backend.runtime === "node"
-            ? (this.bindingAvailable
-                ? "This @curatelabs/graphforge binding does not expose listAssertions() yet."
-                : this.bindingError)
+            ? this.bindingAvailable
+              ? "This @curatelabs/graphforge binding does not expose listAssertions() yet."
+              : this.bindingError
             : "Knowledge ledger APIs not yet wired for the Python runtime.",
       };
     }
@@ -959,9 +1028,11 @@ export class GraphForgeSession implements vscode.Disposable {
    * swallowed, and total unavailability degrades to `{ available: false }`
    * with an honest note — never a thrown error, never an invented status.
    */
-  private async resolveAssertionStatuses(
-    assertionUuids: string[],
-  ): Promise<{ available: boolean; statuses: Map<string, EpistemicStatus>; note?: string }> {
+  private async resolveAssertionStatuses(assertionUuids: string[]): Promise<{
+    available: boolean;
+    statuses: Map<string, EpistemicStatus>;
+    note?: string;
+  }> {
     const empty = new Map<string, EpistemicStatus>();
     if (assertionUuids.length === 0) {
       return { available: true, statuses: empty };
@@ -986,8 +1057,11 @@ export class GraphForgeSession implements vscode.Disposable {
     let failures = 0;
     const resolveOne = async (uuid: string): Promise<void> => {
       try {
-        const table = decodeTable(await resolveIpcBuffer(assertionStatus(uuid)));
-        const raw = table.rowCount > 0 ? stringField(table.rows[0], "status") : undefined;
+        const table = decodeTable(
+          await resolveIpcBuffer(assertionStatus(uuid)),
+        );
+        const raw =
+          table.rowCount > 0 ? stringField(table.rows[0], "status") : undefined;
         statuses.set(uuid, isEpistemicStatus(raw) ? raw : "statusless");
       } catch {
         failures += 1;
@@ -996,7 +1070,9 @@ export class GraphForgeSession implements vscode.Disposable {
 
     const concurrency = 6;
     for (let i = 0; i < assertionUuids.length; i += concurrency) {
-      await Promise.all(assertionUuids.slice(i, i + concurrency).map(resolveOne));
+      await Promise.all(
+        assertionUuids.slice(i, i + concurrency).map(resolveOne),
+      );
     }
 
     if (statuses.size === 0 && failures > 0) {
@@ -1092,7 +1168,9 @@ export class GraphForgeSession implements vscode.Disposable {
       throw new UnsupportedByBindingError("createAssertion");
     }
     if (!input.graphRefs.length) {
-      throw new Error("Create Assertion requires at least one graph reference.");
+      throw new Error(
+        "Create Assertion requires at least one graph reference.",
+      );
     }
     const assertionUuid = uuidv7();
     const buf = await resolveIpcBuffer(
@@ -1151,7 +1229,10 @@ export class GraphForgeSession implements vscode.Disposable {
 
   /** Advanced: record one explicit assertion-status event (requires an existing provenance UUID). Node-only. */
   async recordAssertionStatus(
-    input: Omit<RecordAssertionStatusInput, "operationUuid" | "statusEventUuid">,
+    input: Omit<
+      RecordAssertionStatusInput,
+      "operationUuid" | "statusEventUuid"
+    >,
   ): Promise<QueryResult> {
     const forge = this.requireNodeForge("recordAssertionStatus");
     if (typeof forge.recordAssertionStatus !== "function") {
@@ -1170,7 +1251,9 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   /** Status event history, optionally filtered to one assertion. Node-only. */
-  async listAssertionStatus(request?: ListAssertionStatusInput): Promise<QueryResult> {
+  async listAssertionStatus(
+    request?: ListAssertionStatusInput,
+  ): Promise<QueryResult> {
     const forge = this.requireNodeForge("listAssertionStatus");
     if (typeof forge.listAssertionStatus !== "function") {
       throw new UnsupportedByBindingError("listAssertionStatus");
@@ -1189,12 +1272,12 @@ export class GraphForgeSession implements vscode.Disposable {
    * Build a graph payload from tabular results, then (when the project has
    * the `knowledge` + `epistemic` capabilities, the active backend is Node,
    * and the binding exposes the status APIs) resolve real ledger status for
-   * each node UUID. Remembers the raw result so `GraphForge: Show Result
-   * Graph` can refresh/re-resolve without re-running the query or verb.
+   * each node UUID. This inspection projection never replaces the original Arrow result.
    */
-  async toGraphPayload(result: QueryResult, title?: string): Promise<GraphPayload> {
-    this.rememberResult(result, title);
-
+  async toGraphPayload(
+    result: QueryResult,
+    title?: string,
+  ): Promise<GraphPayload> {
     const nodes = new Map<string, GraphNode>();
     const edges: GraphEdge[] = [];
     const ontology = this.workspaceOntology();
@@ -1202,7 +1285,58 @@ export class GraphForgeSession implements vscode.Disposable {
       (ontology?.entity_types ?? []).map((e) => e.name),
     );
 
+    const canonicalEdges = new Map<string, GraphEdge>();
+    let canonicalRow = false;
+    const inspectEntity = (value: unknown): void => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(inspectEntity);
+        return;
+      }
+      const entity = value as Record<string, unknown>;
+      if (typeof entity.node_uuid === "string") {
+        canonicalRow = true;
+        const labels = Array.isArray(entity.labels)
+          ? entity.labels.filter(
+              (label): label is string => typeof label === "string",
+            )
+          : [];
+        nodes.set(entity.node_uuid, {
+          id: entity.node_uuid,
+          labels,
+          properties: Object.fromEntries(
+            Object.entries(entity).filter(
+              ([key]) => key !== "node_uuid" && key !== "labels",
+            ),
+          ),
+          ontologyType: labels[0],
+        });
+      } else if (
+        typeof entity.edge_uuid === "string" &&
+        typeof entity.src_uuid === "string" &&
+        typeof entity.dst_uuid === "string"
+      ) {
+        canonicalRow = true;
+        canonicalEdges.set(entity.edge_uuid, {
+          id: entity.edge_uuid,
+          type: String(entity.rel_type ?? ""),
+          source: entity.src_uuid,
+          target: entity.dst_uuid,
+          properties: Object.fromEntries(
+            Object.entries(entity).filter(
+              ([key]) =>
+                !["edge_uuid", "src_uuid", "dst_uuid", "rel_type"].includes(
+                  key,
+                ),
+            ),
+          ),
+        });
+      } else Object.values(entity).forEach(inspectEntity);
+    };
     for (const row of result.rows) {
+      canonicalRow = false;
+      Object.values(row).forEach(inspectEntity);
+      if (canonicalRow) continue;
       const uuid =
         stringField(row, "node_uuid") ??
         stringField(row, "id") ??
@@ -1217,8 +1351,7 @@ export class GraphForgeSession implements vscode.Disposable {
           labels: labels.length ? labels : ["Node"],
           properties: row,
           epistemicStatus: statusFromRow(row),
-          ontologyType:
-            primary && entityNames.has(primary) ? primary : primary,
+          ontologyType: primary && entityNames.has(primary) ? primary : primary,
         });
       }
       if (uuid2) {
@@ -1238,7 +1371,8 @@ export class GraphForgeSession implements vscode.Disposable {
         });
       }
 
-      const source = stringField(row, "source") ?? stringField(row, "start_uuid");
+      const source =
+        stringField(row, "source") ?? stringField(row, "start_uuid");
       const target = stringField(row, "target") ?? stringField(row, "end_uuid");
       if (source && target) {
         if (!nodes.has(source)) {
@@ -1257,7 +1391,10 @@ export class GraphForgeSession implements vscode.Disposable {
         }
         edges.push({
           id: stringField(row, "edge_uuid") ?? `${source}->${target}`,
-          type: stringField(row, "type") ?? stringField(row, "rel_type") ?? "RELATED",
+          type:
+            stringField(row, "type") ??
+            stringField(row, "rel_type") ??
+            "RELATED",
           source,
           target,
           epistemicStatus: statusFromRow(row),
@@ -1266,9 +1403,17 @@ export class GraphForgeSession implements vscode.Disposable {
       }
     }
 
-    // Scaffold demo graph when result has no graph-shaped columns
+    edges.push(...canonicalEdges.values());
+
+    // Empty results stay empty.
     if (nodes.size === 0) {
-      return demoGraphPayload(title ?? "Result (demo)", result);
+      return {
+        nodes: [],
+        edges: [],
+        legend: { statuses: [], types: [] },
+        title,
+        styleMode: "class-only",
+      };
     }
 
     const resolution = await this.resolveEpistemicStatuses([...nodes.keys()]);
@@ -1318,14 +1463,17 @@ export class GraphForgeSession implements vscode.Disposable {
     if (this.lastResult) {
       return this.toGraphPayload(this.lastResult, this.lastResultTitle);
     }
-    return this.toGraphPayload({ columns: [], rows: [], rowCount: 0 }, "Demo graph");
+    return this.toGraphPayload(
+      { columns: [], rows: [], rowCount: 0 },
+      "No result",
+    );
   }
 
   get hasLastResult(): boolean {
     return this.lastResult !== undefined;
   }
 
-  /** Last Cypher/verb table result for Figure presets (#62) — undefined until one runs. */
+  /** Last Cypher/verb result for XYG chart bindings — undefined until one runs. */
   getLastResult(): QueryResult | undefined {
     return this.lastResult;
   }
@@ -1345,6 +1493,15 @@ export class GraphForgeSession implements vscode.Disposable {
     this._onDidChange.fire();
   }
 
+  private resultGeneration(backend: EngineBackend, ipc: Buffer): string | undefined {
+    if (backend !== this.backend) {
+      throw Object.assign(new Error("The project session changed while reading. Run the query again."), {
+        code: "SESSION_CHANGED",
+      });
+    }
+    return backend.resultGeneration?.(ipc);
+  }
+
   private rememberResult(result: QueryResult, title?: string): void {
     this.lastResult = result;
     this.lastResultTitle = title;
@@ -1361,9 +1518,11 @@ export class GraphForgeSession implements vscode.Disposable {
    * still be moving; any missing method, missing capability, or thrown error
    * also falls back to `{ active: false }`.
    */
-  private async resolveEpistemicStatuses(
-    nodeIds: string[],
-  ): Promise<{ active: boolean; statuses: Map<string, EpistemicStatus>; note?: string }> {
+  private async resolveEpistemicStatuses(nodeIds: string[]): Promise<{
+    active: boolean;
+    statuses: Map<string, EpistemicStatus>;
+    note?: string;
+  }> {
     const empty = new Map<string, EpistemicStatus>();
     if (!this.backend || nodeIds.length === 0) {
       return { active: false, statuses: empty };
@@ -1393,7 +1552,10 @@ export class GraphForgeSession implements vscode.Disposable {
     const forge = this.backend.native;
     const listAssertions = forge.listAssertions;
     const assertionStatus = forge.assertionStatus;
-    if (typeof listAssertions !== "function" || typeof assertionStatus !== "function") {
+    if (
+      typeof listAssertions !== "function" ||
+      typeof assertionStatus !== "function"
+    ) {
       return {
         active: false,
         statuses: empty,
@@ -1409,15 +1571,22 @@ export class GraphForgeSession implements vscode.Disposable {
 
     const resolveOne = async (uuid: string): Promise<void> => {
       try {
-        const assertions = decodeTable(await listAssertions({ graphUuid: uuid, limit: 1 }));
+        const assertions = decodeTable(
+          await listAssertions({ graphUuid: uuid, limit: 1 }),
+        );
         const assertionUuid =
-          assertions.rowCount > 0 ? stringField(assertions.rows[0], "assertion_uuid") : undefined;
+          assertions.rowCount > 0
+            ? stringField(assertions.rows[0], "assertion_uuid")
+            : undefined;
         if (!assertionUuid) {
           statuses.set(uuid, "statusless");
           return;
         }
         const statusTable = decodeTable(await assertionStatus(assertionUuid));
-        const raw = statusTable.rowCount > 0 ? stringField(statusTable.rows[0], "status") : undefined;
+        const raw =
+          statusTable.rowCount > 0
+            ? stringField(statusTable.rows[0], "status")
+            : undefined;
         statuses.set(uuid, isEpistemicStatus(raw) ? raw : "statusless");
       } catch {
         failures += 1;
@@ -1439,12 +1608,18 @@ export class GraphForgeSession implements vscode.Disposable {
 
     const notes: string[] = [];
     if (truncated) {
-      notes.push(`Resolved epistemic status for first ${cap} of ${nodeIds.length} nodes.`);
+      notes.push(
+        `Resolved epistemic status for first ${cap} of ${nodeIds.length} nodes.`,
+      );
     }
     if (failures > 0) {
       notes.push(`${failures} node(s) failed status lookup (left class-only).`);
     }
-    return { active: true, statuses, note: notes.length ? notes.join(" ") : undefined };
+    return {
+      active: true,
+      statuses,
+      note: notes.length ? notes.join(" ") : undefined,
+    };
   }
 
   notifyChanged(): void {
@@ -1459,7 +1634,8 @@ export class GraphForgeSession implements vscode.Disposable {
   private async refreshStatusAsync(): Promise<void> {
     if (this.activeProject && this.backend) {
       const mode = await this.ontologyMode();
-      const runtimeLabel = this.backend.runtime === "python" ? "Python" : "Node";
+      const runtimeLabel =
+        this.backend.runtime === "python" ? "Python" : "Node";
       this.statusBar.text = `$(database) GraphForge: ${this.activeProject.name} (${mode}) · ${runtimeLabel}`;
       this.statusBar.tooltip = `${this.activeProject.rootPath}\nRuntime: ${runtimeLabel}`;
       return;
@@ -1467,7 +1643,12 @@ export class GraphForgeSession implements vscode.Disposable {
 
     const snapshot = await this.environmentSnapshot();
     const usable =
-      chooseRuntime(snapshot.preference, snapshot.node, snapshot.python, snapshot.projectKind) !== undefined;
+      chooseRuntime(
+        snapshot.preference,
+        snapshot.node,
+        snapshot.python,
+        snapshot.projectKind,
+      ) !== undefined;
     if (!usable) {
       this.statusBar.text = "$(warning) GraphForge: no runtime";
       this.statusBar.tooltip = describeRuntimeUnavailable(
@@ -1516,59 +1697,7 @@ function labelsFromRow(row: TableRow, prefix = ""): string[] {
  * knowledge capability is absent.
  */
 function statusFromRow(row: TableRow): EpistemicStatus | undefined {
-  const raw = stringField(row, "epistemic_status") ?? stringField(row, "status");
+  const raw =
+    stringField(row, "epistemic_status") ?? stringField(row, "status");
   return isEpistemicStatus(raw) ? raw : undefined;
-}
-
-function demoGraphPayload(title: string, result: QueryResult): GraphPayload {
-  const nodes: GraphNode[] = [
-    {
-      id: "demo-a",
-      labels: ["Person"],
-      ontologyType: "Person",
-      epistemicStatus: "supported",
-      properties: { name: "Alice", note: "scaffold demo" },
-    },
-    {
-      id: "demo-b",
-      labels: ["Person"],
-      ontologyType: "Person",
-      epistemicStatus: "hypothesis",
-      properties: { name: "Bob", note: "scaffold demo" },
-    },
-    {
-      id: "demo-c",
-      labels: ["Org"],
-      ontologyType: "Org",
-      epistemicStatus: "disputed",
-      properties: { name: "Curate", rows: result.rowCount },
-    },
-  ];
-  const edges: GraphEdge[] = [
-    {
-      id: "e1",
-      type: "KNOWS",
-      source: "demo-a",
-      target: "demo-b",
-      epistemicStatus: "supported",
-    },
-    {
-      id: "e2",
-      type: "WORKS_AT",
-      source: "demo-a",
-      target: "demo-c",
-      epistemicStatus: "hypothesis",
-    },
-  ];
-  return {
-    nodes,
-    edges,
-    legend: {
-      statuses: ALL_EPISTEMIC_STATUSES,
-      types: ["Person", "Org"],
-    },
-    title,
-    styleMode: "demo",
-    banner: "Demo graph — no graph-shaped rows in the last result.",
-  };
 }

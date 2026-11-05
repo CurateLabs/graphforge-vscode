@@ -205,6 +205,7 @@ export class PythonEngineBackend implements EngineBackend {
   readonly runtime: RuntimeKind = "python";
   private resolvedPath: string | null = null;
   private resolvedOntologyMode = "unknown";
+  private readonly generations = new WeakMap<Buffer, string>();
 
   private constructor(
     private readonly bridge: PythonBridge,
@@ -247,9 +248,27 @@ export class PythonEngineBackend implements EngineBackend {
     return this.resolvedOntologyMode;
   }
 
+  /** Identity is captured by the host in the same response as these exact bytes. */
+  resultGeneration(ipc: Buffer): string | undefined {
+    return this.generations.get(ipc);
+  }
+
+  private readResultBuffer(result: Record<string, unknown>): Buffer {
+    const ipc = arrowBuffer(result);
+    const generation = result["generation_uuid"];
+    if (generation !== undefined) {
+      if (typeof generation !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(generation)) {
+        throw new PythonBridgeError("Python bridge returned an invalid generation identity.", "GF_GENERATION_INVALID");
+      }
+      this.generations.set(ipc, generation);
+    }
+    return ipc;
+  }
+
   async execute(cypher: string, params?: Record<string, unknown>): Promise<Buffer> {
     const result = await this.bridge.request("execute", { cypher, params });
-    return arrowBuffer(result);
+    return this.readResultBuffer(result);
   }
 
   async rank(
@@ -308,7 +327,7 @@ export class PythonEngineBackend implements EngineBackend {
 
   private async verb(name: string, args: Record<string, unknown>): Promise<Buffer> {
     const result = await this.bridge.request("verb", { verb: name, args });
-    return arrowBuffer(result);
+    return this.readResultBuffer(result);
   }
 
   async labels(): Promise<string[]> {
@@ -327,7 +346,7 @@ export class PythonEngineBackend implements EngineBackend {
 
   async listAssertions(): Promise<Buffer> {
     const result = await this.bridge.request("list_assertions");
-    return arrowBuffer(result);
+    return this.readResultBuffer(result);
   }
 
   async dispose(): Promise<void> {

@@ -30,6 +30,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -52,6 +54,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -66,7 +70,9 @@ jobs:
         run: npm run check
 
       - name: Qualification runner regression tests
-        run: node --test scripts/qualify-hub-clone.test.cjs
+        run: |
+          node --test scripts/qualify-hub-clone.test.cjs
+          PYTHONDONTWRITEBYTECODE=1 python3 src/test/fixtures/pythonHostGeneration.test.py
 
       - name: Compile
         run: npm run compile
@@ -87,6 +93,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -113,6 +121,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -127,7 +137,7 @@ jobs:
         run: npm run compile
 
       - name: Package extension (no publish)
-        run: npx vsce package --no-dependencies -o graphforge-ci.vsix
+        run: npm run package -- --no-dependencies -o graphforge-ci.vsix
 
       - name: Upload .vsix artifact
         # Best-effort: the packaging step above is the actual gate. Don't fail the
@@ -152,6 +162,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up Node
         uses: actions/setup-node@v7

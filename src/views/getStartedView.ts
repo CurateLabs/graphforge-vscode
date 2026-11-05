@@ -7,7 +7,7 @@ import {
   selectJourneyArtifacts,
   type GetStartedStepModel,
 } from "./getStartedContent";
-import { isQuickstartSamplePath } from "../session/quickstartSample";
+import { isQuickstartSamplePath, QUICKSTART_QUERY_REL } from "../session/quickstartSample";
 import {
   scanProjectArtifacts,
   type ProjectArtifactIndex,
@@ -192,15 +192,13 @@ export async function buildGetStartedState(
         mutations: [],
       };
   const sampleQueryPath = isSampleProject
-    ? (artifacts.queryTemplates[0] ?? artifacts.queries[0])?.path
+    ? artifacts.queryTemplates.find(item => item.path === QUICKSTART_QUERY_REL)?.path
     : undefined;
   const { resultPath, visualizationPath } = selectJourneyArtifacts(
     isSampleProject,
     artifacts.results,
     artifacts.visualizations,
-    vscode.workspace
-      .getConfiguration("graphforge")
-      .get<string>("resultGraph.renderer", "cytoscape"),
+    "xyg",
   );
 
   const nodeLine = nodeAvailable ? "Node binding ready" : "Node binding not linked";

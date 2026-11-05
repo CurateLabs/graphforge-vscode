@@ -3,7 +3,7 @@
 GraphForge for VS Code is a TypeScript extension host that wraps a runtime-agnostic
 `EngineBackend` — either `@curatelabs/graphforge` (default) or a Python `graphforge` bridge
 subprocess (#12) — decodes Arrow IPC results, and presents workbench UI: tree views, Cypher
-language support, analyst-verb commands, and webviews for ontology and epistemic-aware graphs.
+language support, analyst-verb commands, and webviews for ontology and XYG visualizations.
 
 Query, visualization, and import are first-party modules activated through the same module
 lifecycle used by GraphForge-catalog and side-loaded modules. The future catalog is the happy
@@ -56,37 +56,17 @@ flowchart LR
 | `nodeEngineBackend` / `pythonBridge` | `EngineBackend` implementations over Node / Python | `types.EngineBackend` |
 | `runtime` / `runtimeSelection` | Choose Node vs. Python per `graphforge.runtime`; open the backend | nativeLoader, pythonLoader, both backends |
 | `GraphForgeSession` | Open project, execute/verbs, IPC→rows, graph payload | `EngineBackend` + arrow |
-| `projectArtifacts` / `visualizationRegistry` | Read v1 compatibility specs; validate/write strict v2 project-owned specs; materialize centralized renderer defaults | Node fs + project root |
+| `projectArtifacts` / `visualizationRegistry` | Resolve project files and delegate `xyg.intent/v1` validation to XYG | Node fs + project root |
 | Tree providers | Projects, Ontology, Knowledge sidebars | Session |
 | Commands | Run Query, verbs, open panels, load ontology, Setup (Native/Python) | Session, webviews |
-| Webviews | Results + Result Graph + artifact visualization + Ontology + Settings + Modules + retained Plotly Figure | QueryResult, `GraphPayload`, validated artifact specs, module/configuration state |
-| `webview-ui/` | Vite-built browser bundles for webview panels/views | shared schemas/view models, G6/G2/L7, retained Cytoscape/Sigma/Plotly |
+| `XygVisualizationPanel` / `xygRuntime` | Instance/frame lifecycle and explicit field binding | Bundled XYG native engine and shared painter |
 
 ### Build tooling (Vite, #24)
 
-Vite is the single build tool, per the sequenced decision recorded in issue #24 (Phase 2
-complete). Two configs with opposite semantics:
-
-- **Extension host (`vite.config.mts`, repo root):** a Node **library/SSR build** — no dev
-  server, no HMR, no app-mode assumptions. `vite build` bundles `src/extension.ts` →
-  `dist/extension.js` (single flat CJS file, `vscode` and `@curatelabs/graphforge` external,
-  `apache-arrow` bundled); `vite build --mode tests` emits per-test-file CJS bundles →
-  `dist/test/` and copies `src/test/fixtures/` alongside them.
-- **Webview UI (`webview-ui/vite.config.mts`):** browser-side webview apps (config inside this
-  package — no monorepo/workspace split). Emits fixed-name bundles to `dist/webview-ui/`
-  (e.g. `results.*`, `settings.*`, `figure.*`, `resultGraph.*`,
-  `artifactVisualization.*`), which panel hosts load via
-  `webview.asWebviewUri` under a nonce-based, Settings-strict CSP. Results, Settings, Figure, and
-  Result Graph and artifact visualizations are Vite-built. Figure bundles full
-  `plotly.js` locally—see ADR-0001. Result Graph bundles G6, Cytoscape, Sigma,
-  Graphology, and worker/main-thread layouts; the artifact panel bundles G2 and
-  L7. No renderer code, map provider, or result data comes from a CDN or remote
-  fetch. The nonce CSP retains only extension/data/blob resources and worker
-  allowances required by local bundles.
-- `npm run compile` runs both (`compile:host` then `compile:webview`); `npm run check`
-  type-checks both TS projects (`tsconfig.json` and `webview-ui/tsconfig.json`). The
-  `webview-ui` app shares vscode-free modules from `src/` (e.g. `settingsSchema.ts`) by direct
-  relative import.
+Vite bundles the extension host and test/benchmark entries as Node libraries.
+`webview-ui/vite.config.mts` builds the browser UI separately. Before these builds,
+`scripts/build-xyg.mjs` builds and bundles the pinned XYG native engine, Node
+facade and browser painter. The package targets the build host OS/architecture.
 
 ### Runtime abstraction (#12)
 
@@ -169,7 +149,7 @@ small, versioned, newline-delimited JSON protocol:
 
 Ops: `open`, `execute`, `verb` (`{"verb": "rank"|"cluster"|"paths"|"analyze"|"similar"|"find", "args": {...}}`),
 `labels`, `relationship_types`, `ontology_mode`, `load_ontology`, `list_assertions`, `close`.
-Every table-shaped result is returned as `{"arrow_ipc_base64": <str>}` (an Arrow IPC stream,
+Every table-shaped result is returned as `{"arrow_ipc_base64": <str>, "generation_uuid": <optional UUID string>}` (an Arrow IPC stream,
 base64-encoded) so the extension's existing `apache-arrow` decode path — shared with the Node
 binding — consumes it unchanged; non-table results are returned as `{"json": ...}` or bespoke
 fields (e.g. `{"labels": [...]}`). Every request is a **thin marshal** straight to a
@@ -189,18 +169,7 @@ any breaking wire change, and document it here.
 
 ## Data model
 
-- **DetectedProject** — root path, CURRENT generation pointer
-- **QueryResult** — columns/rows from Arrow tables
-- **GraphPayload** — nodes/edges with `epistemicStatus`, `ontologyType`, legend
-- **OntologyDoc** — entity_types, relation_types, properties (from workspace participant)
-- **ProjectVisualizationSpecV1** — compatibility reader for existing
-  `graphforge.visualization/v1` Cytoscape/Sigma result graphs and Plotly charts;
-  opening does not migrate or rewrite the file.
-- **ProjectVisualizationSpecV2** — strict writer contract for `result-graph`,
-  `chart`, `geospatial`, and `temporal`. It references a project result and
-  explicitly records renderer, bindings, filters, layout/coordinate/time, and
-  presentation configuration. Geospatial link sources name both endpoint
-  coordinate pairs and their ordered L7 point/arc layers.
+See [XYG integration](XYG.md) for native composition, typed painting, lifecycle and export.
 
 Workbench artifact layout:
 
@@ -229,6 +198,8 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 
 ## Key flows
 
+Node and Python backends capture generation identity with each read and associate it with that exact returned Buffer. Session reads reject a backend replacement before remembering the result. Python hosts without the Core identity capability omit the field rather than inventing an identity.
+
 ### Run Cypher
 
 1. User invokes Run Query — command
@@ -253,29 +224,11 @@ intentionally out of v0 rather than inferred from point order.
 
 ### Render and inspect a result graph
 
-1. Host reads the saved artifact or materializes the creation template, then posts
-   the current `GraphPayload` and explicit renderer/layout to the Vite webview.
-2. G6 runs the saved worker ForceAtlas2 configuration; Cytoscape/Sigma run only
-   when their saved adapters are selected. The host does not select by graph size.
-3. A node/edge click posts the reserved `selectNode` / `selectEdge` protocol message.
-4. The host validates the id against the current payload. Assertion-shaped nodes dispatch
-   `graphforge.showAssertion`; other nodes and edges open a read-only JSON summary.
-5. A saved artifact remains authoritative when global creation defaults change.
-   Renderer/layout failure reports a stable error without silent substitution.
+See [XYG integration](XYG.md) for native composition, typed painting, lifecycle and export.
 
-### Open and edit a v2 chart, map, or timeline
+### Open an XYG chart, map, or timeline
 
-1. `openProjectVisualization` validates the v2 spec, resolves its project result,
-   and applies only its explicit filters.
-2. The host opens the G2/L7 artifact panel. An explicitly selected v2 Plotly
-   **chart** uses the retained Figure adapter; v2 temporal artifacts are G2-only.
-   The command returns the artifact path, complete spec, and panel outcome.
-3. L7 link sources materialize unique endpoint points and pass each valid
-   source/target row to the saved arc layer without field-name inference.
-4. The webview renders an accessible filtered-row companion and reports local
-   lifecycle events without graph properties, rows, coordinates, timestamps, or paths.
-5. Viewport or temporal-range changes create a host-validated draft and visible
-   dirty state. Save atomically replaces the artifact; Revert restores committed JSON.
+See [XYG integration](XYG.md) for native composition, typed painting, lifecycle and export.
 
 ### Clone from the Hub
 
@@ -342,8 +295,7 @@ confirmation and the result (`coreVersion`).
 - **Error handling:** Fail closed on missing binding or invalid FORMAT; `showErrorMessage`. When
   no runtime is usable, the message and recovery actions cover **both** Setup commands (#12).
 - **Configuration:** `graphforge.nativeModulePath`, `graphforge.openResultGraphOnQuery`,
-  `graphforge.resultGraph.renderer` (`cytoscape` creation default; optional `g6`/`sigma`),
-  `graphforge.chart.renderer` (`plotly` creation default; optional `g2`), `graphforge.runtime`,
+  `graphforge.runtime`,
   and `graphforge.pythonInterpreterPath`. Get Started derives its journey from
   runtime/session state plus project-owned artifacts; it has no separate onboarding
   mode or completion setting.
@@ -366,31 +318,11 @@ confirmation and the result (`coreVersion`).
   (`pythonLoader.ts`) and invalidated on `graphforge.pythonInterpreterPath`/`graphforge.runtime`
   config changes, workspace folder changes, and (best-effort) Python-extension interpreter
   changes — see `extension.ts`.
-  Visualization preparation and isolated Node-layout comparison is an explicit
-  bounded `npm run benchmark:visualizations` command, not a CI gate or browser-rendering claim.
+  XYG owns visualization performance evidence; local host tests establish bounded composition and paint behavior.
 
 ## Decisions
 
-- Optional peer on `@curatelabs/graphforge` so the extension installs without a prebuilt napi binary.
-- Cytoscape Canvas and Plotly are the graph/chart creation defaults. G6 and G2
-  remain explicit options; Sigma remains an explicit graph alternative; G2 remains
-  the temporal adapter and L7 the geospatial adapter. v1 remains readable,
-  v2 is written, and saved artifacts—not current settings or hidden thresholds—own behavior.
-- Demo graph when result rows are not graph-shaped, so the epistemic/class legend is reviewable without data.
-- Python is reached via a **long-lived subprocess bridge**, not per-call spawns: engine startup
-  cost and the project's single-writer lock make a fresh interpreter per request impractical (#12).
-- `EngineBackend` is scoped to what `GraphForgeSession` actually calls today, not the full (and
-  still-moving) `GraphForgeNative` surface — checkpoints/embeddings/invocation-descriptor APIs
-  (#8–#11) are Node-only until those issues define their own cross-runtime contract.
-- `auto` prefers Python over an available Node binding in Python-first workspaces (product
-  feedback on #12): a fast, in-process Node binding is still the better default absent other
-  signals, but a repo that is clearly Python's (has `pyproject.toml`, `uv.lock`, etc. and no
-  `package.json`) should not force analysts to also set up a Node binding they don't otherwise
-  need. `graphforge.runtime` set explicitly always overrides this.
-- Python package installs standardize on `uv` (product feedback on #12): `pip` has no lockfile,
-  no project-aware `add`, and mixing it with `uv`-managed environments causes drift; requiring
-  `uv` end-to-end (install-uv-first, no fallback) keeps Setup Python Binding's guidance
-  unambiguous.
+See [XYG integration](XYG.md) for native composition, typed painting, lifecycle and export.
 
 ## Risks & trade-offs
 

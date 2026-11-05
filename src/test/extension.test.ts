@@ -325,186 +325,22 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     );
   });
 
-  test("showResultGraph does not throw (opens demo graph webview when no result exists yet)", async () => {
+  test("showResultGraph does not throw (reports a missing result without fabricating a demo)", async () => {
     await assert.doesNotReject(
       Promise.resolve(vscode.commands.executeCommand("graphforge.showResultGraph")),
     );
   });
 
-  test("open Result Graph follows renderer setting changes without host reload (#65)", async () => {
-    const config = vscode.workspace.getConfiguration("graphforge");
-    const previous = config.inspect<string>("resultGraph.renderer")?.globalValue;
-    try {
-      await config.update(
-        "resultGraph.renderer",
-        "cytoscape",
-        vscode.ConfigurationTarget.Global,
-      );
-      await assert.doesNotReject(
-        Promise.resolve(vscode.commands.executeCommand("graphforge.showResultGraph")),
-      );
-      await config.update(
-        "resultGraph.renderer",
-        "sigma",
-        vscode.ConfigurationTarget.Global,
-      );
-      await assert.doesNotReject(
-        Promise.resolve(vscode.commands.executeCommand("graphforge.showResultGraph")),
-      );
-    } finally {
-      await config.update(
-        "resultGraph.renderer",
-        previous,
-        vscode.ConfigurationTarget.Global,
-      );
+  test("XYG commands fail clearly when no real result exists", async () => {
+    for (const command of ["graphforge.showResultGraph","graphforge.showFigure","graphforge.figureFromResult"]) {
+      const outcome=await vscode.commands.executeCommand<{error?:string}>(command);
+      assert.ok(outcome?.error);
     }
-  });
-
-  test("showFigure with { figure } returns structured panel status without prompting (#62)", async () => {
-    const result = await vscode.commands.executeCommand<{
-      figure?: { data: unknown[] };
-      panel?: string;
-      error?: string;
-      code?: string;
-    }>("graphforge.showFigure", {
-      figure: {
-        data: [{ type: "bar", x: ["a", "b"], y: [1, 2] }],
-        layout: { title: { text: "agent figure" } },
-      },
-    });
-    assert.ok(result);
-    assert.equal(result.error, undefined);
-    assert.ok(result.figure?.data?.length);
-    assert.ok(result.panel === "opened" || result.panel === "updated");
-  });
-
-  test("keeps independently opened unsaved figures alive (#81)", async () => {
-    const countFigures = () => vscode.window.tabGroups.all.flatMap((group) => group.tabs)
-      .filter((tab) => tab.input instanceof vscode.TabInputWebview)
-      .filter((tab) => (tab.input as vscode.TabInputWebview).viewType.replace(/^mainThreadWebview-/, "") === "graphforge.figure")
-      .length;
-    const before = countFigures();
-    const first = await vscode.commands.executeCommand<{ panel?: string }>("graphforge.showFigure", {
-      figure: { data: [{ type: "bar", x: ["a"], y: [1] }], layout: { title: "Independent A" } },
-    });
-    const second = await vscode.commands.executeCommand<{ panel?: string }>("graphforge.showFigure", {
-      figure: { data: [{ type: "bar", x: ["b"], y: [2] }], layout: { title: "Independent B" } },
-    });
-    assert.equal(first?.panel, "opened");
-    assert.equal(second?.panel, "opened");
-    for (let attempt = 0; attempt < 50 && countFigures() < before + 2; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    assert.ok(countFigures() >= before + 2);
-  });
-
-  test("showFigure without figure returns FIGURE_REQUIRED (#62)", async () => {
-    const result = await vscode.commands.executeCommand<{
-      error?: string;
-      code?: string;
-      nextAction?: string;
-    }>("graphforge.showFigure");
-    assert.ok(result);
-    assert.equal(result.code, "FIGURE_REQUIRED");
-    assert.ok(result.nextAction);
-  });
-
-  test("figureFromResult with table + bindings returns figure without prompting (#62)", async () => {
-    const result = await vscode.commands.executeCommand<{
-      figure?: { data: unknown[] };
-      panel?: string;
-      chartType?: string;
-      error?: string;
-    }>("graphforge.figureFromResult", {
-      chartType: "bar",
-      x: "label",
-      y: "score",
-      columns: ["label", "score"],
-      rows: [
-        { label: "a", score: 1 },
-        { label: "b", score: 2 },
-      ],
-    });
-    assert.ok(result);
-    assert.equal(result.error, undefined);
-    assert.equal(result.chartType, "bar");
-    assert.ok(result.figure?.data?.length);
-    assert.ok(result.panel === "opened" || result.panel === "updated");
   });
 
   test("showOntology does not throw", async () => {
     await assert.doesNotReject(
       Promise.resolve(vscode.commands.executeCommand("graphforge.showOntology")),
-    );
-  });
-
-  test("visualization webviews stack as tabs in one editor group (#63)", async () => {
-    const expectedViewTypes = new Set([
-      "graphforge.resultGraph",
-      "graphforge.figure",
-      "graphforge.ontologyViewer",
-    ]);
-    const normalizeViewType = (viewType: string) =>
-      viewType.replace(/^mainThreadWebview-/, "");
-
-    // Earlier smoke tests open these panels. Dispose them so this test covers
-    // the installed-VSIX failure mode: two fresh CTA commands arriving before
-    // the first webview's active editor group has settled.
-    const staleTabs = vscode.window.tabGroups.all.flatMap((group) =>
-      group.tabs.filter(
-        (tab) =>
-          tab.input instanceof vscode.TabInputWebview &&
-          expectedViewTypes.has(normalizeViewType(tab.input.viewType)),
-      ),
-    );
-    if (staleTabs.length > 0) {
-      await vscode.window.tabGroups.close(staleTabs, true);
-    }
-
-    const resultGraphOpen = vscode.commands.executeCommand(
-      "graphforge.showResultGraph",
-    );
-    const figureOpen = vscode.commands.executeCommand("graphforge.showFigure", {
-      figure: {
-        data: [{ type: "bar", x: ["a", "b"], y: [1, 2] }],
-        layout: { title: "Column reuse contract" },
-      },
-    });
-    const ontologyOpen = vscode.commands.executeCommand("graphforge.showOntology");
-    await Promise.all([resultGraphOpen, figureOpen, ontologyOpen]);
-
-    const groupByViewType = new Map<string, vscode.TabGroup>();
-    let actualViewTypes: string[] = [];
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      groupByViewType.clear();
-      actualViewTypes = [];
-      for (const group of vscode.window.tabGroups.all) {
-        for (const tab of group.tabs) {
-          if (tab.input instanceof vscode.TabInputWebview) {
-            actualViewTypes.push(tab.input.viewType);
-            const viewType = normalizeViewType(tab.input.viewType);
-            if (expectedViewTypes.has(viewType)) {
-              groupByViewType.set(viewType, group);
-            }
-          }
-        }
-      }
-      if (groupByViewType.size === expectedViewTypes.size) {
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-
-    for (const viewType of expectedViewTypes) {
-      assert.ok(
-        groupByViewType.has(viewType),
-        `missing ${viewType} tab; found ${actualViewTypes.join(", ")}`,
-      );
-    }
-    assert.equal(
-      new Set(groupByViewType.values()).size,
-      1,
-      "Result Graph, Figure, and Ontology must share one editor group",
     );
   });
 

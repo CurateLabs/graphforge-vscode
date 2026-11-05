@@ -1,3 +1,4 @@
+import { bufferToUuid } from "./arrowCodec";
 import type { EngineBackend, GraphForgeNative, RuntimeKind } from "./types";
 
 /**
@@ -8,6 +9,18 @@ import type { EngineBackend, GraphForgeNative, RuntimeKind } from "./types";
  */
 export class NodeEngineBackend implements EngineBackend {
   readonly runtime: RuntimeKind = "node";
+  private readonly generations = new WeakMap<Buffer, string>();
+
+  resultGeneration(ipc: Buffer): string | undefined {
+    return this.generations.get(ipc);
+  }
+
+  private captureResult(ipc: Buffer): Buffer {
+    const identity = this.forge.committedGenerationIdentity?.();
+    const generation = identity && bufferToUuid(identity.generationUuid);
+    if (generation) this.generations.set(ipc, generation);
+    return ipc;
+  }
 
   constructor(private readonly forge: GraphForgeNative) {}
 
@@ -32,7 +45,7 @@ export class NodeEngineBackend implements EngineBackend {
   }
 
   async execute(cypher: string, params?: Record<string, unknown>): Promise<Buffer> {
-    return params ? this.forge.execute(cypher, params) : this.forge.execute(cypher);
+    return this.captureResult(params ? this.forge.execute(cypher, params) : this.forge.execute(cypher));
   }
 
   async moduleCatalog(): Promise<unknown[]> {
@@ -46,7 +59,7 @@ export class NodeEngineBackend implements EngineBackend {
     directed?: boolean | null,
     writeProperty?: string | null,
   ): Promise<Buffer> {
-    return this.forge.rank(label, by, via, directed, writeProperty);
+    return this.captureResult(this.forge.rank(label, by, via, directed, writeProperty));
   }
 
   async cluster(
@@ -57,7 +70,7 @@ export class NodeEngineBackend implements EngineBackend {
     writeProperty?: string | null,
     vectorProperty?: string | null,
   ): Promise<Buffer> {
-    return this.forge.cluster(label, by, via, directed, writeProperty, vectorProperty);
+    return this.captureResult(this.forge.cluster(label, by, via, directed, writeProperty, vectorProperty));
   }
 
   async paths(
@@ -68,7 +81,7 @@ export class NodeEngineBackend implements EngineBackend {
     directed?: boolean | null,
     k?: number | null,
   ): Promise<Buffer> {
-    return this.forge.paths(source, target, by, via, directed, k);
+    return this.captureResult(this.forge.paths(source, target, by, via, directed, k));
   }
 
   async analyze(
@@ -77,7 +90,7 @@ export class NodeEngineBackend implements EngineBackend {
     via?: string | null,
     directed?: boolean | null,
   ): Promise<Buffer> {
-    return this.forge.analyze(label, by, via, directed);
+    return this.captureResult(this.forge.analyze(label, by, via, directed));
   }
 
   async similar(
@@ -87,7 +100,7 @@ export class NodeEngineBackend implements EngineBackend {
     vectorProperty?: string | null,
     via?: string | null,
   ): Promise<Buffer> {
-    return this.forge.similar(label, by, k, vectorProperty, via);
+    return this.captureResult(this.forge.similar(label, by, k, vectorProperty, via));
   }
 
   async find(
@@ -97,7 +110,7 @@ export class NodeEngineBackend implements EngineBackend {
   ): Promise<Buffer> {
     // Native find() also carries vector/similarTo/semanticQuery/space/forceStale
     // (search parity, #8) — out of scope for the #12 facade; pass positionally.
-    return this.forge.find(query, label, undefined, undefined, undefined, limit);
+    return this.captureResult(this.forge.find(query, label, undefined, undefined, undefined, limit));
   }
 
   async labels(): Promise<string[]> {

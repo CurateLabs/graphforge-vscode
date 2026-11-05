@@ -2,19 +2,13 @@
 
 Real-world airline route graph used by GraphForge **Try sample project** / e2e.
 
-`project/` contains the reusable `queries/templates/routes-overview.cypher`
-query, a small documented route-activity result, and seven visualization specs:
-a default v2 Cytoscape graph; explicit v2 G6 graph, G2 chart, L7 map, and G2
-timeline examples; plus v1 Cytoscape and Plotly compatibility examples. Every
-renderer, binding, layout, coordinate, and time choice is visible in those
-files.
-`project/notebooks/air-routes-analysis.ipynb` is the parallel analyst path. It
-reads the copied CSVs with pandas, bulk-builds the graph through GraphForge
-Python, runs native PageRank, renders Plotly in VS Code Jupyter, and writes a
-normal result plus Plotly visualization spec back into the sample project.
-During creation, the extension also copies this dataset to
-`data/air-routes/` and generates `mutations/seed-air-routes.cypher` before
-executing that project-backed mutation.
+`project/` contains the route query and four XYG intents: network, distance
+histogram, geographic routes and an illustrative timeline. Core retains the
+canonical result as Arrow; XYG composes and paints every view. The route query
+returns 579 connected airports; seven source airports have no returned route.
+The Python notebook and Streamlit app use the same CSVs, GraphForge PageRank
+and XYG's public composition API. Creation copies data under `data/air-routes/`
+and generates the reviewed seed under `mutations/`.
 
 `project/results/route-activity.json` is a small illustrative timeline fixture,
 not a claim about the historical air-routes source. It is committed separately

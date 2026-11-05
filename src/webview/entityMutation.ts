@@ -2,6 +2,7 @@ import type { EntityInspectSelection } from "./protocol";
 
 export interface SerializedEntityMutation {
   cypher: string;
+  params?: Record<string, unknown>;
   properties: Record<string, unknown>;
   setKeys: string[];
   removedKeys: string[];
@@ -80,10 +81,22 @@ function endpointPredicate(variable: string, value: string): string {
   ].join(" OR ");
 }
 
+function canonicalIdentity(selection: EntityInspectSelection): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    selection.item.id,
+  );
+}
+
 function matchClause(selection: EntityInspectSelection): string[] {
+  if (canonicalIdentity(selection))
+    return [
+      selection.kind === "node" ? "MATCH (entity)" : "MATCH ()-[entity]->()",
+      `WHERE entity.${selection.kind === "node" ? "node_uuid" : "edge_uuid"} = $entityUuid`,
+    ];
   if (selection.kind === "node") {
     const identityField = ["node_uuid", "uuid", "id", "code"].find(
-      (key) => String(selection.item.properties[key] ?? "") === selection.item.id,
+      (key) =>
+        String(selection.item.properties[key] ?? "") === selection.item.id,
     );
     return [
       "MATCH (entity)",
@@ -100,7 +113,8 @@ function matchClause(selection: EntityInspectSelection): string[] {
     `  AND (${endpointPredicate("target", selection.item.target)})`,
   ];
   const identityField = ["edge_uuid", "uuid", "id"].find(
-    (key) => String(selection.item.properties?.[key] ?? "") === selection.item.id,
+    (key) =>
+      String(selection.item.properties?.[key] ?? "") === selection.item.id,
   );
   if (identityField) {
     lines.push(
@@ -165,7 +179,10 @@ export function serializeEntityMutation(
   lines.push("RETURN count(entity) AS updated");
 
   return {
-    cypher: `${lines.join("\n")};\n`,
+    cypher: `${lines.join("\n")}\n`,
+    ...(canonicalIdentity(selection)
+      ? { params: { entityUuid: { $uuid: selection.item.id } } }
+      : {}),
     properties: JSON.parse(JSON.stringify(editedProperties)) as Record<
       string,
       unknown

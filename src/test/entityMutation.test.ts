@@ -30,10 +30,7 @@ suite("Entity Inspect edit mutations", () => {
       /WHERE entity\.id = 'ATL'.*entity\.code = 'ATL'/,
     );
     assert.match(mutation.cypher, /entity\.`city` = 'Austin'/);
-    assert.match(
-      mutation.cypher,
-      /entity\.`tags` = \['hub', 'sample'\]/,
-    );
+    assert.match(mutation.cypher, /entity\.`tags` = \['hub', 'sample'\]/);
     assert.match(mutation.cypher, /REMOVE entity\.`obsolete`/);
     assert.match(mutation.cypher, /RETURN count\(entity\) AS updated/);
   });
@@ -60,6 +57,32 @@ suite("Entity Inspect edit mutations", () => {
     assert.match(mutation.cypher, /source\.code = 'ATL'/);
     assert.match(mutation.cypher, /target\.code = 'AUS'/);
     assert.match(mutation.cypher, /entity\.`dist` = 815/);
+  });
+
+  test("canonical UUID edits use typed Core parameters for exactly one entity", () => {
+    const id = "018f0f4e-7b8c-7000-8000-00000000a001";
+    for (const kind of ["node", "edge"] as const) {
+      const item =
+        kind === "node"
+          ? { id, labels: ["Airport"], properties: { score: 1 } }
+          : {
+              id,
+              type: "ROUTE",
+              source: "a",
+              target: "b",
+              properties: { score: 1 },
+            };
+      const edit = serializeEntityMutation(
+        { kind, item } as EntityInspectSelection,
+        { score: 2 },
+      );
+      assert.deepEqual(edit.params, { entityUuid: { $uuid: id } });
+      assert.ok(
+        edit.cypher.includes(
+          `entity.${kind === "node" ? "node_uuid" : "edge_uuid"} = $entityUuid`,
+        ),
+      );
+    }
   });
 
   test("rejects invalid JSON numbers and no-op saves", () => {

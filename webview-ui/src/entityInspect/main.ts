@@ -14,6 +14,7 @@ let saving = false;
 let statusMessage = "";
 let statusTone: "saved" | "error" | "" = "";
 let draftPropertiesText = "";
+let restoreFocusAfterSave = false;
 
 function post(message: WebviewToHost): void {
   vscode.postMessage(message);
@@ -162,6 +163,7 @@ function renderPropertyEditor(selection: EntityInspectSelection): HTMLElement {
       "Change values, add keys, or remove keys. Values may be JSON scalars or arrays of scalars. IDs, endpoints, relationship type, and labels stay read-only.",
     ),
   );
+  section.querySelector(".edit-help")!.id = "edit-help";
 
   const textarea = element("textarea", "property-editor");
   textarea.id = "property-editor";
@@ -169,6 +171,12 @@ function renderPropertyEditor(selection: EntityInspectSelection): HTMLElement {
   textarea.value =
     draftPropertiesText || JSON.stringify(propertiesOf(selection), null, 2);
   textarea.setAttribute("aria-label", "Entity properties JSON");
+  textarea.setAttribute("aria-describedby", "edit-help validation");
+  textarea.readOnly = saving;
+  if (statusTone === "error") {
+    textarea.setAttribute("aria-invalid", "true");
+    textarea.setAttribute("aria-describedby", "edit-help validation edit-status");
+  }
   textarea.addEventListener("input", () => {
     draftPropertiesText = textarea.value;
   });
@@ -182,6 +190,7 @@ function renderPropertyEditor(selection: EntityInspectSelection): HTMLElement {
   const actions = element("div", "edit-actions");
   const save = element("button", "primary", saving ? "Saving…" : "Save");
   save.type = "button";
+  save.id = "save-properties";
   save.disabled = saving;
   save.addEventListener("click", () => {
     try {
@@ -191,6 +200,8 @@ function renderPropertyEditor(selection: EntityInspectSelection): HTMLElement {
         throw new Error("Properties must be a JSON object.");
       }
       validation.textContent = "";
+      textarea.removeAttribute("aria-invalid");
+      restoreFocusAfterSave = !!app?.contains(document.activeElement);
       saving = true;
       save.disabled = true;
       save.textContent = "Saving…";
@@ -203,24 +214,27 @@ function renderPropertyEditor(selection: EntityInspectSelection): HTMLElement {
     } catch (error) {
       validation.textContent =
         error instanceof Error ? error.message : String(error);
+      textarea.setAttribute("aria-invalid", "true");
+      textarea.focus();
     }
   });
   const cancel = element("button", undefined, "Cancel");
   cancel.type = "button";
+  cancel.id = "cancel-properties";
   cancel.disabled = saving;
   cancel.addEventListener("click", () => {
     editing = false;
     draftPropertiesText = "";
     statusMessage = "";
     statusTone = "";
-    render(selection);
+    render(selection, "edit-entity");
   });
   actions.append(save, cancel);
   section.append(actions);
   return section;
 }
 
-function render(selection: EntityInspectSelection): void {
+function render(selection: EntityInspectSelection, focusId?: string): void {
   if (!app) return;
   const fragment = document.createDocumentFragment();
   const header = element("header");
@@ -237,6 +251,7 @@ function render(selection: EntityInspectSelection): void {
   );
   const edit = element("button", "edit-toggle", editing ? "Editing" : "Edit");
   edit.type = "button";
+  edit.id = "edit-entity";
   edit.disabled = editing || saving;
   edit.setAttribute("aria-pressed", String(editing));
   edit.addEventListener("click", () => {
@@ -244,7 +259,7 @@ function render(selection: EntityInspectSelection): void {
     draftPropertiesText = JSON.stringify(propertiesOf(selection), null, 2);
     statusMessage = "";
     statusTone = "";
-    render(selection);
+    render(selection, "property-editor");
   });
   titleRow.append(titleCopy, edit);
   header.append(titleRow);
@@ -287,6 +302,7 @@ function render(selection: EntityInspectSelection): void {
     ),
   );
   app.replaceChildren(fragment);
+  if (focusId) document.getElementById(focusId)?.focus();
 }
 
 window.addEventListener("message", (event: MessageEvent<HostToWebview>) => {
@@ -300,6 +316,8 @@ window.addEventListener("message", (event: MessageEvent<HostToWebview>) => {
     statusTone = "";
     render(message.selection);
   } else if (message?.type === "graphforge/entityEditState") {
+    const ownedFocus = document.hasFocus() && (app?.contains(document.activeElement) ||
+      (restoreFocusAfterSave && document.activeElement === document.body));
     saving = message.state === "saving";
     statusMessage = message.message;
     statusTone =
@@ -312,7 +330,9 @@ window.addEventListener("message", (event: MessageEvent<HostToWebview>) => {
       editing = false;
       draftPropertiesText = "";
     }
-    if (currentSelection) render(currentSelection);
+    if (currentSelection) render(currentSelection,
+      ownedFocus ? (editing ? "property-editor" : "edit-entity") : undefined);
+    if (!saving) restoreFocusAfterSave = false;
   }
 });
 

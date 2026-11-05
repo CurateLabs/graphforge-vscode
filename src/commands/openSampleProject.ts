@@ -163,7 +163,11 @@ export function registerOpenSampleProject(
           presentError(`GraphForge: ${error}`);
           return { error, code: "SAMPLE_STREAMLIT_MISSING", nextAction: "graphforge.openSampleProject" };
         }
-        const command = `uv run --with streamlit --with graphforge --with pandas --with plotly streamlit run ${appPath}`;
+        const xygRequirement = "xyg @ git+https://github.com/CurateLabs/xyg.git@18951e621e875407d0e40c35ccddf12d4b1a8def";
+        // The displayed command is copied into the user's shell; quote both the
+        // requirement and arbitrary project path without allowing interpolation.
+        const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+        const command = `uv run --with streamlit --with graphforge --with pandas --with ${quote(xygRequirement)} streamlit run ${quote(appPath)}`;
         await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(appPath));
         void vscode.window.showInformationMessage(
           `Opened Streamlit app: ${appPath}. Run: ${command}`,

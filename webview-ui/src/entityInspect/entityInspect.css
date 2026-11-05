@@ -114,7 +114,7 @@ header {
 
 .edit-status.error,
 .validation {
-  color: var(--vscode-errorForeground, #f14c4c);
+  color: var(--vscode-errorForeground, var(--vscode-foreground));
 }
 
 .eyebrow {
@@ -179,6 +179,9 @@ pre,
 }
 
 .badge {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   padding: 3px 8px;
   border: 1px solid var(--vscode-badge-background, var(--border));
   border-radius: 999px;
@@ -302,7 +305,7 @@ h2 {
   min-height: 280px;
   padding: 10px;
   resize: vertical;
-  border: 1px solid var(--border);
+  border: 1px solid var(--vscode-input-border, var(--vscode-descriptionForeground));
   border-radius: 4px;
   color: var(--vscode-input-foreground, var(--vscode-foreground));
   background: var(--vscode-input-background, var(--code));
@@ -360,6 +363,7 @@ dd {
 }
 
 .property-name {
+  overflow-wrap: anywhere;
   font-size: 11px;
   font-weight: 600;
 }
@@ -377,12 +381,11 @@ dd {
 
 .value-number,
 .value-bigint {
-  color: var(--vscode-debugTokenExpression-number, #b5cea8);
   font-variant-numeric: tabular-nums;
 }
 
 .value-boolean {
-  color: var(--vscode-debugTokenExpression-boolean, #569cd6);
+  color: inherit;
 }
 
 .missing,
@@ -484,3 +487,6 @@ footer {
     scroll-behavior: auto !important;
   }
 }
+
+body.vscode-light, body.vscode-high-contrast-light { color-scheme: light; }
+body.vscode-dark, body.vscode-high-contrast { color-scheme: dark; }

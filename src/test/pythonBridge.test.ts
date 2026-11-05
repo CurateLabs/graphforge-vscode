@@ -99,6 +99,46 @@ suite("PythonEngineBackend", () => {
     }
   });
 
+  test("binds concurrent reads and verbs to their own generation across a mutation", async () => {
+    const backend = await PythonEngineBackend.open(process.execPath, "/tmp/proj", FAKE_HOST);
+    try {
+      const [before, rank, mutation, after] = await Promise.all([
+        backend.execute("READ"),
+        backend.rank("Person", "pagerank"),
+        backend.execute("MUTATE"),
+        backend.execute("READ_AFTER"),
+      ]);
+      const g1 = "0190a000-0000-7000-8000-000000000001";
+      const g2 = "0190a000-0000-7000-8000-000000000002";
+      assert.equal(backend.resultGeneration(before), g1);
+      assert.equal(backend.resultGeneration(rank), g1);
+      assert.equal(backend.resultGeneration(mutation), g2);
+      assert.equal(backend.resultGeneration(after), g2);
+      assert.equal(backend.resultGeneration(Buffer.from(before)), undefined);
+      assert.deepEqual(JSON.parse(before.toString("utf8")), [{ cypher: "READ", params: null }]);
+      assert.deepEqual(JSON.parse(rank.toString("utf8")), [{
+        verb: "rank", args: { label: "Person", by: "pagerank" },
+      }]);
+    } finally {
+      await backend.dispose();
+    }
+  });
+
+  test("does not invent identity for older hosts and rejects malformed identity", async () => {
+    const backend = await PythonEngineBackend.open(process.execPath, "/tmp/proj", FAKE_HOST);
+    try {
+      const result = await backend.execute("NO_IDENTITY");
+      assert.equal(backend.resultGeneration(result), undefined);
+      await assert.rejects(() => backend.execute("INVALID_IDENTITY"), (error: unknown) => {
+        assert.ok(error instanceof PythonBridgeError);
+        assert.equal(error.code, "GF_GENERATION_INVALID");
+        return true;
+      });
+    } finally {
+      await backend.dispose();
+    }
+  });
+
   // Note: this test constructs its own bridge because PythonEngineBackend
   // always resolves the default (real) host script path when not overridden.
   test("bridge points at graphforge_host.py by default", () => {

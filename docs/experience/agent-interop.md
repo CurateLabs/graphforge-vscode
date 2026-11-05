@@ -108,9 +108,9 @@ Source of truth: `package.json#contributes.commands` (88 contributed commands on
 | `graphforge.saveProjectQuery` | `{ name?, cypher, run?, resultName? }` | `{ path }` or query result | None | Yes |
 | `graphforge.saveProjectQueryTemplate` | `{ name?, cypher, run?, resultName? }` | `{ path }` or query result | None | Yes; writes under `queries/templates/` |
 | `graphforge.openProjectResult` | `string \| Uri \| { path }` | `{ path, absolutePath, rowCount, columns }` | None | Yes; restores Results/session state |
-| `graphforge.openProjectVisualization` | `string \| Uri \| { path, waitForReady?, timeoutMs? }` | `{ path, absolutePath, kind, spec, panel?, lifecycle? }` (legacy adapters may nest their panel result in `outcome`) | None | Yes; loads the saved spec and referenced result/filter. Explicit readiness waits return `renderReady` or a structured terminal failure. |
-| `graphforge.createProjectVisualization` | `{ name?, result, kind, renderer?, explicit bindings, filter?, open? }` | `{ path, spec, panel? }` | None when required bindings are supplied | Yes; writes strict v2 before opening |
-| `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` | `{ path, spec, panel? }` | None | Yes; accepts readable v1 or strict v2 and does not infer missing fields |
+| `graphforge.openProjectVisualization` | `string \| Uri \| { path, waitForReady? }` | `{ path, absolutePath, kind, spec, panel?, lifecycle? }` | None | Yes; loads the saved spec and referenced result/filter. Explicit readiness waits return `renderReady` or a structured terminal failure. |
+| `graphforge.createProjectVisualization` | `{ name?, result, kind, explicit bindings, filter?, open? }` | `{ path, spec, panel? }` | None when required bindings are supplied | Yes; writes XYG `xyg.intent/v1` before opening |
+| `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` | `{ path, spec, panel? }` | None | Yes; accepts XYG `xyg.intent/v1` and does not infer missing fields |
 | `graphforge.openProjectArtifact` | `string \| Uri \| { path }` | `{ path, absolutePath }` | None | Yes; opens any in-project file in the editor |
 | `graphforge.applyProjectMutation` | `{ path: string \| Uri; confirm: true }` | `{ path, absolutePath, columns, rowCount }` | With no args: mutation QuickPick + modal confirmation. Programmatic calls never prompt and require `confirm: true` | Yes; executable path must stay under `mutations/` |
 | `graphforge.importData` | `{ path: string \| Uri; label: string; mode?: "create" \| "merge"; idColumn?: string; confirm: true }` | `{ path, format, label, mode, idColumn?, imported, result }` | File/label/confirmation prompts only when omitted; programmatic calls require `confirm: true` | Yes; imports CSV/JSON/JSONL/NDJSON as nodes |
@@ -153,10 +153,10 @@ Source of truth: `package.json#contributes.commands` (88 contributed commands on
 | `graphforge.recordAssertionStatus` | `{ assertionUuid?, status?, provenanceUuid? }` | `QueryResult` | Assertion prompt, status QuickPick, provenance InputBox | Yes |
 | `graphforge.showOntology` | none | `void` (opens/reveals webview) | None | No — shows an empty/best-effort viewer without a project |
 | `graphforge.showResultsTable` | none | `void` (reveals the bottom Results panel) | None | No — shows the panel's empty state before a result |
-| `graphforge.showResultGraph` | none | `{ panel, nodes, edges, styleMode, title? }` | None | No — shows a demo graph when no result exists yet |
-| `graphforge.showResultGraphAdvanced` | none | `void` | 1 QuickPick + 1 `showInputBox` (belief-resolution policy) | No |
-| `graphforge.showFigure` | `{ figure }` (Plotly figure JSON: `data`, optional `layout`/`frames`) | `{ figure, panel: "opened"\|"updated" }` or `{ error, code, nextAction? }` | None when `figure` provided; missing figure → structured `FIGURE_REQUIRED` | No |
-| `graphforge.figureFromResult` | `{ chartType, x, y?, color?, title?, columns?, rows? }` or `{ table: { columns, rows }, … }` (`chartType`: `bar`\|`scatter`\|`histogram`\|`line`) | `{ figure, panel, chartType }` or `{ error, code, nextAction? }` / `{ cancelled: true }` | Chart/column QuickPicks when bindings incomplete; skipped when args complete | No — uses last session result or explicit table |
+| `graphforge.showResultGraph` | `{ title?, waitForReady? }` | `{ panel, instanceId, renderer, lifecycle? }` | None | Yes — requires canonical Core Arrow |
+| `graphforge.showResultGraphAdvanced` | none | Same as `showResultGraph` | None | Yes |
+| `graphforge.showFigure` | Explicit chart bindings | XYG panel or structured error | Uses the current result | Requires a result |
+| `graphforge.figureFromResult` | `{ chartType, x, y?, color?, title? }` (`chartType`: `bar`\|`scatter`\|`histogram`\|`line`) | `{ panel, instanceId, renderer, chartType }` or `{ error, code, nextAction? }` / `{ cancelled: true }` | Chart/column QuickPicks when bindings incomplete; skipped when args complete | Yes — uses current session result |
 | `graphforge.showCapabilities` | none | `void` (opens markdown doc) or nothing on failure | None (fire-and-forget error toast if no project) | Yes, to see real data |
 | `graphforge.loadOntology` | none | `void` | File picker | Yes |
 | `graphforge.openOntologyFile` | none | `void` (opens the committed ontology.json, or offers Load Ontology) | Button-bearing toast when no committed ontology exists | Yes, to open a real file |
@@ -175,19 +175,7 @@ Source of truth: `package.json#contributes.commands` (88 contributed commands on
 
 ### Project file contract
 
-- Project marker: `FORMAT` must contain exactly `graphforge-project/v1\n`.
-- Queries: `.cypher`/`.cql` text, or JSON `{ "cypher": "...", "params": { ... } }`.
-- Notebooks: `.ipynb` files under `notebooks/`; these run in the user's selected VS Code
-  Jupyter kernel and publish ordinary result and visualization artifacts.
-- Results: JSON `{ "columns": ["..."], "rows": [{ ... }], "rowCount": 0 }`. `results/query-result.json` is canonical latest; timestamped JSON/Markdown pairs are history.
-- Visualizations: new files use strict `graphforge.visualization/v2` with kind
-  `result-graph`, `chart`, `geospatial`, or `temporal`; existing v1
-  Cytoscape/Sigma/Plotly files remain readable and are not rewritten on open.
-  A v2 spec records renderer/backend, filters, bindings, layout or coordinates,
-  and presentation/time configuration. Missing choices are rejected rather than
-  inferred or replaced at render time.
-- Mutations: the same query formats under `mutations/`; execute through `applyProjectMutation` so write intent and confirmation are explicit.
-- All artifact commands accept project-relative or absolute paths (and VS Code `Uri` values) but reject traversal outside the active project. Mutation execution is additionally confined to `mutations/`.
+See [XYG integration](../engineering/XYG.md) for the sole native engine, saved intent, explicit bindings and PNG/SVG exports.
 
 The sample project includes `AGENTS.md` with this contract beside the project files, so repository-aware agents can discover it without opening a GraphForge webview.
 
@@ -198,16 +186,12 @@ path plus `kind`. Optional common fields are `name`, `open`, and
 `filter: { column, operator: "equals" | "contains", value }`. Kind-specific
 fields are flattened into that same object:
 
-- `result-graph`: optional `renderer: "g6" | "cytoscape" | "sigma"`.
-- `chart`: `mark: "bar" | "scatter" | "line" | "histogram"`, `x`, `y`
-  (omit `y` only for a histogram), optional `color`, and optional
-  `renderer: "g2" | "plotly"`.
-- `geospatial`: `longitude` and `latitude`; the persisted adapter is L7.
-- `temporal`: `timestamp` and `y`, with optional `color`,
-  `mark: "line" | "bar" | "point"`, IANA `timezone`, and `granularity` from
-  millisecond through year; the persisted adapter is G2.
+- `result-graph`: optional analytical `base` and XYG `intent`; source must retain original Core entity Arrow.
+- `chart`: `mark` (`bar`, `scatter`, `line`, `histogram`), `x`, required `y` except histogram, optional `color`.
+- `geospatial`: `longitude`, `latitude`, optional paired `targetLongitude`/`targetLatitude`; explicit EPSG:4326 coordinates.
+- `temporal`: `timestamp`, `y`, optional `color` and `mark`; `timezone` is UTC. Timestamps must include an offset.
 
-The command materializes every remaining choice into the saved v2 artifact; it
+The command materializes every remaining choice into the saved XYG intent; it
 does not accept or infer a nested `bindings` object.
 
 ## Recommended agent loop
@@ -224,18 +208,11 @@ flowchart TD
     E --> F["createProjectVisualization({ result, kind, explicit bindings })"]
 ```
 
-1. **Get context** — `executeCommand("graphforge.agent.getContext")`. This includes the full environment report, effective settings, project marker, absolute artifact paths, and last-result paths. Use `checkEnvironment({ silent: true })` only when environment state alone is sufficient.
-2. **Setup / Init if needed** — if no runtime is usable, run `graphforge.setupNativeBinding` and/or `graphforge.setupPythonBinding` (each is one QuickPick with no args-based bypass yet; see [Gaps](#gaps--follow-ups)); if a runtime is ready but no project is open, run `graphforge.openSampleProject({ path })` for the quickstart demo, `graphforge.initializeProjectHere` (new project), or `graphforge.openProject(path)` (existing project — `path` is a plain string arg, no picker needed). Re-run step 1 to confirm.
-3. **Operate by file** — call `runProjectQuery(path)`, `openProjectResult(path)`, or `openProjectVisualization(path)` using an `absolutePath` from context. For a reviewed write, call `applyProjectMutation({ path, confirm: true })`.
-4. **Read the result** — either the `executeCommand` return value or the open project's durable `results/query-result.json`; the Markdown preview is for human scanning. On failure, inspect `error`/`code`/`nextAction`.
-5. **Create durable visualization work** — call
-   `graphforge.createProjectVisualization` with the result path, semantic kind,
-   and explicit bindings. It saves first and returns the complete `{ path, spec,
-   panel? }`. Cytoscape and Plotly are current graph/chart creation defaults;
-   G2 remains the temporal adapter and L7 owns geospatial views;
-   Cytoscape, Sigma, and Plotly remain explicit alternatives. For unsaved raw
-   Plotly interchange, `figureFromResult` and `showFigure({ figure })` remain
-   available, but they are not a substitute for a project artifact.
+1. Get `graphforge.agent.getContext` and resolve runtime/project state.
+2. Run `graphforge.runProjectQuery({ path })` or reopen a saved result.
+3. Create a project visualization with explicit fields, then open its saved path.
+4. Use `waitForReady: true` for real paint acknowledgement; export with `graphforge.exportVisualization`.
+5. Review mutations separately before `confirm: true`.
 
 ## Runtime note (Node vs. Python)
 
@@ -248,3 +225,5 @@ flowchart TD
 - **Verb commands (`rank`, `cluster`, `paths`, `analyze`, `similar`, `find`) do not yet accept args.** They always walk their QuickPick chain (label, then algorithm, then advanced prompts). An agent can still read the eventual result (now returned from `executeCommand` instead of `void`), but cannot skip straight to a known `{ label, by, ... }` combination the way it can with `runQuery` — or with the checkpoint / embedding-space / index / power / knowledge commands, which already accept args. Adding an optional args object mirroring `session.invokeVerb`'s parameter shape would close this remaining gap.
 - **`setupNativeBinding`, `initializeProjectHere`, `loadOntology`, `showResultGraphAdvanced` are QuickPick/dialog-only.** These are inherently about human choices (which folder, which binding source) and are reasonable to leave interactive; an agent's role here is to detect the need (via Check Environment) and either prompt the human or make the choice on the human's behalf by pre-setting `graphforge.nativeModulePath` via the VS Code configuration API before calling `setupNativeBinding`, or by using `openProject(path)`/args-based commands where they exist instead.
 - **The live-project integration gate is optional and runtime-dependent.** `src/test/quickstart.e2e.test.ts` exercises sample → query → Result Graph → Figure when a binding is available and skips otherwise; `src/test/extension.test.ts` always proves registration, context shape, and fail-closed behavior. A small deterministic engine fixture would make the success path reliable in every CI environment.
+
+`graphforge.exportVisualization` saves the active ready XYG view as PNG/SVG. Static time-axis export currently returns `XYG_SCENE_UNSUPPORTED_PUBLIC_AXIS`.

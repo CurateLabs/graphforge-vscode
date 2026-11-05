@@ -24,6 +24,8 @@ import { KnowledgeTreeProvider } from "./views/knowledgeTree";
 import { GetStartedViewProvider } from "./views/getStartedView";
 import { OntologyTreeProvider } from "./views/ontologyTree";
 import { ProjectExplorerProvider } from "./views/projectExplorer";
+import { XygVisualizationPanel } from "./webview/xygPanel";
+import { resolveResultEntitySelection } from "./webview/resultTableModel";
 import { EntityInspectPanel } from "./webview/entityInspectPanel";
 import { ModuleManagerPanel } from "./webview/moduleManagerPanel";
 import { visualizationInstances } from "./webview/visualizationInstanceRegistry";
@@ -36,12 +38,34 @@ export async function activate(
   context: vscode.ExtensionContext,
 ): Promise<void> {
   const session = new GraphForgeSession();
-  context.subscriptions.push(session, { dispose: () => visualizationInstances.dispose() });
+  context.subscriptions.push(session, {
+    dispose: () => visualizationInstances.dispose(),
+  });
 
   const projects = new ProjectExplorerProvider(session);
   const ontology = new OntologyTreeProvider(session);
   const knowledge = new KnowledgeTreeProvider(session);
   EntityInspectPanel.configure(session);
+  context.subscriptions.push(
+    XygVisualizationPanel.onDidSelect(async (selection) => {
+      if (session.project?.rootPath !== selection.projectRoot) return;
+      try {
+        const graph = await session.toGraphPayload(selection.source);
+        if (session.project?.rootPath !== selection.projectRoot) return;
+        const entity = resolveResultEntitySelection(
+          graph,
+          selection.kind,
+          selection.item.id,
+        );
+        if (entity)
+          EntityInspectPanel.show(context.extensionUri, entity, false);
+      } catch {
+        void vscode.window.showErrorMessage(
+          "GraphForge: Could not inspect the selected entity.",
+        );
+      }
+    }),
+  );
   const results = new ResultTableViewProvider(context.extensionUri, session);
   context.subscriptions.push(projects, ontology, knowledge, results);
   const modules = new ModuleManager(context, session, results);
@@ -90,21 +114,24 @@ export async function activate(
     vscode.commands.registerCommand("graphforge.manageModules", () =>
       ModuleManagerPanel.show(context.extensionUri, modules),
     ),
-    vscode.commands.registerCommand("graphforge.installModuleFromFile", async () => {
-      const selected = await vscode.window.showOpenDialog({
-        canSelectFiles: true,
-        canSelectFolders: true,
-        canSelectMany: false,
-        filters: { "GraphForge modules": ["json"] },
-        openLabel: "Install module",
-        title: "Select a .gfmodule.json file or module folder",
-      });
-      if (!selected?.[0]) return { cancelled: true };
-      const installed = await modules.installFromUri(selected[0]);
-      if (!installed) return { cancelled: true };
-      ModuleManagerPanel.show(context.extensionUri, modules);
-      return modules.list();
-    }),
+    vscode.commands.registerCommand(
+      "graphforge.installModuleFromFile",
+      async () => {
+        const selected = await vscode.window.showOpenDialog({
+          canSelectFiles: true,
+          canSelectFolders: true,
+          canSelectMany: false,
+          filters: { "GraphForge modules": ["json"] },
+          openLabel: "Install module",
+          title: "Select a .gfmodule.json file or module folder",
+        });
+        if (!selected?.[0]) return { cancelled: true };
+        const installed = await modules.installFromUri(selected[0]);
+        if (!installed) return { cancelled: true };
+        ModuleManagerPanel.show(context.extensionUri, modules);
+        return modules.list();
+      },
+    ),
     vscode.commands.registerCommand("graphforge.refreshModules", async () => {
       await modules.refreshGraphForgeCatalog();
       return modules.list();
@@ -160,11 +187,15 @@ export async function activate(
       return;
     }
     try {
-      const api = pythonExt.isActive ? pythonExt.exports : await pythonExt.activate();
-      const disposable = api?.environments?.onDidChangeActiveEnvironmentPath?.(() => {
-        resetPythonCache();
-        session.notifyChanged();
-      });
+      const api = pythonExt.isActive
+        ? pythonExt.exports
+        : await pythonExt.activate();
+      const disposable = api?.environments?.onDidChangeActiveEnvironmentPath?.(
+        () => {
+          resetPythonCache();
+          session.notifyChanged();
+        },
+      );
       if (disposable) {
         context.subscriptions.push(disposable);
       }

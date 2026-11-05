@@ -1,6 +1,6 @@
 # ADR-0001: Plotly Figure webview under Settings-strict CSP
 
-- Status: Accepted
+- Status: Superseded by [ADR-0006](0006-xyg-only-visualization.md)
 - Date: 2026-08-01
 - Issue: [#62](https://github.com/CurateLabs/graphforge-vscode/issues/62)
 

@@ -12,16 +12,12 @@
 import { withCodSpeed } from "@codspeed/tinybench-plugin";
 import { Bench } from "tinybench";
 import { registerArrowCodecBenchmarks } from "./arrowCodec.bench";
-import { registerFigureBenchmarks } from "./figures.bench";
-import { registerResultGraphBenchmarks } from "./resultGraph.bench";
 import { registerResultTableBenchmarks } from "./resultTable.bench";
 
 async function main(): Promise<void> {
   const bench = withCodSpeed(new Bench({ name: "graphforge", throws: true }));
 
   registerArrowCodecBenchmarks(bench);
-  registerFigureBenchmarks(bench);
-  registerResultGraphBenchmarks(bench);
   registerResultTableBenchmarks(bench);
 
   await bench.run();

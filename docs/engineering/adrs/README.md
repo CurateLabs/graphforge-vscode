@@ -24,8 +24,9 @@ carries inline guidance), then add a row to the log below.
 
 | ADR | Title | Status | Date |
 |---|---|---|---|
-| [0001](./0001-plotly-figure-webview-csp.md) | Plotly Figure webview under Settings-strict CSP | Accepted | 2026-08-01 |
+| [0001](./0001-plotly-figure-webview-csp.md) | Plotly Figure webview under Settings-strict CSP | Superseded by ADR-0006 | 2026-08-01 |
 | [0002](./0002-unified-module-lifecycle.md) | Catalog-first unified module lifecycle | Accepted | 2026-08-02 |
 | [0003](./0003-antv-visualization-artifacts.md) | AntV defaults with explicit visualization artifacts | Superseded by ADR-0004 | 2026-08-02 |
-| [0004](./0004-restore-cytoscape-plotly-defaults.md) | Restore Cytoscape and Plotly creation defaults | Accepted | 2026-08-02 |
+| [0004](./0004-restore-cytoscape-plotly-defaults.md) | Restore Cytoscape and Plotly creation defaults | Superseded by ADR-0006 | 2026-08-02 |
 | [0005](./0005-hub-extension-core-xyg-interplay.md) | Adopt the GraphForge component boundaries in the extension | Accepted | 2026-10-03 |
+| [0006](./0006-xyg-only-visualization.md) | XYG is the sole visualization engine | Accepted | 2026-11-03 |

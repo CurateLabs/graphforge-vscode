@@ -7,48 +7,21 @@
 
 ## Quick start
 
-1. Install **GraphForge** from the Marketplace (or Open VSX).
-2. Open a folder, then click the **GraphForge icon** in the Activity Bar. The **Get Started**
-   view opens with one persistent journey map. There is no startup-mode choice.
-3. Follow the highlighted node in **Environment → Project → Query → Result → Visualize**:
-   1. **Environment** — set up Node or Python; the primary button matches your workspace.
-   2. **Project** — open a project, or choose **Try the air-routes sample** to seed the vendored
-      **US air-routes** graph (586 airports / 7,430 routes, Apache-2.0) via
-      `graphforge.openSampleProject`. By default, it creates the visible project at
-      `~/Downloads/graphforge-quickstart`; it does not write into the open IDE folder or
-      extension-private storage.
-   3. **Query** — with the sample open, use **Run sample query**.
-      This executes `queries/templates/routes-overview.cypher` from the project.
-      Or choose **Open Python notebook** for exploratory Jupyter work, or
-      **Open Streamlit app** for the browser dashboard. Both read the same copied
-      CSVs with pandas, build the graph through GraphForge Python, run PageRank,
-      and render Plotly without using VS Code result or visualization artifacts.
-   4. **Result** — inspect the saved result in the Results panel.
-   5. **Visualize** — open the saved Cytoscape route network. An explicit G6
-      network, G2 route-distance chart, L7 airport map with arcs between airport
-      nodes, and G2 route-activity timeline remain available. The sample also
-      keeps v1 Cytoscape and Plotly artifacts so compatibility is visible rather
-      than hidden. Result Graph stays closed until you ask unless you opt into
-      auto-open.
-4. The journey remains visible after completion and names the project files that
-   prove each step. Use the Home, Query, and Visualize icons in the Get Started view title. Query
-   saves reusable templates under `queries/templates/` and reopens timestamped
-   `results/` history. Visualize saves strict v2 graph, chart, geospatial, or
-   temporal settings under `visualizations/`; existing v1 artifacts remain
-   readable. Renderer settings affect newly created files only because resolved
-   behavior is stored in each artifact.
+1. Open GraphForge's Get Started view and follow Environment → Project → Query → Result → Visualize.
+2. Set up a Core runtime, then use **Try the air-routes sample**. The visible project defaults to `~/Downloads/graphforge-quickstart`.
+3. Run `queries/templates/routes-overview.cypher` and inspect the saved result.
+4. Open the saved XYG route network, route-distance chart, airport map or illustrative timeline.
+5. Use Fit, Re-layout and Save PNG + SVG. Intent and source data remain in the project.
 
-The Python paths are explicit inside the project: `notebooks/air-routes-analysis.ipynb`
-and `apps/air_routes_dashboard.py`. The notebook prints its absolute project,
-notebook, and output paths, then writes a portable CSV and self-contained Plotly
-HTML under `notebooks/outputs/`. Select a kernel that can import `graphforge`,
-`pyarrow`, `pandas`, and `plotly`; its setup instructions use `uv` and never
-install packages automatically. To run the dashboard from any terminal, use:
+This source build replaces all legacy renderers with XYG. Older visualization
+files require a new `xyg.intent/v1` intent and a rerun preserving Core Arrow;
+opening them never rewrites the original file. Install a VSIX built for your
+extension host's OS and architecture. XYG is bundled; a separate Core runtime
+is still required.
 
-```bash
-uv run --with streamlit --with graphforge --with pandas --with plotly \
-  streamlit run apps/air_routes_dashboard.py
-```
+The Python notebook and Streamlit app use GraphForge and XYG directly. Their
+source installation commands are in the copied project; XYG's package cohort
+is not yet published. See [XYG integration](../engineering/XYG.md).
 
 Prefer the Command Palette, or driving the extension from an agent? Run
 **`GraphForge: Check Environment`** — it reports both runtimes' full diagnostics and always

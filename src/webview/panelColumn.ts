@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 /**
  * Shared editor group for GraphForge visualization webviews (Result Graph,
- * Figure, Ontology). The first panel opens beside the active editor. Later
+ * XYG, Ontology). The first panel opens beside the active editor. Later
  * panels target the live anchor panel's concrete editor column, so they do not
  * depend on VS Code applying a preceding reveal/focus operation first.
  *

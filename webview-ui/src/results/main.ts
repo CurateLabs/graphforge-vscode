@@ -19,10 +19,12 @@ const tableBody = document.getElementById("table-body");
 const footer = document.getElementById("footer");
 const renderCount = document.getElementById("render-count");
 const loadMore = document.getElementById("load-more") as HTMLButtonElement | null;
+const previousPage = document.getElementById("previous-rows") as HTMLButtonElement | null;
 
 let result: QueryResult | undefined;
 let columns: string[] = [];
-let renderedRows = PAGE_SIZE;
+let pageStart = 0;
+let hasEntityLinks = false;
 let selectedRows = new Set<number>();
 let entityLinks: Record<string, ResultEntityLink[]> = {};
 
@@ -91,7 +93,7 @@ function renderHeader(): void {
     header.textContent = column;
     row.append(header);
   }
-  if (Object.keys(entityLinks).length > 0) {
+  if (hasEntityLinks) {
     const inspect = document.createElement("th");
     inspect.className = "inspect-actions";
     inspect.scope = "col";
@@ -104,11 +106,14 @@ function renderHeader(): void {
 function renderBody(): void {
   if (!result || !tableBody) return;
   const fragment = document.createDocumentFragment();
-  const visible = result.rows.slice(0, renderedRows);
-  for (const [rowIndex, rowValue] of visible.entries()) {
+  const visible = result.rows.slice(pageStart, pageStart + PAGE_SIZE);
+  for (const [offset, rowValue] of visible.entries()) {
+    const rowIndex = pageStart + offset;
     const row = document.createElement("tr");
     row.dataset.rowIndex = String(rowIndex);
-    row.tabIndex = 0;
+    row.tabIndex = offset === 0 ? 0 : -1;
+    row.setAttribute("aria-rowindex", String(rowIndex + 2));
+    row.setAttribute("aria-selected", String(selectedRows.has(rowIndex)));
     row.setAttribute("aria-label", `Result row ${rowIndex + 1}`);
     if (selectedRows.has(rowIndex)) row.classList.add("selected");
 
@@ -123,9 +128,13 @@ function renderBody(): void {
       appendValue(cell, rowValue[column]);
       row.append(cell);
     }
-    if (Object.keys(entityLinks).length > 0) {
+    if (hasEntityLinks) {
       const actions = document.createElement("td");
       actions.className = "inspect-actions";
+      const buttons = document.createElement("div");
+      buttons.className = "inspect-buttons";
+      buttons.setAttribute("role", "group");
+      buttons.setAttribute("aria-label", `Inspect entities in row ${rowIndex + 1}`);
       for (const link of entityLinks[String(rowIndex)] ?? []) {
         const button = document.createElement("button");
         button.className = `inspect-link inspect-${link.kind}`;
@@ -144,8 +153,9 @@ function renderBody(): void {
             shiftKey: event.shiftKey,
           });
         });
-        actions.append(button);
+        buttons.append(button);
       }
+      actions.append(buttons);
       row.append(actions);
     }
     row.addEventListener("click", (event) => {
@@ -155,9 +165,17 @@ function renderBody(): void {
       select(rowIndex, cell?.dataset.column);
     });
     row.addEventListener("keydown", (event) => {
+      if (event.target !== row) return;
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         select(rowIndex);
+      } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        const rows = [...tableBody.querySelectorAll<HTMLTableRowElement>("tr")];
+        const index = event.key === "Home" ? 0 : event.key === "End" ? rows.length - 1
+          : Math.max(0, Math.min(rows.length - 1, offset + (event.key === "ArrowDown" ? 1 : -1)));
+        rows.forEach((item, i) => { item.tabIndex = i === index ? 0 : -1; });
+        rows[index]?.focus();
       }
     });
     fragment.append(row);
@@ -168,13 +186,16 @@ function renderBody(): void {
 
 function updateFooter(): void {
   if (!result || !footer || !renderCount || !loadMore) return;
-  const shown = Math.min(renderedRows, result.rows.length);
+  const shown = Math.min(pageStart + PAGE_SIZE, result.rows.length);
   footer.hidden = result.rows.length === 0;
   renderCount.textContent =
-    shown < result.rows.length
-      ? `Showing ${shown.toLocaleString()} of ${result.rows.length.toLocaleString()} rows`
-      : `${result.rows.length.toLocaleString()} rows`;
-  loadMore.hidden = shown >= result.rows.length;
+    `Rows ${(pageStart + 1).toLocaleString()}–${shown.toLocaleString()} of ${result.rows.length.toLocaleString()}`;
+  loadMore.hidden = result.rows.length <= PAGE_SIZE;
+  loadMore.disabled = shown >= result.rows.length;
+  if (previousPage) {
+    previousPage.hidden = result.rows.length <= PAGE_SIZE;
+    previousPage.disabled = pageStart === 0;
+  }
 }
 
 function updateSelectionClasses(): void {
@@ -183,6 +204,7 @@ function updateSelectionClasses(): void {
       "selected",
       selectedRows.has(Number(row.dataset.rowIndex)),
     );
+    row.setAttribute("aria-selected", String(selectedRows.has(Number(row.dataset.rowIndex))));
   });
 }
 
@@ -194,9 +216,10 @@ function renderResults(
 ): void {
   result = current;
   columns = deriveColumns(current);
-  renderedRows = PAGE_SIZE;
+  pageStart = 0;
   selectedRows.clear();
   entityLinks = links;
+  hasEntityLinks = Object.keys(links).length > 0;
   if (title) title.textContent = currentTitle;
   if (summary) {
     const columnLabel = `${columns.length} column${columns.length === 1 ? "" : "s"}`;
@@ -215,24 +238,29 @@ function renderResults(
       ? ""
       : "The query completed successfully but returned no rows.";
   }
-  if (table) table.hidden = !hasRows;
+  if (table) {
+    table.hidden = !hasRows;
+    table.setAttribute("aria-rowcount", String(current.rows.length + 1));
+  }
   renderHeader();
   renderBody();
 }
 
 function highlightRows(rowIndices: number[]): void {
   if (!result || rowIndices.length === 0) return;
+  rowIndices = rowIndices.filter(index => Number.isSafeInteger(index) && index >= 0 && index < result!.rows.length);
+  if (!rowIndices.length) return;
   selectedRows = new Set(rowIndices);
-  const first = Math.min(...rowIndices);
-  if (first >= renderedRows) {
-    renderedRows = Math.min(result.rows.length, first + 1);
+  const first = rowIndices.reduce((minimum, index) => Math.min(minimum, index), Infinity);
+  if (first < pageStart || first >= pageStart + PAGE_SIZE) {
+    pageStart = Math.floor(first / PAGE_SIZE) * PAGE_SIZE;
     renderBody();
   } else {
     updateSelectionClasses();
   }
   tableBody
     ?.querySelector<HTMLTableRowElement>(`tr[data-row-index="${first}"]`)
-    ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    ?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   if (linkStatus) {
     linkStatus.textContent = `Result Graph selection appears in ${rowIndices.length} row(s).`;
     linkStatus.classList.add("linked");
@@ -242,8 +270,14 @@ function highlightRows(rowIndices: number[]): void {
 
 loadMore?.addEventListener("click", () => {
   if (!result) return;
-  renderedRows = Math.min(result.rows.length, renderedRows + PAGE_SIZE);
+  pageStart = Math.min(Math.floor((result.rows.length - 1) / PAGE_SIZE) * PAGE_SIZE, pageStart + PAGE_SIZE);
   renderBody();
+  tableBody?.querySelector<HTMLTableRowElement>("tr")?.focus();
+});
+previousPage?.addEventListener("click", () => {
+  pageStart = Math.max(0, pageStart - PAGE_SIZE);
+  renderBody();
+  tableBody?.querySelector<HTMLTableRowElement>("tr")?.focus();
 });
 document.getElementById("open-json")?.addEventListener("click", () => {
   post({ type: "graphforge/openResultDocument", kind: "json" });

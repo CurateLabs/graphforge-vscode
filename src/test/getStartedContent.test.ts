@@ -123,15 +123,15 @@ suite("getStartedContent", () => {
           path: "visualizations/airports-map.gfviz.json",
           result: "results/query-result.json",
           kind: "geospatial",
-          format: "graphforge.visualization/v2",
-          renderer: "l7",
+          format: "xyg.intent/v1",
+          renderer: "xyg",
         },
         {
           path: "visualizations/route-activity-timeline.gfviz.json",
           result: "results/route-activity.json",
           kind: "temporal",
-          format: "graphforge.visualization/v2",
-          renderer: "g2",
+          format: "xyg.intent/v1",
+          renderer: "xyg",
         },
       ],
     );
@@ -143,7 +143,7 @@ suite("getStartedContent", () => {
     const afterQuery = selectJourneyArtifacts(
       true,
       [
-        { path: "results/query-result.json" },
+        { path: "results/query-result.json", hasArrow: true },
         { path: "results/route-activity.json" },
       ],
       [
@@ -151,36 +151,30 @@ suite("getStartedContent", () => {
           path: "visualizations/airports-map.gfviz.json",
           result: "results/query-result.json",
           kind: "geospatial",
-          format: "graphforge.visualization/v2",
-          renderer: "l7",
+          format: "xyg.intent/v1",
+          renderer: "xyg",
         },
-        {
-          path: "visualizations/routes-network-default.gfviz.json",
-          result: "results/query-result.json",
-          kind: "result-graph",
-          format: "graphforge.visualization/v2",
-          renderer: "cytoscape",
-        },
-        {
-          path: "visualizations/routes-network-antv.gfviz.json",
-          result: "results/query-result.json",
-          kind: "result-graph",
-          format: "graphforge.visualization/v2",
-          renderer: "g6",
-        },
-        {
-          path: "visualizations/routes-network.gfviz.json",
-          result: "results/query-result.json",
-          kind: "result-graph",
-          format: "graphforge.visualization/v1",
-          renderer: "cytoscape",
-        },
+        {path:"visualizations/routes-network.gfviz.json",result:"results/query-result.json",kind:"result-graph",format:"xyg.intent/v1",renderer:"xyg"},
       ],
     );
     assert.deepEqual(afterQuery, {
       resultPath: "results/query-result.json",
-      visualizationPath: "visualizations/airports-map.gfviz.json",
+      visualizationPath: "visualizations/routes-network.gfviz.json",
     });
+  });
+
+  test("keeps JSON-only graph results inspectable without claiming a ready graph", () => {
+    const result = selectJourneyArtifacts(true,
+      [{ path: "results/query-result.json", hasArrow: false }],
+      [{ path: "visualizations/graph.gfviz.json", result: "results/query-result.json", kind: "result-graph" }]);
+    assert.equal(result.resultPath, "results/query-result.json");
+    assert.equal(result.visualizationPath, undefined);
+  });
+
+  test("a missing sample template offers repair instead of a different query", () => {
+    const step = buildChecklistSteps({ ...base, sampleQueryPath: undefined }).find(step => step.id === "query");
+    assert.equal(step?.primaryAction?.command, "graphforge.openSampleProject");
+    assert.match(step?.detail ?? "", /missing/);
   });
 
   suite("runtimeStepActions", () => {

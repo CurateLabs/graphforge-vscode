@@ -1,0 +1,3 @@
+[submodule "vendor/xyg"]
+	path = vendor/xyg
+	url = https://github.com/CurateLabs/xyg.git

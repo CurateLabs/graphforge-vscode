@@ -12,7 +12,7 @@ document.body.innerHTML = `
   <div id="home-page" class="page">
 <section id="ready-summary" class="ready-summary" hidden>
   <p class="ready-kicker">Project ready</p>
-  <p class="ready-copy">Open any saved view. The map leads because it explains this dataset fastest; the force-directed graphs remain available.</p>
+  <p class="ready-copy">Open an XYG graph, chart, map, or timeline from the saved results.</p>
   <label>Saved view<select id="home-visualization"></select></label>
   <button class="primary full" type="button" id="open-home-visualization">Open selected view</button>
   <div class="actions compact-actions">
@@ -59,10 +59,11 @@ document.body.innerHTML = `
     <option value="temporal">Temporal chart</option>
   </select></label>
   <div id="graph-settings">
-    <label>Renderer<select id="viz-renderer"><option value="">Cytoscape (default)</option><option value="cytoscape">Cytoscape</option><option value="g6">AntV G6</option><option value="sigma">Sigma</option></select></label>
+    <p class="muted">Return nodes and relationships in the query. Apply graph filters there.</p>
+    <p id="graph-readiness" class="muted" role="status"></p>
+    <button id="open-graph-source" class="secondary" type="button" hidden>Open source query</button>
   </div>
   <div id="chart-settings" hidden>
-    <label>Renderer<select id="viz-chart-renderer"><option value="">Plotly (default)</option><option value="plotly">Plotly</option><option value="g2">AntV G2</option></select></label>
     <label>Chart type<select id="viz-chart-type">
       <option>scatter</option><option>bar</option><option>line</option><option>histogram</option>
     </select></label>
@@ -81,30 +82,31 @@ document.body.innerHTML = `
       <label>Target longitude (optional)<select id="viz-target-longitude"></select></label>
       <label>Target latitude (optional)<select id="viz-target-latitude"></select></label>
     </div>
-    <p class="muted">Choose both target fields to draw explicit L7 arcs between source and target points. Coordinates remain EPSG:4326 on an offline blank map.</p>
+    <p class="muted">Choose both target fields to draw XYG route geometry between source and target points. Coordinates remain EPSG:4326 on an offline blank map.</p>
   </div>
   <div id="temporal-settings" hidden>
-    <label>Renderer<select id="viz-temporal-renderer"><option value="g2">AntV G2</option></select></label>
     <div class="form-row">
       <label>Timestamp field<select id="viz-timestamp"></select></label>
       <label>Value field<select id="viz-temporal-value"></select></label>
     </div>
     <div class="form-row">
-      <label>Timezone<input id="viz-timezone" value="UTC" /></label>
-      <label>Granularity<select id="viz-granularity"><option>day</option><option>hour</option><option>week</option><option>month</option><option>quarter</option><option>year</option></select></label>
+      <label>Timezone<input id="viz-timezone" value="UTC" readonly aria-describedby="timezone-help" /></label>
     </div>
+    <p id="timezone-help" class="muted">Timestamps must include a UTC offset. This view displays time in UTC.</p>
     <label>Series field<select id="viz-temporal-series"></select></label>
   </div>
   <details class="optional-section">
-    <summary>Naming and filter</summary>
+    <summary id="viz-optional-summary">Naming</summary>
     <label>Name (optional)<input id="viz-name" placeholder="vis-YYYYMMDD-HHMMSS-mmm" /></label>
+    <div id="viz-filter-settings" hidden>
     <div class="form-row">
       <label>Filter column<select id="viz-filter-column"></select></label>
       <label>Filter mode<select id="viz-filter-operator"><option value="equals">equals</option><option value="contains">contains</option></select></label>
     </div>
     <label>Filter value (optional)<input id="viz-filter-value" /></label>
+    </div>
   </details>
-  <button class="primary full" type="submit">Save &amp; open</button>
+  <button id="save-visualization" class="primary full" type="submit">Save &amp; open</button>
 </form>
 <details class="artifact-section" open><summary>Saved visualizations</summary><div id="visualization-list" class="artifact-list"></div></details>
   </div>
@@ -131,7 +133,7 @@ function artifactRow(item, actions, meta) {
     escapeHtml(meta || item.path) + '</span></div><div class="actions">' +
     actions.map((action) => actionButton(
       action.primary ? 'primary' : 'secondary',
-      action.disabled ? action : { ...action, args: [{ path: item.path }] },
+      action.disabled ? action : { ...action, args: action.args || [{ path: item.path }] },
     )).join('') + '</div></div>';
 }
 
@@ -141,17 +143,18 @@ function renderArtifacts(artifacts) {
   const results = artifacts?.results || [];
   const visualizations = artifacts?.visualizations || [];
   const availableResults = new Set(results.map((item) => item.path));
+  const canOpen = item => availableResults.has(item.result) &&
+    (item.kind !== 'result-graph' || results.find(result => result.path === item.result)?.hasArrow === true);
   const visualizationPriority = (item) => {
     if (item.kind === 'geospatial') return 0;
-    if (item.kind === 'result-graph' && item.renderer === 'cytoscape') return 1;
+    if (item.kind === 'result-graph' && item.renderer === 'xyg') return 1;
     if (item.kind === 'result-graph') return 2;
-    if (item.kind === 'plotly') return 3;
     if (item.kind === 'chart') return 4;
     if (item.kind === 'temporal') return 5;
     return 6;
   };
   const readyVisualizations = visualizations
-    .filter((item) => availableResults.has(item.result))
+    .filter(canOpen)
     .slice()
     .sort((left, right) =>
       visualizationPriority(left) - visualizationPriority(right) ||
@@ -189,15 +192,16 @@ function renderArtifacts(artifacts) {
     ? results.map((item) => artifactRow(item, [
         { label: 'Table', command: 'graphforge.openProjectResult', primary: true },
         { label: 'JSON', command: 'graphforge.openProjectArtifact' },
-      ], item.rowCount + ' rows · ' + item.path)).join('')
+        ...(item.sourceQuery ? [{ label: 'Source query', command: 'graphforge.openProjectArtifact', args: [{ path: item.sourceQuery }] }] : []),
+      ], item.rowCount + ' rows · ' + (item.hasArrow ? 'Original results stored' : 'Table only; rerun query for graphs') + ' · ' + item.path)).join('')
     : '<p class="empty-copy">Run a query to create durable result history.</p>';
   byId('visualization-list').innerHTML = visualizations.length
     ? visualizations.map((item) => {
-        const sourceReady = availableResults.has(item.result);
+        const sourceReady = canOpen(item);
         return artifactRow(item, [
           sourceReady
             ? { label: 'Open', command: 'graphforge.openProjectVisualization', primary: true }
-            : { label: 'Needs result', disabled: 'Run the visualization source query first.', primary: true },
+            : { label: 'Rerun query first', disabled: 'A graph needs the original typed query results. Open the source query and run it again.', primary: true },
           { label: 'JSON', command: 'graphforge.openProjectArtifact' },
         ], item.kind + ' · ' + item.renderer + ' · ' + item.result + (sourceReady ? '' : ' · source result missing'));
       }).join('')
@@ -228,21 +232,57 @@ function updateColumnOptions() {
     const select = byId(id);
     const old = select.value;
     const empty = id === 'viz-color' || id === 'viz-target-longitude' || id === 'viz-target-latitude' || id === 'viz-temporal-series' || id === 'viz-filter-column'
-      ? '<option value="">(none)</option>' : '';
+      ? '<option value="">(none)</option>' : '<option value="">Choose a field</option>';
     select.innerHTML = empty + columns.map((column) =>
       '<option value="' + escapeHtml(column) + '">' + escapeHtml(column) + '</option>'
     ).join('');
     if (columns.includes(old)) select.value = old;
   });
+  updateVisualizationControls();
 }
 
+function updateVisualizationControls() {
+  const kind = byId('viz-kind').value;
+  const graph = kind === 'result-graph';
+  const result = selectedResult();
+  const blocked = graph && !result?.hasArrow;
+  byId('viz-filter-settings').hidden = graph;
+  byId('viz-optional-summary').textContent = graph ? 'Naming' : 'Naming and filter';
+  byId('save-visualization').disabled = !result || blocked;
+  byId('graph-readiness').textContent = blocked
+    ? result ? 'This result is available as a table. Run its source query again before creating a graph.'
+      : 'Run a query first, then choose its saved result.'
+    : 'The original query result is stored. XYG checks graph compatibility when opening.';
+  byId('open-graph-source').hidden = !blocked;
+  byId('open-graph-source').textContent = result?.sourceQuery ? 'Open source query' : 'Open Query';
+  const required = kind === 'chart' ? ['viz-x', ...(byId('viz-chart-type').value === 'histogram' ? [] : ['viz-y'])]
+    : kind === 'geospatial' ? ['viz-longitude', 'viz-latitude']
+    : kind === 'temporal' ? ['viz-timestamp', 'viz-temporal-value'] : [];
+  ['chart', 'geospatial', 'temporal'].forEach(panel => {
+    byId(panel + '-settings').querySelectorAll('input, select').forEach(control => {
+      control.disabled = kind !== panel;
+      control.required = required.includes(control.id);
+    });
+  });
+}
+byId('open-graph-source').addEventListener('click', () => {
+  const source = selectedResult()?.sourceQuery;
+  if (source) runCommand('graphforge.openProjectArtifact', { path: source });
+  else runCommand('graphforge.getStarted.showQuery');
+});
+
 byId('viz-result').addEventListener('change', updateColumnOptions);
+['viz-target-longitude', 'viz-target-latitude'].forEach(id => {
+  byId(id).addEventListener('change', () => byId('viz-target-latitude').setCustomValidity(''));
+});
+byId('viz-chart-type').addEventListener('change', updateVisualizationControls);
 byId('viz-kind').addEventListener('change', () => {
   const kind = byId('viz-kind').value;
   byId('graph-settings').hidden = kind !== 'result-graph';
   byId('chart-settings').hidden = kind !== 'chart';
   byId('geospatial-settings').hidden = kind !== 'geospatial';
   byId('temporal-settings').hidden = kind !== 'temporal';
+  updateVisualizationControls();
 });
 
 function currentQueryArgs() {
@@ -272,13 +312,18 @@ byId('save-template').addEventListener('click', () => saveTemplate(false));
 byId('visualization-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const kind = byId('viz-kind').value;
+  if (byId('save-visualization').disabled) return;
+  const from = byId('viz-target-longitude'), to = byId('viz-target-latitude');
+  to.setCustomValidity(kind === 'geospatial' && Boolean(from.value) !== Boolean(to.value)
+    ? 'Choose both target coordinates, or leave both empty.' : '');
+  if (!byId('visualization-form').reportValidity()) return;
   const filterValue = byId('viz-filter-value').value.trim();
   const filterColumn = byId('viz-filter-column').value;
   const common = {
     name: byId('viz-name').value,
     kind,
     result: byId('viz-result').value,
-    filter: filterValue && filterColumn ? {
+    filter: kind !== 'result-graph' && filterValue && filterColumn ? {
       column: filterColumn,
       operator: byId('viz-filter-operator').value,
       value: filterValue,
@@ -286,30 +331,25 @@ byId('visualization-form').addEventListener('submit', (event) => {
   };
   const args = kind === 'result-graph' ? {
     ...common,
-    renderer: byId('viz-renderer').value || undefined,
   } : kind === 'chart' ? {
     ...common,
-    renderer: byId('viz-chart-renderer').value || undefined,
     mark: byId('viz-chart-type').value,
     x: byId('viz-x').value,
     y: byId('viz-chart-type').value === 'histogram' ? undefined : byId('viz-y').value,
     color: byId('viz-color').value || undefined,
   } : kind === 'geospatial' ? {
     ...common,
-    renderer: 'l7',
     longitude: byId('viz-longitude').value,
     latitude: byId('viz-latitude').value,
     targetLongitude: byId('viz-target-longitude').value || undefined,
     targetLatitude: byId('viz-target-latitude').value || undefined,
   } : {
     ...common,
-    renderer: byId('viz-temporal-renderer').value,
     mark: 'line',
     timestamp: byId('viz-timestamp').value,
     y: byId('viz-temporal-value').value,
     color: byId('viz-temporal-series').value || undefined,
     timezone: byId('viz-timezone').value,
-    granularity: byId('viz-granularity').value,
   };
   runCommand('graphforge.createProjectVisualization', {
     ...args,

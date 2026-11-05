@@ -48,6 +48,7 @@ export interface RuntimeStepActions {
 
 export interface JourneyResultArtifact {
   path: string;
+  hasArrow?: boolean;
 }
 
 export interface JourneyVisualizationArtifact {
@@ -68,41 +69,18 @@ export function selectJourneyArtifacts(
   isSampleProject: boolean,
   results: readonly JourneyResultArtifact[],
   visualizations: readonly JourneyVisualizationArtifact[],
-  preferredGraphRenderer = "cytoscape",
+  preferredGraphRenderer = "xyg",
 ): { resultPath?: string; visualizationPath?: string } {
   const resultPath = isSampleProject
     ? results.find((item) => item.path === "results/query-result.json")?.path
     : results[0]?.path;
   const matchingVisualizations = resultPath
-    ? visualizations.filter((item) => item.result === resultPath)
+    ? visualizations.filter((item) => item.result === resultPath &&
+        (item.kind !== "result-graph" || results.find(result => result.path === resultPath)?.hasArrow === true))
     : [];
-  const visualizationPath =
-    (isSampleProject
-      ? matchingVisualizations.find(
-          (item) =>
-            item.kind === "geospatial" &&
-            item.renderer === "l7" &&
-            item.format === "graphforge.visualization/v2",
-        )?.path
-      : undefined) ??
-    matchingVisualizations.find(
-      (item) =>
-        item.kind === "result-graph" &&
-        item.renderer === preferredGraphRenderer &&
-        item.format === "graphforge.visualization/v2",
-    )?.path ??
-    matchingVisualizations.find(
-      (item) =>
-        item.kind === "result-graph" &&
-        item.renderer === preferredGraphRenderer,
-    )?.path ??
-    matchingVisualizations.find(
-      (item) =>
-        item.kind === "result-graph" &&
-        item.format === "graphforge.visualization/v2",
-    )?.path ??
-    matchingVisualizations.find((item) => item.kind === "result-graph")?.path ??
-    matchingVisualizations[0]?.path;
+  const visualizationPath = matchingVisualizations.find(item => item.kind === "result-graph" && item.renderer === preferredGraphRenderer)?.path
+    ?? matchingVisualizations.find(item => item.kind === "result-graph")?.path
+    ?? matchingVisualizations[0]?.path;
   return { resultPath, visualizationPath };
 }
 
@@ -206,9 +184,11 @@ export function buildChecklistSteps(input: ChecklistStepInput): GetStartedStepMo
       ? "Available after a project is open."
       : queryComplete
         ? "A saved query has produced a durable result."
-        : isSampleProject
+        : isSampleProject && sampleQueryPath
           ? "Run the saved routes query, or use notebooks/air-routes-analysis.ipynb or apps/air_routes_dashboard.py for Python."
-          : "Write and run a saved Cypher query.",
+          : isSampleProject
+            ? "The sample query is missing. Open the sample again to restore its template."
+            : "Write and run a saved Cypher query.",
     artifact: sampleQueryPath ?? (projectReady ? "queries/first-query.cypher" : undefined),
     status: stepStatus(queryComplete, runtimeReady && projectReady),
     primaryAction:
@@ -219,7 +199,10 @@ export function buildChecklistSteps(input: ChecklistStepInput): GetStartedStepMo
               command: "graphforge.runProjectQuery",
               args: [{ path: sampleQueryPath }],
             }
-          : {
+          : isSampleProject ? {
+              label: "Restore sample query",
+              command: "graphforge.openSampleProject",
+            } : {
               label: "Write and run query",
               command: "graphforge.getStarted.showQuery",
             }

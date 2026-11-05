@@ -1,0 +1,100 @@
+{
+  "status": "local-qualified",
+  "date": "2026-11-03",
+  "platform": "darwin-arm64",
+  "xyg": {
+    "revision": "18951e621e875407d0e40c35ccddf12d4b1a8def",
+    "branch": "integrate/extension-xyg-intents",
+    "independentReview": "xyg_review: all findings resolved; final histogram guard re-reviewed; parent integration review of 18951e62: caption collection, empty-schema guards and zero-length native buffers reviewed; no blocking findings",
+    "nativeIntentAndTransportTests": 8
+  },
+  "extensionCore": "0.6.0-rc.7",
+  "checks": {
+    "typecheck": "passed",
+    "unit": {
+      "passed": 282,
+      "pending": 1,
+      "pendingReason": "Optional sibling Python interpreter probe unavailable"
+    },
+    "finalFocusedRegression": {
+      "passed": 22
+    },
+    "qualificationRunnerRegression": {
+      "passed": 7
+    },
+    "vscode": {
+      "passed": true,
+      "views": [
+        "graph",
+        "chart",
+        "geospatial",
+        "temporal"
+      ],
+      "canonicalUuidEdit": "passed",
+      "reopen": "passed",
+      "directGraphCommand": "passed",
+      "paintAcknowledgement": "actual webview frames",
+      "staticExports": [
+        "graph",
+        "chart",
+        "geospatial"
+      ],
+      "emptyGraph": "passed: actual webview paint acknowledgement with zero nodes"
+    },
+    "plainCypherIntegration": {
+      "nativeTests": 53,
+      "freshCoreCases": 4,
+      "independentLayoutControllers": "identical positions and exports for identical Arrow and generation",
+      "reopenIdentitiesAndGeneration": "preserved",
+      "report": "plain-cypher-qualification.json"
+    }
+  },
+  "dataset": {
+    "sourceAirports": 586,
+    "connectedAirports": 579,
+    "routes": 7430,
+    "timeline": "illustrative fixture"
+  },
+  "pythonNotebook": {
+    "core": "0.5.2",
+    "allCodeCells": "passed",
+    "outputs": [
+      "CSV",
+      "XYG HTML"
+    ],
+    "xygRevision": "14e944b1b1e931e1e270d023c5b8fa5c5dce2d8d"
+  },
+  "package": {
+    "file": "graphforge-xyg-darwin-arm64.vsix",
+    "sha256": "73cbe5cb7a1e42555bca72d941346cf3e75712dceffa4a997e9c849c50a0a594",
+    "target": "darwin-arm64",
+    "rendererAssets": "XYG only",
+    "sourceProvenanceClean": true
+  },
+  "remaining": [
+    "Static time-axis export fails explicitly with XYG_SCENE_UNSUPPORTED_PUBLIC_AXIS (upstream XYG limitation).",
+    "Other operating systems, architectures, high-contrast accessibility and large-data release matrix are not qualified by this run.",
+    "Desktop capture failed with cgWindowNotFound; displayed images are actual native exports."
+  ],
+  "release": "Not published or merged; issues #80 and #82 remain open.",
+  "inspectionUiRegression": {
+    "caption": "MHK",
+    "uuidSeparate": true,
+    "properties": 9,
+    "nativeXygSampleCaption": "passed",
+    "unitCaptionAndLinkingTests": 9,
+    "vscodeMetadataTests": 6,
+    "resultsViewports": [
+      1280,
+      800,
+      480
+    ],
+    "horizontalScrollPositions": [
+      "start",
+      "middle",
+      "end"
+    ],
+    "stickyActionColumn": "opaque selected and hovered surfaces; table-cell layout; all actions remain inside cell",
+    "verificationSurface": "Actual compiled webview components with real query data; native composition and VS Code metadata tests run separately"
+  }
+}

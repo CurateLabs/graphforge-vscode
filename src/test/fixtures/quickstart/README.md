@@ -16,7 +16,7 @@ into each sample project:
 | Path | Role |
 | --- | --- |
 | `queries/templates/routes-overview.cypher` | Reusable graph + chart query template |
-| `visualizations/*.gfviz.json` | Result Graph and Plotly settings |
+| `visualizations/*.gfviz.json` | XYG intent documents |
 | `mutations/seed-air-routes.cypher` | Generated from the CSVs before execution |
 | `data/air-routes/` | Copied source data and license files |
 

@@ -20,7 +20,6 @@ import {
   readProjectResult,
   readProjectVisualization,
   scanProjectArtifacts,
-  VISUALIZATION_SPEC_FORMAT_V2,
 } from "../session/projectArtifacts";
 
 /** Repo root from dist/test/quickstartSample.test.js → ../.. */
@@ -86,14 +85,14 @@ suite("quickstartSample (#63)", () => {
       [QUICKSTART_NOTEBOOK_REL.split(path.sep).join("/")],
     );
     assert.deepEqual(artifacts.apps.map((item) => item.path), ["apps/air_routes_dashboard.py"]);
-    assert.equal(artifacts.visualizations.length, 7);
+    assert.equal(artifacts.visualizations.length, 4);
     assert.ok(artifacts.mutations.some((item) => item.path === seedMutationPath));
     assert.ok(fs.existsSync(path.join(projectRoot, "data", "air-routes", "airports.csv")));
     const notebookPath = path.join(projectRoot, QUICKSTART_NOTEBOOK_REL);
     assert.ok(fs.existsSync(notebookPath));
     const streamlitPath = path.join(projectRoot, "apps", "air_routes_dashboard.py");
     assert.ok(fs.existsSync(streamlitPath));
-    assert.match(fs.readFileSync(streamlitPath, "utf8"), /st\.plotly_chart/);
+    assert.match(fs.readFileSync(streamlitPath, "utf8"), /components\.html/);
     assert.match(fs.readFileSync(streamlitPath, "utf8"), /streamlit run apps\/air_routes_dashboard\.py/);
     const notebook = JSON.parse(fs.readFileSync(notebookPath, "utf8")) as {
       nbformat?: number;
@@ -140,53 +139,17 @@ suite("quickstartSample (#63)", () => {
     assert.ok(query.cypher.includes("AS targetLongitude"));
     assert.ok(query.cypher.includes("AS targetLatitude"));
 
-    const legacyFiles = ["route-distances.gfviz.json", "routes-network.gfviz.json"];
-    for (const fileName of legacyFiles) {
-      const templatePath = path.join(dataset.datasetDir, "project", "visualizations", fileName);
-      const materializedPath = path.join(projectRoot, "visualizations", fileName);
-      const templateText = fs.readFileSync(templatePath, "utf8");
-      assert.equal(
-        fs.readFileSync(materializedPath, "utf8"),
-        templateText,
-        `${fileName} must be copied byte-for-byte`,
-      );
-      const loaded = readProjectVisualization(
-        projectRoot,
-        path.posix.join("visualizations", fileName),
-      );
-      assert.deepEqual(loaded, JSON.parse(templateText));
-      assert.equal(loaded.format, "graphforge.visualization/v1");
-    }
+    const specs=artifacts.visualizations.map(item=>readProjectVisualization(projectRoot,item.path));
+    assert.deepEqual(specs.map(spec=>spec.kind).sort(),['chart','geospatial','result-graph','temporal']);
+    assert.ok(specs.every(spec=>spec.format==='xyg.intent/v1'));
+    const graph=specs.find(spec=>spec.kind==='result-graph')!;
+    assert.equal(graph.graph!.layout,'cose');
+    const geo=specs.find(spec=>spec.kind==='geospatial')!;
+    assert.equal(geo.geospatial!.targetLongitude,'targetLongitude');
+    const activity=readProjectResult(projectRoot,'results/route-activity.json');
+    assert.equal(activity.rowCount,12);
+    assert.equal(specs.find(spec=>spec.kind==='temporal')!.temporal!.timezone,'UTC');
 
-    const specs = artifacts.visualizations.map((item) =>
-      readProjectVisualization(projectRoot, item.path),
-    );
-    const v2 = specs.filter((spec) => spec.format === VISUALIZATION_SPEC_FORMAT_V2);
-    assert.equal(v2.length, 5);
-    assert.ok(v2.some((spec) => spec.kind === "result-graph" && spec.renderer.id === "cytoscape"));
-    assert.ok(v2.some((spec) => spec.kind === "result-graph" && spec.renderer.id === "g6"));
-    assert.ok(v2.some((spec) => spec.kind === "chart" && spec.renderer.id === "g2"));
-    assert.ok(v2.some((spec) => spec.kind === "geospatial" && spec.renderer.id === "l7"));
-    assert.ok(v2.some((spec) => spec.kind === "temporal" && spec.renderer.id === "g2"));
-    const geospatial = v2.find((spec) => spec.kind === "geospatial");
-    assert.ok(geospatial);
-    assert.equal(geospatial.geospatial.source.type, "links");
-    assert.deepEqual(geospatial.geospatial.layers.map((layer) => layer.type), ["arc", "point"]);
-
-    const plotly = specs.find((spec) => spec.kind === "plotly");
-    assert.ok(plotly);
-    assert.equal(plotly.result, "results/query-result.json");
-
-    const activity = readProjectResult(projectRoot, "results/route-activity.json");
-    assert.deepEqual(activity.columns, ["timestamp", "routes", "region"]);
-    assert.equal(activity.rowCount, 12);
-    assert.ok(activity.rows.every((row) => !Number.isNaN(Date.parse(String(row.timestamp)))));
-
-    const temporal = v2.find((spec) => spec.kind === "temporal");
-    assert.ok(temporal);
-    assert.equal(temporal.result, "results/route-activity.json");
-    assert.equal(temporal.temporal.timestampField, "timestamp");
-    assert.equal(temporal.temporal.timezone, "UTC");
   });
 
   test("repairs newly shipped sample artifacts without overwriting analyst files", () => {
@@ -202,7 +165,7 @@ suite("quickstartSample (#63)", () => {
 
     assert.ok(repaired.includes(QUICKSTART_NOTEBOOK_REL.split(path.sep).join("/")));
     assert.ok(repaired.includes("visualizations/airports-map.gfviz.json"));
-    assert.ok(repaired.includes("visualizations/routes-network-default.gfviz.json"));
+    assert.ok(repaired.includes("visualizations/airports-map.gfviz.json"));
     assert.equal(
       fs.readFileSync(
         path.join(projectRoot, "visualizations", "routes-network.gfviz.json"),
@@ -211,5 +174,79 @@ suite("quickstartSample (#63)", () => {
       "analyst-owned\n",
     );
     assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), []);
+  });
+
+  test("upgrades the unchanged legacy sample query with a preserved backup", () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-xyg-upgrade-"));
+    const dataset = loadQuickstartDataset(REPO_ROOT);
+    materializeQuickstartProjectFiles(projectRoot, dataset);
+    const relative = "queries/templates/routes-overview.cypher";
+    const file = path.join(projectRoot, relative);
+    const legacy = fs.readFileSync(path.join(__dirname, "fixtures/legacy-routes-overview.cypher"));
+    fs.writeFileSync(file, legacy);
+    try {
+      assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), [relative]);
+      assert.match(fs.readFileSync(file, "utf8"), /RETURN a, r, b,/);
+      assert.deepEqual(fs.readFileSync(`${file}.pre-xyg`), legacy);
+      assert.equal(scanProjectArtifacts(projectRoot).queryTemplates.length, 1);
+      assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), []);
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  for (const hasLegacyQuery of [true, false]) {
+    test(`rejects an escaping query directory before repair writes (existing query: ${hasLegacyQuery})`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-symlink-"));
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-outside-"));
+      const dataset = loadQuickstartDataset(REPO_ROOT);
+      const legacy = fs.readFileSync(path.join(__dirname, "fixtures/legacy-routes-overview.cypher"));
+      const externalQuery = path.join(outside, "routes-overview.cypher");
+      fs.mkdirSync(path.join(root, "queries"));
+      fs.symlinkSync(outside, path.join(root, "queries/templates"), process.platform === "win32" ? "junction" : "dir");
+      if (hasLegacyQuery) fs.writeFileSync(externalQuery, legacy);
+      try {
+        assert.throws(() => repairQuickstartProjectFiles(root, dataset), /must stay inside the project/);
+        assert.equal(fs.existsSync(`${externalQuery}.pre-xyg`), false);
+        if (hasLegacyQuery) assert.deepEqual(fs.readFileSync(externalQuery), legacy);
+        else assert.deepEqual(fs.readdirSync(outside), []);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+  }
+
+  test("preserves a customized default sample query during repair", () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-custom-query-"));
+    const dataset = loadQuickstartDataset(REPO_ROOT);
+    materializeQuickstartProjectFiles(projectRoot, dataset);
+    const file = path.join(projectRoot, "queries/templates/routes-overview.cypher");
+    const custom = "MATCH (a:Airport) RETURN a LIMIT 10\n";
+    fs.writeFileSync(file, custom);
+    try {
+      assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), []);
+      assert.equal(fs.readFileSync(file, "utf8"), custom);
+      assert.equal(fs.existsSync(`${file}.pre-xyg`), false);
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("does not overwrite a conflicting sample query backup", () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-query-backup-"));
+    const dataset = loadQuickstartDataset(REPO_ROOT);
+    materializeQuickstartProjectFiles(projectRoot, dataset);
+    const file = path.join(projectRoot, "queries/templates/routes-overview.cypher");
+    const legacy = fs.readFileSync(path.join(__dirname, "fixtures/legacy-routes-overview.cypher"));
+    fs.writeFileSync(file, legacy);
+    fs.writeFileSync(`${file}.pre-xyg`, "existing backup");
+    try {
+      assert.throws(() => repairQuickstartProjectFiles(projectRoot, dataset), /backup already exists/);
+      assert.deepEqual(fs.readFileSync(file), legacy);
+      assert.equal(fs.readFileSync(`${file}.pre-xyg`, "utf8"), "existing backup");
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 });

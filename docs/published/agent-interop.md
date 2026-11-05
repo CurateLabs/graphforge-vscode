@@ -45,7 +45,7 @@ flowchart TD
    bare exception or a silent no-op.
 5. **Save visualization work** — call `graphforge.createProjectVisualization`
    with a result path, semantic kind, and complete bindings. It writes a strict
-   v2 artifact before opening and returns `{ path, spec, panel? }`.
+   XYG intent before opening and returns `{ path, spec, panel? }`.
 
 ## What's structured vs. interactive
 
@@ -69,8 +69,8 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.runQuery` / `runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown> }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) |
 | `graphforge.runProjectQuery` | `string \| Uri \| { path, resultName? }` | `QueryResult` |
 | `graphforge.openProjectResult` | `string \| Uri \| { path }` | `{ path, absolutePath, columns, rowCount }` |
-| `graphforge.openProjectVisualization` | `string \| Uri \| { path, waitForReady?, timeoutMs? }` | `{ path, absolutePath, kind, spec, panel?, lifecycle? }` |
-| `graphforge.createProjectVisualization` | `{ name?, result, kind, renderer?, explicit bindings, filter?, open? }` | `{ path, spec, panel? }` |
+| `graphforge.openProjectVisualization` | `string \| Uri \| { path, waitForReady? }` | `{ path, absolutePath, kind, spec, panel?, lifecycle? }` |
+| `graphforge.createProjectVisualization` | `{ name?, result, kind, explicit bindings, filter?, open? }` | `{ path, spec, panel? }` |
 | `graphforge.saveProjectVisualization` | `{ name?, spec, open? }` | `{ path, spec, panel? }` |
 | `graphforge.applyProjectMutation` | `{ path: string \| Uri; confirm: true }` | `{ path, absolutePath, columns, rowCount }` |
 | `graphforge.importData` | `{ path: string \| Uri; label: string; mode?: "create" \| "merge"; idColumn?: string; confirm: true }` | `{ path, format, label, mode, idColumn?, imported, result }` |
@@ -109,32 +109,19 @@ Pass a project-relative `result`, a `kind`, and flattened kind-specific fields
 to `graphforge.createProjectVisualization`. Common optional fields are `name`,
 `open`, and `filter: { column, operator: "equals" | "contains", value }`.
 
-- `result-graph`: optional `renderer: "g6" | "cytoscape" | "sigma"`.
-- `chart`: `mark: "bar" | "scatter" | "line" | "histogram"`, `x`, `y`
-  (except histogram), optional `color`, and optional
-  `renderer: "g2" | "plotly"`.
-- `geospatial`: source `longitude` and `latitude`; optional target longitude and
-  latitude create an explicit L7 link source with arc and endpoint layers.
-- `temporal`: `timestamp` and `y`, plus optional `color`, `mark`, IANA
-  `timezone`, and `granularity` (G2).
+- `result-graph`: optional analytical `base` and XYG `intent`; source must retain original Core entity Arrow.
+- `chart`: `mark` (`bar`, `scatter`, `line`, `histogram`), `x`, required `y` except histogram, optional `color`.
+- `geospatial`: `longitude`, `latitude`, optional paired `targetLongitude`/`targetLatitude`; explicit EPSG:4326 coordinates.
+- `temporal`: `timestamp`, `y`, optional `color` and `mark`; `timezone` is UTC. Timestamps must include an offset.
 
-There is no nested `bindings` argument. The saved strict v2 artifact contains
-the complete renderer, layout, mapping, and presentation choices.
+There is no nested `bindings` argument. The saved XYG `xyg.intent/v1` artifact contains
+the explicit source, mark, layout and field bindings.
 
 The full per-command contract (prompt-by-prompt) lives in
 `docs/experience/agent-interop.md` in the repository, proven by the
 `src/test/extension.test.ts` safe-commands suites in CI.
 
-Project files are also a public contract: exact `FORMAT` marker; `.cypher`/`.cql`
-or `{ cypher, params }` query specs; `{ columns, rows, rowCount }` results;
-strict `graphforge.visualization/v2` `.gfviz.json` files for graph, chart,
-geospatial, and temporal work; readable v1 Cytoscape/Sigma/Plotly files; and
-reviewed writes under `mutations/`. V2 artifacts explicitly own renderer,
-backend, layout, bindings, filters, coordinates/time, and presentation—settings
-only choose the next creation template. Absolute and project-relative command
-paths are accepted, but traversal
-outside the project is rejected. The bundled sample includes `AGENTS.md` beside
-these folders so a repository-aware agent can discover the contract directly.
+Project files are the contract: exact FORMAT marker, saved queries, JSON/Markdown results paired with canonical Arrow, XYG `xyg.intent/v1` documents and reviewed mutations. Paths outside the project are rejected. Old renderer documents fail without modification.
 
 GraphForge does not contribute a VS Code Language Model Tool on its current
 `^1.96` engine floor because that version's stable extension API does not expose
@@ -148,3 +135,5 @@ surface for Copilot, Cursor, and MCP bridges until the engine floor can move.
 Node-only surfaces (checkpoints, embedding spaces, indexing, invocation descriptors, composite
 transactions, knowledge-ledger writes) should check `nodeBinding.available` from
 `checkEnvironment` before calling them, since the Python bridge does not back those yet.
+
+`graphforge.exportVisualization` saves the active ready XYG view as PNG/SVG. Static time-axis export currently returns `XYG_SCENE_UNSUPPORTED_PUBLIC_AXIS`.

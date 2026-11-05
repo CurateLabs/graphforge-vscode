@@ -35,6 +35,7 @@ import json
 import sys
 import traceback
 from typing import Any
+from uuid import UUID
 
 PROTOCOL_VERSION = 1
 
@@ -89,7 +90,7 @@ class Session:
             return {}
         if op == "list_assertions":
             table = self.forge.list_assertions()
-            return _encode_table(table)
+            return self._result(table)
         if op == "close":
             self._close()
             return {"closed": True}
@@ -110,13 +111,23 @@ class Session:
             "graphforge_version": getattr(g, "__version__", None),
         }
 
+    def _result(self, table: Any) -> dict[str, Any]:
+        # The host processes requests serially. Capture identity before the next
+        # request can mutate the project, alongside this read's exact Arrow bytes.
+        identity_reader = getattr(self.forge, "committed_generation_identity", None)
+        identity = identity_reader() if callable(identity_reader) else None
+        result = _encode_table(table)
+        if identity is not None:
+            result["generation_uuid"] = str(UUID(bytes=identity["generation_uuid"]))
+        return result
+
     def _execute(self, request: dict[str, Any]) -> dict[str, Any]:
         cypher = request.get("cypher")
         if not cypher:
             raise HostError("execute requires 'cypher'")
         params = request.get("params") or None
         table = self.forge.execute(cypher, params)
-        return _encode_table(table)
+        return self._result(table)
 
     def _verb(self, request: dict[str, Any]) -> dict[str, Any]:
         verb = request.get("verb")
@@ -145,7 +156,7 @@ class Session:
             table = self.forge.find(args.get("query"), **_kwargs(label=label, limit=k))
         else:
             raise HostError(f"unknown verb {verb!r}")
-        return _encode_table(table)
+        return self._result(table)
 
     def _close(self) -> None:
         if self.forge is not None:

@@ -36,6 +36,12 @@ export interface QueryResult {
   rows: TableRow[];
   rowCount: number;
   algorithm?: string;
+  /** Original Core Arrow IPC; XYG owns schema recognition and composition. */
+  ipc?: Uint8Array;
+  numericColumns?: string[];
+  generationUuid?: string;
+  /** Project query file to open for explicit rerun; never executed on reopen. */
+  sourceQuery?: string;
 }
 
 export interface GraphNode {
@@ -61,9 +67,8 @@ export interface GraphEdge {
  *   legitimate "statusless" values).
  * - "class-only": no knowledge capability (or binding support) — color by
  *   ontology/label class only. Never invent a status in this mode.
- * - "demo": scaffold sample data shown when there are no graph-shaped rows.
  */
-export type GraphStyleMode = "epistemic" | "class-only" | "demo";
+export type GraphStyleMode = "epistemic" | "class-only";
 
 export interface GraphPayload {
   nodes: GraphNode[];
@@ -355,6 +360,7 @@ export interface GraphForgeNative {
 
   // ---- Capabilities / write coordination (#11 / ADR 0015). ----
   projectCapabilities?(): Promise<Buffer>;
+  committedGenerationIdentity?(): { generationUuid: Buffer; manifestSha256: Buffer };
   enableCapability?(request: {
     operationUuid: string;
     capabilityId: string;
@@ -529,6 +535,8 @@ export interface EngineBackend {
   ontologyMode(): Promise<string>;
   execute(cypher: string, params?: Record<string, unknown>): Promise<Buffer>;
   moduleCatalog?(): Promise<unknown[]>;
+  /** Generation captured with this exact read, before another operation can advance it. */
+  resultGeneration?(ipc: Buffer): string | undefined;
   rank(
     label: string,
     by: string,
