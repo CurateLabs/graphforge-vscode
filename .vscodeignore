@@ -29,6 +29,7 @@ agent-transcripts/**
 .productfeeling/**
 .redteam/**
 design-qa.md
+TASKS.md
 onboarding-design-qa/**
 graphforge-quickstart/**
 

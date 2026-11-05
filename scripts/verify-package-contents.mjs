@@ -25,7 +25,7 @@ const forbiddenPrefixes = [
 ];
 const retiredAssets =
   /(?:resultGraph|artifactVisualization|figure|layout\.worker)\.(?:js|css)$/;
-const forbiddenFiles = new Set(["design-qa.md"]);
+const forbiddenFiles = new Set(["design-qa.md", "TASKS.md"]);
 const forbidden = files.filter(
   (file) =>
     forbiddenFiles.has(file) ||

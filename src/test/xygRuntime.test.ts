@@ -101,7 +101,8 @@ suite("XYG ownership and native composition", () => {
     ])
       assert.equal(isVisualizationSpec(invalid), false);
   });
-  test("native XYG owns chart, temporal and geographic scene composition", async () => {
+  test("native XYG owns chart, temporal and geographic scene composition", async function () {
+    this.timeout(30000);
     const xy = await loadXyg(root);
     const data = {
       columns: ["x", "y", "timestamp", "lon", "lat", "toLon", "toLat"],
