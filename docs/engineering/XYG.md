@@ -117,9 +117,10 @@ or replacing an artifact. Graphs reject host row filters before they can discard
 the graph's Arrow. Temporal granularity is not offered. The UI disables time-axis
 image export while that pinned XYG capability is unavailable.
 
-Theme changes regenerate native scenes, including both VS Code high-contrast
-variants, while browser chrome uses host tokens and the matching native-control
-color scheme. Reduced motion paints the completed native graph layout rather
+Theme changes regenerate visible native scenes, including both VS Code
+high-contrast variants. Retained hidden views defer theme, motion and viewport
+recomposition until reveal so they do not compete with the active view. Browser
+chrome uses host tokens and the matching native-control color scheme. Reduced motion paints the completed native graph layout rather
 than its intermediate frames, disables animated Fit, and reveals linked result
 rows without smooth scrolling. Pending readiness follows the current render
 generation through theme and motion updates. The browser reports bounded

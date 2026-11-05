@@ -58,6 +58,7 @@ export class XygVisualizationPanel implements VisualizationController {
   private readySettled = false;
   private disposed = false;
   private initialized = false;
+  private needsRender = false;
   private reducedMotion = false;
   private width = 1100;
   private height = 650;
@@ -84,6 +85,8 @@ export class XygVisualizationPanel implements VisualizationController {
     this.listeners.push(
       panel.onDidChangeViewState((e) => {
         if (e.webviewPanel.active) visualizationInstances.activate(instanceId);
+        if (e.webviewPanel.visible && this.needsRender && this.initialized && !this.disposed)
+          void this.render();
       }),
     );
     this.listeners.push(
@@ -105,7 +108,7 @@ export class XygVisualizationPanel implements VisualizationController {
       });
     });
     this.listeners.push(vscode.window.onDidChangeActiveColorTheme(() => {
-      if (this.initialized && !this.disposed) void this.render();
+      if (this.initialized && !this.disposed) void this.renderWhenVisible();
     }));
     panel.webview.html = this.html(panel.webview);
   }
@@ -131,7 +134,7 @@ export class XygVisualizationPanel implements VisualizationController {
       // Retain completed paint as well; explicit Re-layout still starts a job.
       const reuse = spec.kind === "result-graph" && existing.spec.kind === spec.kind &&
         existing.projectRoot === projectRoot && existing.selected.length === 0 &&
-        (existing.isReady || !existing.readySettled) &&
+        !existing.needsRender && (existing.isReady || !existing.readySettled) &&
         JSON.stringify(existing.spec) === JSON.stringify(spec) &&
         sameArrowResult(existing.result, result) && sameArrowResult(existing.base, base);
       existing.spec = spec;
@@ -214,12 +217,12 @@ export class XygVisualizationPanel implements VisualizationController {
     }
     if (!this.lifecycle.accepts(message)) return;
     if (message.type === "viewport") {
-      if (this.updateViewport(message)) await this.render();
+      if (this.updateViewport(message)) await this.renderWhenVisible();
       return;
     }
     if (message.type === "motionPreference" && typeof message.reducedMotion === "boolean") {
       this.reducedMotion = message.reducedMotion;
-      await this.render();
+      await this.renderWhenVisible();
       return;
     }
     if (
@@ -378,7 +381,15 @@ export class XygVisualizationPanel implements VisualizationController {
     });
     await accepted;
   }
+  private renderWhenVisible(): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    if (this.panel.visible) return this.render();
+    this.needsRender = true;
+    return Promise.resolve();
+  }
   private async render() {
+    this.needsRender = false;
+    const { width, height } = this;
     this.rejectFrames();
     this.isReady = false;
     this.acceptedFrame = 0;
@@ -400,8 +411,8 @@ export class XygVisualizationPanel implements VisualizationController {
       title: this.spec.name,
       ready: false,
       exportAvailable: this.spec.kind !== "temporal",
-      width: this.width,
-      height: this.height,
+      width: width,
+      height: height,
     });
     try {
       this.xy = await loadXyg(this.extensionUri.fsPath);
@@ -423,8 +434,8 @@ export class XygVisualizationPanel implements VisualizationController {
           // Native scheduling includes worker startup and paint ACKs. Keep
           // it within the panel deadline, reserving cancellation/cleanup time.
           maxWallMs: READY_TIMEOUT_MS - 5000,
-          width: this.width,
-          height: this.height,
+          width: width,
+          height: height,
           theme,
           title: this.spec.name,
           layout: this.spec.graph!.layout,
@@ -440,8 +451,8 @@ export class XygVisualizationPanel implements VisualizationController {
           this.xy,
           this.spec,
           this.result,
-          this.width,
-          this.height,
+          width,
+          height,
         );
         const compiled = this.figure.compile();
         const buffer = this.xy.sceneBrowserPainter(
@@ -462,8 +473,8 @@ export class XygVisualizationPanel implements VisualizationController {
           this.xy,
           this.spec,
           this.result,
-          this.width,
-          this.height,
+          width,
+          height,
           theme,
         );
         const payload = this.figure.buildPayload();
@@ -491,16 +502,16 @@ export class XygVisualizationPanel implements VisualizationController {
         nodeCount: this.payload?.positions?.uuid.length ?? 0,
         rowCount: this.result.rowCount,
         reducedMotion: this.reducedMotion,
-        width: this.width,
-        height: this.height,
+        width: width,
+        height: height,
       };
       this.post({
         type: "status",
         message: `XYG ready · ${this.result.rowCount.toLocaleString()} result rows`,
         ready: true,
         exportAvailable: this.spec.kind !== "temporal",
-        width: this.width,
-        height: this.height,
+        width: width,
+        height: height,
       });
       this.isReady = true;
       this.settleReady(lifecycle);

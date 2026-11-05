@@ -204,6 +204,14 @@ suite("XYG air-routes integration", () => {
         assert.equal(themed.lifecycle?.type, "graphforge/renderReady", JSON.stringify(themed));
         assert.equal(themed.lifecycle.nodeCount, 579);
       }
+      for (const spec of specs.filter(spec => spec.kind !== "result-graph")) {
+        const revealed = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", {
+          path: spec.path, waitForReady: true,
+        });
+        assert.equal(revealed.lifecycle?.type, "graphforge/renderReady", JSON.stringify(revealed));
+        assert.ok(revealed.lifecycle.renderGeneration > 1,
+          "a retained hidden view refreshes when revealed after theme changes");
+      }
       const direct = await vscode.commands.executeCommand<any>(
         "graphforge.showResultGraph",
         { waitForReady: true },
