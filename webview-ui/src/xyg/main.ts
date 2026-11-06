@@ -9,17 +9,35 @@ let context: { instanceId: string; renderGeneration: number } | undefined;
 let frame = 0;
 let view: any;
 let disposed = false;
-const tickRequests = new Map<
-  string,
-  {
-    resolve: (packet: ArrayBuffer) => void;
-    reject: (error: Error) => void;
-    timer: ReturnType<typeof setTimeout>;
-  }
->();
+let worker: any;
+let workerReady: Promise<any> | undefined;
+const assetAbort = new AbortController();
 const client = import(/* @vite-ignore */ config.clientUri);
 const post = (type: string, extra: Record<string, unknown> = {}) =>
   vscode.postMessage({ type, ...context, ...extra });
+const tickWorker = () => workerReady ??= (async () => {
+  const xy = await client;
+  const [source, wasm] = await Promise.all([config.workerUri, config.wasmUri].map(async uri => {
+    const response = await fetch(uri, { signal: assetAbort.signal });
+    if (!response.ok) throw Object.assign(new Error("XYG WASM asset is unavailable. Reload the installed extension."), { code: "XYG_WASM_ASSET_MISSING" });
+    return response.arrayBuffer();
+  }));
+  if (disposed) throw Object.assign(new Error("XYG view disposed"), { code: "XYG_DISPOSED" });
+  // VS Code's resource origin cannot create a module Worker directly. This
+  // bundled, self-contained worker is loaded locally and started from a Blob.
+  const url = URL.createObjectURL(new Blob([source], { type: "application/javascript" }));
+  try {
+    worker = new xy.XygWasmWorker({ workerUrl: url, wasm });
+    post("diagnostic", { phase: "worker-started" });
+    await worker.ready;
+    if (disposed) { await worker.dispose(); throw Object.assign(new Error("XYG view disposed"), { code: "XYG_DISPOSED" }); }
+    post("diagnostic", { phase: "worker-ready" });
+    return worker;
+  } catch (error) {
+    await worker?.dispose();
+    throw error;
+  } finally { URL.revokeObjectURL(url); }
+})();
 const motionChanged = () => post("motionPreference", { reducedMotion: motionPreference.matches });
 motionPreference.addEventListener("change", motionChanged);
 const nextFrame = () =>
@@ -58,25 +76,11 @@ window.addEventListener("message", async (event: MessageEvent) => {
     return;
   if (context && message.renderGeneration > context.renderGeneration) {
     view?.destroy();
-    for (const request of tickRequests.values())
-      request.reject(new Error("XYG_TICK_SUPERSEDED"));
-    tickRequests.clear();
   }
   context = {
     instanceId: message.instanceId,
     renderGeneration: message.renderGeneration,
   };
-  if (message.type === "tickResult") {
-    const key = `${message.frame}:${message.requestId}`,
-      request = tickRequests.get(key);
-    if (request) {
-      clearTimeout(request.timer);
-      tickRequests.delete(key);
-      if (message.error) request.reject(new Error(message.error));
-      else request.resolve(message.packet);
-    }
-    return;
-  }
   if (message.type === "status") {
     hostWidth = message.width;
     hostHeight = message.height;
@@ -132,51 +136,12 @@ window.addEventListener("message", async (event: MessageEvent) => {
     if (message.painter)
       view = xy.hydrateWasmPainter(chart, { painter: buffer });
     else {
-      view = xy.renderStandalone(chart, message.spec, buffer);
+      const currentView = xy.renderStandalone(chart, message.spec, buffer);
+      view = currentView;
       post("diagnostic", { phase: "view-created" });
-      const host = xy.createHostTickEngine({
-        resolve: (
-          packet: ArrayBuffer,
-          task: { requestId: number; signal: AbortSignal },
-        ) =>
-          new Promise<ArrayBuffer>((resolve, reject) => {
-            const key = `${rendering}:${task.requestId}`;
-            const cleanup = () => {
-              clearTimeout(timer);
-              tickRequests.delete(key);
-              task.signal.removeEventListener("abort", cancel);
-            };
-            const fail = (error: Error) => {
-              cleanup();
-              reject(error);
-            };
-            const cancel = () => fail(new Error("XYG_TICK_CANCELLED"));
-            if (task.signal.aborted) {
-              reject(new Error("XYG_TICK_CANCELLED"));
-              return;
-            }
-            task.signal.addEventListener("abort", cancel, { once: true });
-            const timer = setTimeout(
-              () => fail(new Error("XYG_TICK_TIMEOUT")),
-              10000,
-            );
-            tickRequests.set(key, {
-              resolve: (result) => {
-                cleanup();
-                resolve(result);
-              },
-              reject: fail,
-              timer,
-            });
-            post("ticks", {
-              packet,
-              requestId: task.requestId,
-              frame: rendering,
-              renderGeneration: generation,
-            });
-          }),
-      });
-      await xy.attachRustTicks(view, { worker: host, workerOwnership: "own" });
+      const ticks = await tickWorker();
+      if (disposed || frame !== rendering || context?.renderGeneration !== generation) { currentView.destroy(); return; }
+      await xy.attachWasmTicks(currentView, { worker: ticks, workerOwnership: "borrow" });
       post("diagnostic", { phase: "ticks-ready" });
     }
     await nextFrame();
@@ -228,8 +193,7 @@ window.addEventListener("pagehide", () => {
   resizeObserver.disconnect();
   motionPreference.removeEventListener("change", motionChanged);
   view?.destroy();
-  for (const request of tickRequests.values())
-    request.reject(new Error("XYG_DISPOSED"));
-  tickRequests.clear();
+  assetAbort.abort();
+  void worker?.dispose();
 });
 post("ready", { reducedMotion: motionPreference.matches, ...viewport() });

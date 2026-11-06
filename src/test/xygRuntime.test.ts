@@ -11,6 +11,10 @@ import {
   composeMap,
   validateVisualization,
   resultEntitySelection,
+  resultRowsFromXygPick,
+  resultEntitiesFromXygRow,
+  requireVisualComposition,
+  graphResultId,
 } from "../webview/xygRuntime";
 import {
   createResultGraphSpec,
@@ -22,6 +26,49 @@ import { tableFromArrays, tableToIPC } from "apache-arrow";
 
 const root = path.resolve(__dirname, "../..");
 suite("XYG ownership and native composition", () => {
+  test("table-only composition fails with an action instead of starting graph layout", () => {
+    assert.throws(() => requireVisualComposition({ kind: "table" }), (error: any) => error.code === "XYG_TABLE_ONLY" && /Open the source result in Results/.test(error.message));
+    requireVisualComposition({ kind: "parallel-coordinates" });
+  });
+  test("explicit analytical charts require no invented base graph", async () => {
+    const xy = await loadXyg(root);
+    const fixture = path.join(root, "vendor/xyg/tests/fixtures/graphforge/results-0.6.0-rc.5");
+    for (const [name, intent] of [["node2vec", "parallel-coordinates"], ["conductance", "bar-chart"]] as const) {
+      const result = decodeTable(fs.readFileSync(path.join(fixture, `${name}.arrow`)));
+      const spec = createResultGraphSpec({ name, result: `results/${name}.json`, intent });
+      const input = graphInput(spec, result);
+      assert.equal(input.base, undefined);
+      assert.ok("layers" in input);
+      assert.equal(input.layers[0].resultId, graphResultId(spec, result));
+      const c = xy.composeGraphForge(input);
+      assert.equal(c.kind, intent);
+      assert.ok(xy.graphforgeChart(c, { width: 480, height: 320 }).buildPayload().buffers.byteLength > 0);
+    }
+  });
+  test("derived and aggregate picks use bounded native result provenance", () => {
+    const derived = { uuid: null, layers: [{ resultId: "results/a.json", row: 4 }, { resultId: "results/b.json", row: 2 }] };
+    assert.deepEqual(resultRowsFromXygPick(derived, "results/a.json", 10), [4]);
+    assert.deepEqual(resultRowsFromXygPick({ edges: [derived, derived, { layers: [{ resultId: "results/a.json", row: -1 }, { resultId: "results/a.json", row: 10 }] }] }, "results/a.json", 10), [4]);
+    assert.deepEqual(resultRowsFromXygPick(derived, "results/other.json", 10), []);
+  });
+  test("analytical table rows select native member identities without inventing derived UUIDs", async () => {
+    const xy = await loadXyg(root);
+    const fixture = path.join(root, "vendor/xyg/tests/fixtures/graphforge/results-0.6.0-rc.5");
+    const manifest = JSON.parse(fs.readFileSync(path.join(fixture, "manifest.json"), "utf8"));
+    const base = manifest.bases[manifest.fixtures.node_similarity.base];
+    const read = (name: string) => fs.readFileSync(path.join(fixture, `${name}.arrow`));
+    const c = xy.composeGraphForge({ base: { tables: [read(base.nodes), read(base.edges)], generation: base.generation },
+      layers: [{ result: read("node_similarity"), resultId: "similarity", intent: "graph", generation: base.generation }] });
+    const index = [...c.edges.derived].findIndex((derived: unknown) => derived === 1);
+    const identity = c.identify("edge", index);
+    assert.equal(identity.uuid, null);
+    const row = resultRowsFromXygPick(identity, "similarity", 100)[0];
+    assert.equal(typeof row, "number");
+    const selected = resultEntitiesFromXygRow(c, "similarity", row);
+    assert.ok(selected.nodeIds.includes(identity.source) && selected.nodeIds.includes(identity.target));
+    assert.deepEqual(selected.edgeIds, []);
+    assert.deepEqual(resultEntitiesFromXygRow(c, "another-result", row), { nodeIds: [], edgeIds: [] });
+  });
   test("scalar cells fall back to canonical row identities while entity cells stay specific", () => {
     const row = {
       a: { node_uuid: "a" }, r: { edge_uuid: "r" }, b: { node_uuid: "b" },
@@ -52,8 +99,8 @@ suite("XYG ownership and native composition", () => {
       name: "Graph",
       result: "results/a.json",
     });
-    assert.equal(graphInput(spec, result).base.tables[0], ipc);
-    assert.equal(graphInput(spec, result).base.generation, result.generationUuid);
+    assert.equal(graphInput(spec, result).base!.tables[0], ipc);
+    assert.equal(graphInput(spec, result).base!.generation, result.generationUuid);
     assert.equal(result.algorithm, "pagerank");
     assert.deepEqual(result.rows, [{ value: 1 }, { value: 2 }]);
   });

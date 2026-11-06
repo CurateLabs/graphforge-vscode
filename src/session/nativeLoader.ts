@@ -16,7 +16,7 @@ export function resetNativeCache(): void {
 }
 
 /**
- * Resolve @curatelabs/graphforge from config path, node_modules, or sibling monorepo.
+ * Resolve Core from an explicit config path, the platform VSIX, node_modules, or sibling monorepo.
  * Returns null when unavailable (fail closed for engine calls).
  */
 export function loadGraphForgeModule(): GraphForgeModule | null {
@@ -103,6 +103,10 @@ function collectCandidates(): string[] {
   if (configPath) {
     out.push(configPath);
   }
+
+  const extension = vscode.extensions.getExtension("CurateLabsAI.graphforge");
+  if (extension)
+    out.push(path.join(extension.extensionUri.fsPath, "dist/core/node_modules/@curatelabs/graphforge"));
 
   out.push("@curatelabs/graphforge");
 

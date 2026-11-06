@@ -4,6 +4,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { serializeEntityMutation } from "../webview/entityMutation";
+import { decodeTable } from "../session/arrowCodec";
+import { persistQueryResultDocuments } from "../session/resultDocument";
 import { buildGetStartedState } from "../views/getStartedView";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import {
@@ -12,6 +14,38 @@ import {
 } from "../session/projectArtifacts";
 
 suite("XYG air-routes integration", () => {
+  test("explicit analytical compositions paint and table-only intent saves nothing", async function () {
+    this.timeout(180000);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-xyg-analytical-"));
+    try {
+      const opened = await vscode.commands.executeCommand<any>("graphforge.openSampleProject", { path: root });
+      if (opened?.code === "RUNTIME_UNAVAILABLE") {
+        if (process.env.GRAPHFORGE_REQUIRE_NATIVE) assert.fail("Native Core is required");
+        this.skip();
+      }
+      const source = process.env.GRAPHFORGE_XYG_SOURCE ?? path.resolve(__dirname, "../..");
+      for (const [name, intent] of [["node2vec", "parallel-coordinates"], ["conductance", "bar-chart"], ["is_dag", "table"]] as const) {
+        const fixture = path.join(source, "vendor/xyg/tests/fixtures/graphforge/results-0.6.0-rc.5", `${name}.arrow`);
+        const documents = await persistQueryResultDocuments(root, decodeTable(fs.readFileSync(fixture)), name);
+        const result = path.relative(root, documents.historyJsonPath!).split(path.sep).join("/");
+        const created = await vscode.commands.executeCommand<any>("graphforge.createProjectVisualization", { name, kind: "result-graph", result, intent, open: false });
+        if (intent === "table") {
+          assert.match(created.error, /XYG_TABLE_ONLY.*Open the source result in Results/);
+          assert.equal(fs.existsSync(path.join(root, "visualizations/is_dag.gfviz.json")), false);
+          continue;
+        }
+        assert.ok(!created.error, "Analytical artifact must validate before saving");
+        const painted = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", { path: created.path, waitForReady: true });
+        assert.equal(painted.lifecycle?.type, "graphforge/renderReady", `Analytical ${intent} must paint`);
+        const exported = await vscode.commands.executeCommand<any>("graphforge.exportVisualization");
+        assert.ok(exported.pngPath && exported.svgPath, "XYG exports analytical compositions");
+      }
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await vscode.commands.executeCommand("graphforge.closeProject");
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
   test("Core query → persisted Arrow → independent XYG graph/chart/map/timeline", async function () {
     // The retained-view/theme matrix contains multiple independently bounded
     // 60-second readiness phases, plus Core seeding, edits and exports.
@@ -246,6 +280,32 @@ suite("XYG air-routes integration", () => {
             ),
         );
       assert.equal(tabs.length, 6);
+      await vscode.commands.executeCommand("graphforge.runProjectQuery", { path: "queries/templates/routes-overview.cypher" });
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await vscode.commands.executeCommand("graphforge.closeProject");
+      await vscode.commands.executeCommand("graphforge.openProject", root);
+      const saved = { path: graphSpec.path, waitForReady: true };
+      const reopenedSaved = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", saved);
+      assert.equal(reopenedSaved.lifecycle?.type, "graphforge/renderReady");
+      assert.equal(reopenedSaved.lifecycle.nodeCount, 579, "Saved Arrow reopens without rerunning its query");
+      const resize = async (left: number) => {
+        await vscode.commands.executeCommand("vscode.setEditorLayout", { orientation: 0, groups: [{ size: left }, { size: 1 - left }] });
+        // ResizeObserver deliberately debounces host recomposition by 100 ms.
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const resized = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", saved);
+        assert.equal(resized.lifecycle?.type, "graphforge/renderReady");
+        assert.equal(resized.lifecycle.nodeCount, 579);
+        return resized.lifecycle;
+      };
+      const wide = await resize(0.25), narrow = await resize(0.75);
+      assert.notEqual(wide.width, narrow.width, "Actual split-editor viewport change must recompose");
+      assert.ok(narrow.renderGeneration > wide.renderGeneration);
+      if (process.env.GRAPHFORGE_XYG_SCENARIOS)
+        fs.writeFileSync(process.env.GRAPHFORGE_XYG_SCENARIOS, JSON.stringify({
+          fourViews: "passed", arrowEditReopen: "passed", themes: 4,
+          retainedViews: "passed", explicitTemporalExportLimit: "passed",
+          savedReopenWithoutQuery: "passed", resize: { wide, narrow },
+        }, null, 2));
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await vscode.commands.executeCommand("graphforge.closeProject");

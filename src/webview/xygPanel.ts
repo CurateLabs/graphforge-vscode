@@ -17,7 +17,7 @@ import {
   type VisualizationController,
   type VisualizationKind,
 } from "./visualizationInstanceRegistry";
-import { loadXyg, graphInput, composeChart, composeMap, resultEntitySelection, sameArrowResult } from "./xygRuntime";
+import { loadXyg, graphInput, composeChart, composeMap, resultEntitySelection, sameArrowResult, resultRowsFromXygPick, resultEntitiesFromXygRow, requireVisualComposition, graphResultId } from "./xygRuntime";
 import { resultRowsForGraphSelection } from "./resultTableModel";
 
 const READY_TIMEOUT_MS = 60000;
@@ -27,6 +27,8 @@ export class XygVisualizationPanel implements VisualizationController {
     EntityInspectSelection & { source: QueryResult; projectRoot: string }
   >();
   static readonly onDidSelect = XygVisualizationPanel.selection.event;
+  private static readonly rowSelection = new vscode.EventEmitter<{ source: QueryResult; projectRoot: string; rowIndices: number[] }>();
+  static readonly onDidSelectRows = XygVisualizationPanel.rowSelection.event;
   readonly lifecycle: VisualizationInstanceLifecycle;
   get renderGeneration() {
     return this.lifecycle.renderGeneration;
@@ -226,39 +228,6 @@ export class XygVisualizationPanel implements VisualizationController {
       return;
     }
     if (
-      message.type === "ticks" &&
-      Number.isInteger(message.requestId) &&
-      message.requestId > 0 &&
-      Number.isInteger(message.frame) &&
-      message.frame === this.frame
-    ) {
-      try {
-        if (
-          !(message.packet instanceof ArrayBuffer) ||
-          message.packet.byteLength > 1024 * 1024
-        )
-          throw new Error("XYG_TICK_REQUEST_INVALID");
-        const bytes = this.xy.tickResolvePacked(message.packet);
-        this.post({
-          type: "tickResult",
-          requestId: message.requestId,
-          frame: message.frame,
-          packet: bytes.buffer.slice(
-            bytes.byteOffset,
-            bytes.byteOffset + bytes.byteLength,
-          ),
-        });
-      } catch {
-        this.post({
-          type: "tickResult",
-          requestId: message.requestId,
-          frame: message.frame,
-          error: "XYG_TICK_RESOLVE_FAILED",
-        });
-      }
-      return;
-    }
-    if (
       message.type === "diagnostic" &&
       [
         "client-loaded",
@@ -331,6 +300,9 @@ export class XygVisualizationPanel implements VisualizationController {
           this.composition,
           { trace: message.trace, index: message.index },
         );
+        const rowIndices = resultRowsFromXygPick(identity, graphResultId(this.spec, this.result), this.result.rowCount);
+        if (rowIndices.length)
+          XygVisualizationPanel.rowSelection.fire({ source: this.result, projectRoot: this.projectRoot, rowIndices });
         if (
           identity?.uuid &&
           (identity.kind === "node" || identity.kind === "edge")
@@ -423,14 +395,23 @@ export class XygVisualizationPanel implements VisualizationController {
           ? "light"
           : "dark";
       if (this.spec.kind === "result-graph") {
-        this.owner ??= new this.xy.GraphForgeLayoutController();
         const input = graphInput(
           this.spec,
           this.result,
           this.base,
           this.selected,
         );
-        this.payload = await this.owner.render(input, {
+        if (this.spec.intent) this.composition = this.xy.composeGraphForge(input);
+        if (this.composition) requireVisualComposition(this.composition);
+        if (this.composition && this.composition.kind !== "graph") {
+          this.figure = this.xy.graphforgeChart(this.composition, { width, height, theme, title: this.spec.name });
+          this.figure.interaction = { click: true };
+          const payload = this.figure.buildPayload();
+          const bytes = payload.buffers instanceof Uint8Array ? payload.buffers : new Uint8Array(payload.buffers);
+          await this.paint({ spec: payload.spec, buffer: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) }, generation);
+        } else {
+        this.owner ??= new this.xy.GraphForgeLayoutController();
+        this.payload = await this.owner.render(this.composition ?? input, {
           // Intermediate scenes are not painted under reduced motion. Batch
           // native steps so their packing does not dominate the force work.
           ...(this.reducedMotion ? { chunkSteps: 50 } : {}),
@@ -446,6 +427,7 @@ export class XygVisualizationPanel implements VisualizationController {
               return this.paint(payload, generation);
           },
         });
+        }
       } else if (this.spec.kind === "geospatial") {
         this.figure = composeMap(
           this.xy,
@@ -563,7 +545,9 @@ export class XygVisualizationPanel implements VisualizationController {
       this.spec.kind !== "result-graph"
     )
       return { nodeIds: [], edgeIds: [] };
-    const selection = resultEntitySelection(result.rows[rowIndex], column);
+    const selection = this.spec.intent && this.xy
+      ? resultEntitiesFromXygRow(this.composition ??= this.xy.composeGraphForge(graphInput(this.spec, this.result, this.base)), graphResultId(this.spec, this.result), rowIndex)
+      : resultEntitySelection(result.rows[rowIndex], column);
     const hadSelection = this.selected.length > 0;
     this.selected = [...selection.nodeIds, ...selection.edgeIds];
     if (this.selected.length || hadSelection) void this.render();
@@ -621,6 +605,8 @@ export class XygVisualizationPanel implements VisualizationController {
         .toString();
     const config = JSON.stringify({
       clientUri: uri("xyg", "client", "index.js"),
+      workerUri: uri("xyg", "client", "wasm-worker.js"),
+      wasmUri: uri("xyg", "client", "xyg-wasm.wasm"),
     }).replace(/</g, "\\u003c");
     return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'; worker-src ${webview.cspSource} blob:; connect-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${uri("webview-ui", "xyg.css")}"></head><body><header><h1 id="title"></h1><span id="status" role="status">Loading XYG…</span><nav aria-label="Visualization controls"><button id="fit" disabled>Fit</button><button id="relayout" disabled>Re-layout</button><button id="export" disabled>Save PNG + SVG</button></nav></header><p id="notice" role="status"></p><main id="chart" aria-label="XYG visualization"></main><script id="xyg-config" type="application/json" nonce="${nonce}">${config}</script><script type="module" nonce="${nonce}" src="${uri("webview-ui", "xyg.js")}"></script></body></html>`;
   }

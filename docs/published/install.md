@@ -59,7 +59,8 @@ active, and the next step to fix whichever is missing.
 
 ## Setting up the Node binding
 
-`@curatelabs/graphforge` is an optional peer dependency. Either:
+Platform-specific VSIX packages include Core `0.6.0-rc.7`; the Node runtime works
+without a separate install. To override that runtime for engine development, either:
 
 - Run **`GraphForge: Setup Native Binding`** — one QuickPick offering: link a detected sibling
   build, browse to a built package folder (sets `graphforge.nativeModulePath`), or install it

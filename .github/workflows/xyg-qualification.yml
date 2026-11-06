@@ -1,0 +1,87 @@
+name: XYG qualification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xyg-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packaged:
+    name: Packaged XYG (${{ matrix.platform }})
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: blacksmith-4vcpu-ubuntu-2404
+            platform: linux-x64
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+          - os: macos-15
+            platform: darwin-arm64
+          - os: macos-15-intel
+            platform: darwin-x64
+          - os: windows-latest
+            platform: win32-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Check actual host architecture
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+        run: node -e 'require("node:assert/strict").equal(`${process.platform}-${process.arch}`, process.env.EXPECTED_PLATFORM)'
+      - name: Install dependencies and Rust target
+        run: |
+          npm ci
+          rustup target add wasm32-unknown-unknown --toolchain 1.96.0
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vendor/xyg/target
+          key: xyg-${{ matrix.platform }}-${{ hashFiles('vendor/xyg/Cargo.lock', 'vendor/xyg/rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: |
+            xyg-${{ matrix.platform }}-${{ hashFiles('vendor/xyg/Cargo.lock', 'vendor/xyg/rust-toolchain.toml') }}-
+      - name: Compile and inspect the platform package
+        run: |
+          npm run check
+          npm run compile
+          npm run verify:package
+          npm run package -- --no-dependencies -o "graphforge-${{ matrix.platform }}.vsix"
+      - name: Install desktop test dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Qualify the installed Linux package
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run qualify:xyg:installed -- "graphforge-${{ matrix.platform }}.vsix" "$RUNNER_TEMP/xyg-evidence"
+      - name: Qualify the installed desktop package
+        if: runner.os != 'Linux'
+        run: npm run qualify:xyg:installed -- "graphforge-${{ matrix.platform }}.vsix" "$RUNNER_TEMP/xyg-evidence"
+      - name: Preserve reports and exact platform artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xyg-${{ matrix.platform }}
+          path: |
+            ${{ runner.temp }}/xyg-evidence/*.json
+            graphforge-${{ matrix.platform }}.vsix
+          if-no-files-found: error
+          retention-days: 14
