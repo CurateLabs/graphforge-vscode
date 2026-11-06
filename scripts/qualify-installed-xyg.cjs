@@ -33,7 +33,11 @@ exports.run = async () => {
     const mocha = new Mocha({ ui: "tdd", timeout: 600000, reporter: function SafeReporter(runner) {
       runner.on("pass", test => report.tests.push({ name: test.fullTitle(), status: "passed", durationMs: test.duration }));
       runner.on("pending", test => report.tests.push({ name: test.fullTitle(), status: "skipped" }));
-      runner.on("fail", (test, error) => report.tests.push({ name: test.fullTitle(), status: "failed", code: error.code ?? "XYG_TEST_FAILED" }));
+      runner.on("fail", (test, error) => report.tests.push({
+        name: test.fullTitle(), status: "failed", code: error.code ?? "XYG_TEST_FAILED",
+        // Keep a useful assertion location without recording result-bearing messages or paths.
+        location: error.stack?.match(/quickstart\.e2e\.test\.js:\d+:\d+/)?.[0],
+      }));
     } });
     mocha.addFile(path.join(process.env.GRAPHFORGE_XYG_SOURCE, "dist/test/quickstart.e2e.test.js"));
     const failures = await new Promise(resolve => mocha.run(resolve));
@@ -84,13 +88,15 @@ async function main() {
     const settings = path.join(work, "profile/User");
     fs.mkdirSync(settings, { recursive: true });
     fs.writeFileSync(path.join(settings, "settings.json"), JSON.stringify({ "graphforge.runtime": "node", "update.mode": "none", "chat.disableAIFeatures": true }));
-    // Independently exercise the exact installed cohort, not a source-only native library.
-    const { qualifyXyg } = await import("./qualify-xyg.mjs");
-    await qualifyXyg(core, evidence, installed);
+    // Qualify the installed cohort in a child: Windows cannot remove native
+    // libraries while the runner itself still has them loaded.
+    execFileSync(process.execPath, [path.join(__dirname, "qualify-xyg.mjs"), core, evidence, installed], {
+      stdio: "inherit", timeout: 120_000,
+    });
     await runTests({
       vscodeExecutablePath: executable, extensionDevelopmentPath: installed, extensionTestsPath: __filename,
       launchArgs: [...profiles, ...(process.env.CI ? ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] : []), "--no-sandbox", "--sync", "off", "--disable-extension", "GitHub.copilot-chat", "--skip-welcome", "--skip-release-notes", "--force-prefers-reduced-motion", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"],
-      extensionTestsEnv: { ELECTRON_RUN_AS_NODE: undefined, GRAPHFORGE_NATIVE_MODULE: core, GRAPHFORGE_REQUIRE_NATIVE: "1", GRAPHFORGE_REDUCED_MOTION_REQUIRED: "1", GRAPHFORGE_XYG_INSTALLED: installed, GRAPHFORGE_XYG_SOURCE: process.cwd(), GRAPHFORGE_XYG_REPORT: reportPath, GRAPHFORGE_XYG_SCENARIOS: path.join(evidence, "scenarios.json") },
+      extensionTestsEnv: { ELECTRON_RUN_AS_NODE: undefined, GRAPHFORGE_NATIVE_MODULE: core, GRAPHFORGE_REQUIRE_NATIVE: "1", GRAPHFORGE_QUALIFICATION_WORK: work, GRAPHFORGE_REDUCED_MOTION_REQUIRED: "1", GRAPHFORGE_XYG_INSTALLED: installed, GRAPHFORGE_XYG_SOURCE: process.cwd(), GRAPHFORGE_XYG_REPORT: reportPath, GRAPHFORGE_XYG_SCENARIOS: path.join(evidence, "scenarios.json") },
     });
     assert.equal(JSON.parse(fs.readFileSync(reportPath)).status, "passed");
     console.log(`Installed XYG qualification passed (${process.platform}-${process.arch})`);

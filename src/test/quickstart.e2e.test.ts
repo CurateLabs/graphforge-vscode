@@ -13,10 +13,14 @@ import {
   writeProjectMutation,
 } from "../session/projectArtifacts";
 
+// Installed/remote runners own these files until the extension host exits.
+// Windows may retain Core mappings after a project or panel closes.
+const qualificationWork = process.env.GRAPHFORGE_QUALIFICATION_WORK;
+
 suite("XYG air-routes integration", () => {
   test("explicit analytical compositions paint and table-only intent saves nothing", async function () {
     this.timeout(180000);
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-xyg-analytical-"));
+    const root = fs.mkdtempSync(path.join(qualificationWork ?? os.tmpdir(), "gf-xyg-analytical-"));
     try {
       const opened = await vscode.commands.executeCommand<any>("graphforge.openSampleProject", { path: root });
       if (opened?.code === "RUNTIME_UNAVAILABLE") {
@@ -43,7 +47,8 @@ suite("XYG air-routes integration", () => {
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await vscode.commands.executeCommand("graphforge.closeProject");
-      fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+      if (!qualificationWork)
+        fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
     }
   });
   test("Core query → persisted Arrow → independent XYG graph/chart/map/timeline", async function () {
@@ -54,7 +59,7 @@ suite("XYG air-routes integration", () => {
       "CurateLabsAI.graphforge",
     )!;
     await extension.activate();
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-xyg-e2e-"));
+    const root = fs.mkdtempSync(path.join(qualificationWork ?? os.tmpdir(), "gf-xyg-e2e-"));
     try {
       const opened = await vscode.commands.executeCommand<any>(
         "graphforge.openSampleProject",
@@ -313,7 +318,8 @@ suite("XYG air-routes integration", () => {
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await vscode.commands.executeCommand("graphforge.closeProject");
-      fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+      if (!qualificationWork)
+        fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
     }
   });
 });
