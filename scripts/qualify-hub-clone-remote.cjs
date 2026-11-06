@@ -15,7 +15,7 @@ function remoteUri(authority, containerPath) {
 // Dev Containers labels the container with the host folder it was opened from.
 const containerFilter = (hostFolder) => `label=devcontainer.local_folder=${hostFolder}`;
 
-function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, coreVersion, dockerPlatform }) {
+function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, coreVersion, dockerPlatform, xygSuite = false }) {
   const workspace = `/workspaces/${workspaceName}`;
   return {
     name: "graphforge-hub-clone-qualification",
@@ -26,7 +26,9 @@ function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, 
     // A named volume is ext4 beneath the overlay root; the bind mount below is the host's file sharing.
     mounts: [`source=${volumeName},target=/gfwork,type=volume`],
     waitFor: "postCreateCommand",
-    postCreateCommand: `sudo chown node:node /gfwork && npm install --prefix /gfwork/binding --no-package-lock --no-save --no-audit --no-fund @curatelabs/graphforge@${coreVersion}`,
+    postCreateCommand: xygSuite
+      ? "sudo chown node:node /gfwork && npm install --prefix /gfwork/test-runner --no-package-lock --no-save --ignore-scripts --no-audit --no-fund mocha@11.8.0"
+      : `sudo chown node:node /gfwork && npm install --prefix /gfwork/binding --no-package-lock --no-save --no-audit --no-fund @curatelabs/graphforge@${coreVersion}`,
     remoteEnv: {
       GRAPHFORGE_QUALIFICATION_LANE: "dev-container",
       GRAPHFORGE_QUALIFICATION_WORK: "/gfwork",
@@ -34,6 +36,17 @@ function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, 
       GRAPHFORGE_QUALIFICATION_CORE: coreVersion,
       GRAPHFORGE_QUALIFICATION_EXTENSION: `${workspace}/extensions/${extensionDirName}`,
       GRAPHFORGE_QUALIFICATION_REJECT_BIND: `${workspace}/rejected-bind`,
+      ...(xygSuite ? {
+        TMPDIR: "/gfwork",
+        NODE_PATH: "/gfwork/test-runner/node_modules",
+        GRAPHFORGE_REQUIRE_NATIVE: "1",
+        GRAPHFORGE_REDUCED_MOTION_REQUIRED: "1",
+        GRAPHFORGE_XYG_REPORT: `${workspace}/report.json`,
+        GRAPHFORGE_XYG_SCENARIOS: `${workspace}/scenarios.json`,
+        GRAPHFORGE_XYG_SOURCE: `${workspace}/test-source`,
+        GRAPHFORGE_XYG_INSTALLED: `${workspace}/extensions/${extensionDirName}`,
+        GRAPHFORGE_NATIVE_MODULE: `${workspace}/extensions/${extensionDirName}/dist/core/node_modules/@curatelabs/graphforge`,
+      } : {}),
     },
   };
 }
@@ -47,7 +60,8 @@ const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
 async function main() {
   const vsix = path.resolve(process.argv[2] ?? "graphforge-ci.vsix");
   const evidence = path.resolve(process.argv[3] ?? "dev-container-evidence");
-  const coreVersion = "0.6.0-rc.5";
+  const xygSuite = process.env.GRAPHFORGE_QUALIFICATION_SUITE === "xyg";
+  const coreVersion = xygSuite ? "0.6.0-rc.7" : "0.6.0-rc.5";
   const vscodeVersion = "1.142.0";
   const watchdogMs = 25 * 60 * 1000;
   assert.ok(fs.statSync(vsix).isFile(), "Pass an existing packaged VSIX");
@@ -82,12 +96,24 @@ async function main() {
     dockerPlatform,
     volumeName,
     authority,
-    scope: "Remote (dev-container) packaged-extension clone/open/query/close/reopen on an admitted volume beneath a non-admitted root, with tmpfs and macOS bind-mount rejection; not useful-result or publish-back qualification",
+    scope: xygSuite
+      ? "Actual Linux Dev Container extension host and macOS desktop: bundled Core, analytical and four-view XYG paint, export, Arrow/edit/reopen, themes, reduced motion and resize; not screen-reader or massive-data qualification"
+      : "Remote (dev-container) packaged-extension clone/open/query/close/reopen on an admitted volume beneath a non-admitted root, with tmpfs and macOS bind-mount rejection; not useful-result or publish-back qualification",
   };
   fs.mkdirSync(path.join(hostFolder, ".devcontainer"), { recursive: true });
   fs.mkdirSync(path.join(hostFolder, "rejected-bind"));
   fs.mkdirSync(path.join(userData, "User"), { recursive: true });
   fs.copyFileSync(path.join(__dirname, "qualify-hub-clone.cjs"), path.join(hostFolder, "qualify-hub-clone.cjs"));
+  if (xygSuite) {
+    fs.copyFileSync(path.join(__dirname, "qualify-installed-xyg.cjs"), path.join(hostFolder, "qualify-installed-xyg.cjs"));
+    const source = path.join(hostFolder, "test-source");
+    fs.mkdirSync(path.join(source, "dist"), { recursive: true });
+    fs.cpSync(path.resolve("dist/test"), path.join(source, "dist/test"), { recursive: true });
+    const fixtureDir = "vendor/xyg/tests/fixtures/graphforge/results-0.6.0-rc.5";
+    fs.mkdirSync(path.join(source, fixtureDir), { recursive: true });
+    for (const name of ["node2vec", "conductance", "is_dag"])
+      fs.copyFileSync(path.resolve(fixtureDir, `${name}.arrow`), path.join(source, fixtureDir, `${name}.arrow`));
+  }
   writeJson(path.join(userData, "User", "settings.json"), { "dev.containers.dockerPath": dockerPath, "update.mode": "none", "extensions.autoUpdate": false, "dev.containers.logLevel": "trace" });
   writeJson(hostReport, report);
   writeJson(reportPath, report);
@@ -102,7 +128,7 @@ async function main() {
       ? path.resolve(path.dirname(executable), "..", "Resources", "app", "out", "cli.js")
       : path.join(path.dirname(executable), "resources", "app", "out", "cli.js");
     assert.ok(fs.statSync(cli).isFile(), "Packaged VS Code CLI script is missing");
-    execFileSync(executable, [cli, ...profiles, "--install-extension", vsix, "--install-extension", "ms-vscode-remote.remote-containers", "--force", "--no-sandbox"], {
+    execFileSync(executable, [cli, ...profiles, ...(xygSuite ? [] : ["--install-extension", vsix]), "--install-extension", "ms-vscode-remote.remote-containers", "--force", "--no-sandbox"], {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
       stdio: "inherit",
     });
@@ -112,7 +138,23 @@ async function main() {
       const pkg = readJson(manifest);
       return pkg.publisher?.toLowerCase() === publisher.toLowerCase() && pkg.name === name;
     });
-    const installed = installedBy("CurateLabsAI", "graphforge");
+    let installed = installedBy("CurateLabsAI", "graphforge");
+    if (xygSuite) {
+      // A Linux VSIX cannot be installed in the macOS UI host. Stage it only
+      // for the remote development host; validate every archive path first.
+      const entries = execFileSync("unzip", ["-Z1", vsix], { encoding: "utf8" }).trim().split(/\r?\n/);
+      assert.ok(entries.every(entry => !entry.includes("\\") && !path.posix.isAbsolute(entry) && !entry.split("/").includes("..")), "VSIX contains an escaping archive path");
+      const staging = path.join(root, "unpacked");
+      execFileSync("unzip", ["-q", vsix, "extension/*", "-d", staging]);
+      const staged = path.join(staging, "extension");
+      const pkg = readJson(path.join(staged, "package.json"));
+      assert.equal(pkg.publisher, "CurateLabsAI");
+      assert.equal(pkg.name, "graphforge");
+      const provenance = readJson(path.join(staged, "dist/xyg/provenance.json"));
+      assert.match(provenance.platform, /^linux-(?:x64|arm64)$/);
+      installed = path.join(extensions, `curatelabsai.graphforge-${pkg.version}-${provenance.platform}`);
+      fs.renameSync(staged, installed);
+    }
     const containers = installedBy("ms-vscode-remote", "remote-containers");
     assert.ok(installed, "VSIX installation did not produce the expected extension");
     assert.ok(containers, "Dev Containers extension was not installed");
@@ -121,7 +163,7 @@ async function main() {
     phase = "container";
     assert.throws(() => docker("volume", "inspect", volumeName), "Qualification volume already exists");
     volumeOwned = true;
-    writeJson(path.join(hostFolder, ".devcontainer", "devcontainer.json"), buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName: path.basename(installed), coreVersion, dockerPlatform }));
+    writeJson(path.join(hostFolder, ".devcontainer", "devcontainer.json"), buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName: path.basename(installed), coreVersion, dockerPlatform, xygSuite }));
     writeJson(hostReport, report);
 
     phase = "remote-run";
@@ -141,8 +183,8 @@ async function main() {
     await Promise.race([timeout, runTests({
       vscodeExecutablePath: executable,
       extensionDevelopmentPath: remoteUri(authority, `${workspace}/extensions/${path.basename(installed)}`),
-      extensionTestsPath: remoteUri(authority, `${workspace}/qualify-hub-clone.cjs`),
-      launchArgs: [...profiles, `--folder-uri=${remoteUri(authority, workspace)}`],
+      extensionTestsPath: remoteUri(authority, `${workspace}/${xygSuite ? "qualify-installed-xyg.cjs" : "qualify-hub-clone.cjs"}`),
+      launchArgs: [...profiles, ...(xygSuite ? ["--force-prefers-reduced-motion", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"] : []), `--folder-uri=${remoteUri(authority, workspace)}`],
     })]);
 
     const passed = readJson(hostReport);
@@ -150,6 +192,8 @@ async function main() {
     assert.equal(passed.host.remoteName, "dev-container");
     assert.equal(passed.host.platform, "linux");
     writeJson(reportPath, passed);
+    if (xygSuite && fs.existsSync(path.join(hostFolder, "scenarios.json")))
+      fs.copyFileSync(path.join(hostFolder, "scenarios.json"), path.join(evidence, "scenarios.json"));
     console.log(`Dev Container qualification passed: ${reportPath}`);
   } catch (error) {
     let failed = report;

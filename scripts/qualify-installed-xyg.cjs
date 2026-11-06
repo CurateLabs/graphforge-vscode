@@ -15,7 +15,9 @@ exports.run = async () => {
     const extension = vscode.extensions.getExtension("CurateLabsAI.graphforge");
     assert.ok(extension, "Installed extension is missing");
     assert.equal(fs.realpathSync(extension.extensionPath), fs.realpathSync(process.env.GRAPHFORGE_XYG_INSTALLED));
-    assert.equal(vscode.env.remoteName ?? null, null, "This runner proves the local desktop extension host");
+    const lane = process.env.GRAPHFORGE_QUALIFICATION_LANE ?? "local";
+    assert.ok(["local", "dev-container"].includes(lane), "Unknown installed qualification lane");
+    assert.equal(vscode.env.remoteName ?? null, lane === "dev-container" ? "dev-container" : null, `Expected the ${lane} extension host`);
     report.extensionVersion = extension.packageJSON.version;
     report.vscodeVersion = vscode.version;
     report.host = { platform: process.platform, arch: process.arch, nodeVersion: process.version, remoteName: vscode.env.remoteName ?? null };

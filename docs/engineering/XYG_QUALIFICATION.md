@@ -32,9 +32,16 @@ sizes and timings; they contain no source rows, coordinates or embedding values.
 
 ## Gates that cannot be inferred from those lanes
 
-- Remote extension-host acceptance must run the appropriate Linux VSIX in the
-  real remote host, with paint reaching the desktop client. A local container
-  process or headless Node/WASM comparison is not this proof.
+- Remote extension-host acceptance runs the appropriate Linux VSIX in the
+  real remote host, with paint reaching the desktop client. On macOS with
+  Docker Desktop, after downloading the matching Linux artifact from the same
+  candidate's platform workflow, run:
+  `GRAPHFORGE_QUALIFICATION_SUITE=xyg npm run qualify:hub-clone:dev-container -- <Linux VSIX> <evidence directory>`.
+  The existing Dev Container driver stages the Linux package for the remote
+  development host, uses bundled Core and an admitted named volume for project
+  storage, and runs the same installed paint/reopen/theme/resize scenarios.
+  The runner asserts `vscode.env.remoteName === "dev-container"` and Linux.
+  A local container process or headless Node/WASM comparison is not this proof.
 - Keyboard-only and screen-reader companion behavior needs rendered accessibility
   evidence. Source checks and theme paint acknowledgements do not certify WCAG.
 - Temporal intervals, playback, streaming/LOD, coordinated time-filtered graphs,
