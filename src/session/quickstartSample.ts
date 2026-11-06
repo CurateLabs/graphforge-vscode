@@ -266,10 +266,11 @@ export function repairQuickstartProjectFiles(
   assertContained(queryPath);
   if (fs.lstatSync(queryPath).isFile()) {
     const original = fs.readFileSync(queryPath);
-    if (
-      createHash("sha256").update(original).digest("hex") ===
-      "a72b3213d75416c9bd70f706718d84f4edb7345fe84108203af59714b18029da"
-    ) {
+    // Recognize only the exact LF and CRLF bytes shipped by platform builds.
+    if ([
+      "a72b3213d75416c9bd70f706718d84f4edb7345fe84108203af59714b18029da",
+      "3519426fb6f6197ea6390deffcca27505d2ab6bea0440a234be4af50fffffc8b",
+    ].includes(createHash("sha256").update(original).digest("hex"))) {
       const backup = `${queryPath}.pre-xyg`;
       assertContained(backup);
       if (!fs.existsSync(backup)) {
