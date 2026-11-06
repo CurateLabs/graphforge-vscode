@@ -183,4 +183,4 @@ See [`agent-interop.md`](agent-interop.md) for which of these accept structured 
 return structured results for programmatic (agent) callers, and the source-of-truth test
 (`src/test/extension.test.ts`) that asserts every command above is registered.
 
-`graphforge.exportVisualization` saves the active ready XYG view as PNG/SVG. Static time-axis export currently returns `XYG_SCENE_UNSUPPORTED_PUBLIC_AXIS`.
+`graphforge.exportVisualization` saves the active ready XYG view as PNG/SVG. Pass `{ format: "html" }` to save an acknowledged graph, chart or timeline as self-contained HTML in `visualizations/exports`; the webview also provides Save HTML. The artifact embeds the painted data and client and opens offline. Maps currently support PNG/SVG only. Static time-axis PNG/SVG export still returns `XYG_SCENE_UNSUPPORTED_PUBLIC_AXIS`. HTML captures the painted chart, without playback or cursor/range/window state.

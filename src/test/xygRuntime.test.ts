@@ -230,10 +230,16 @@ suite("XYG ownership and native composition", () => {
         mark: "line",
       },
     };
-    assert.ok(
-      composeChart(xy, time, data, 900, 600, "light").buildPayload().buffers
-        .byteLength > 0,
-    );
+    const temporalPayload = composeChart(xy, time, data, 900, 600, "light").buildPayload();
+    assert.ok(temporalPayload.buffers.byteLength > 0);
+    assert.equal(temporalPayload.spec.axes.x.kind, "time");
+    const hostile = '</script><script>globalThis.exportInjection=true</script>';
+    const html = xy.toHtml({ ...temporalPayload, spec: { ...temporalPayload.spec, title: hostile } });
+    assert.match(html, /connect-src 'none'/);
+    assert.match(html, /xy\.renderStandalone/);
+    assert.ok(html.includes(Buffer.from(temporalPayload.buffers).toString("base64")));
+    assert.ok(!html.includes(hostile), "The owner escapes hostile text in both title and spec");
+    assert.ok(html.includes("\\u003c/script\\u003e"));
     const map: ProjectVisualizationSpec = {
       ...base,
       kind: "geospatial",

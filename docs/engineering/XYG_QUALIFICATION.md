@@ -13,7 +13,7 @@ layout, paint and export. This document does not author a second result ledger.
 | Native/WASM agreement (#80) | Identical request framing and full composition-document bytes, including UUID/result-row membership, rendered bounded Scenes, stale joins and missing embedding-coordinate failures. Missing WASM, an ABI/version mismatch or unavailable native library fails the lane. |
 | Clean offline-capable package (#82) | Per-platform VSIX contains exact Core, XYG native library, browser WASM/worker, painter and notices. Registry integrities and native/WASM hashes bind the artifacts. No external Core path is configured by the installed runner. |
 | Actual platform/architecture (#82) | `XYG qualification` workflow runs Linux x64/arm64, macOS x64/arm64 and Windows x64. Every lane asserts its actual process platform before building and installs only its own platform VSIX. |
-| Installed desktop behavior (#82) | Original Arrow persistence, canonical edit/reopen, graphs/charts/maps/timelines, explicit analytical charts, no-write table-only failure, exports and explicit time-axis export limit, four themes, reduced motion, retained hidden views, split resize and saved-result reopen without rerunning its query. |
+| Installed desktop behavior (#82) | Original Arrow persistence, canonical edit/reopen, graphs/charts/maps/timelines, explicit analytical charts, no-write table-only failure, standalone HTML exports for graphs/charts/timelines and explicit map-HTML/time-axis image limits, four themes, reduced motion, retained hidden views, split resize and saved-result reopen without rerunning its query. |
 | Actionable schema failures (#80) | Table-only intent reports `XYG_TABLE_ONLY` with the Results action. Embedding coordinates are never guessed. Unknown/stale/version-mismatched schemas retain XYG's failures. |
 | Package resource bounds (#82) | At most 240 files and 256 MiB unpacked. The larger bound includes the full Core native engine. Each lane attaches its exact VSIX and value-free `installed.json`, `report.json` and `scenarios.json`. |
 
@@ -56,7 +56,7 @@ sizes and timings; they contain no source rows, coordinates or embedding values.
   the sample's UTC line chart does not stand in for them.
 - XYG currently rejects time-axis PNG/SVG export with
   `XYG_SCENE_UNSUPPORTED_PUBLIC_AXIS`. The extension exposes that limitation and
-  does not substitute a different axis. Full temporal export acceptance is open.
+  does not substitute a different axis. Graphs, charts and timelines export the acknowledged spec and buffers through XYG’s public `toHtml()` API, with its standalone client bundled at the Node exporter’s owned path. Maps have no standalone spec in this integration and reject HTML export. HTML is a snapshot of the painted chart; playback and cursor/range/window export semantics remain open. Full temporal export acceptance is open.
 - Small/medium/large/massive preparation, layout, paint, interaction, memory,
   payload and export budgets need measured scale receipts on the final package.
   The fixture corpus and the 579-node sample are not massive-data evidence.

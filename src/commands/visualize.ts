@@ -44,11 +44,13 @@ export function registerVisualizationCommands(
     ),
     vscode.commands.registerCommand(
       "graphforge.exportVisualization",
-      async () => {
+      async (args?: { format?: "html" | "images" }) => {
         try {
           const panel = XygVisualizationPanel.active();
           if (!panel) throw new Error("Open an XYG visualization first.");
-          return await panel.exportPair();
+          return args?.format === "html"
+            ? await panel.exportHtml()
+            : await panel.exportPair();
         } catch (error) {
           return reportEngineError("XYG export failed", error);
         }

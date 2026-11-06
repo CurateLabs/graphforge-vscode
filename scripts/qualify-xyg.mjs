@@ -35,7 +35,7 @@ export async function qualifyXyg(corePath, evidence, extensionRoot = root) {
     try { contracts = forge.algorithmDescriptorContracts(); }
     finally { forge.close?.(); }
     const xy = await import(pathToFileURL(path.join(extensionRoot, "dist/xyg/node/src/index.js")).href);
-    const client = await import(pathToFileURL(path.join(extensionRoot, "dist/xyg/client/index.js")).href);
+    const client = await import(pathToFileURL(path.join(extensionRoot, "dist/xyg/node/client/index.js")).href);
     const ledger = xy.graphforgeLedger();
     report.coverage = verifyXygCoverage(contracts, ledger);
     report.xyg = JSON.parse(fs.readFileSync(path.join(extensionRoot, "dist/xyg/provenance.json")));
@@ -55,9 +55,9 @@ export async function qualifyXyg(corePath, evidence, extensionRoot = root) {
     report.fixtureManifestSha256 = digest(manifestBytes);
     assert.deepEqual(manifest.contracts, contracts.map(({ verb, algorithm, resultSchemaVersion }) => ({ verb, algorithm, resultSchemaVersion })));
 
-    const wasmPath = path.join(extensionRoot, "dist/xyg/client/xyg-wasm.wasm");
+    const wasmPath = path.join(extensionRoot, "dist/xyg/node/client/xyg-wasm.wasm");
     const wasmBytes = fs.readFileSync(wasmPath);
-    const wasmManifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, "dist/xyg/client/xyg-wasm.manifest.json")));
+    const wasmManifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, "dist/xyg/node/client/xyg-wasm.manifest.json")));
     assert.equal(digest(wasmBytes), wasmManifest.sha256, "WASM artifact digest");
     assert.equal(wasmBytes.length, wasmManifest.bytes, "WASM artifact length");
     const module = await WebAssembly.compile(wasmBytes);

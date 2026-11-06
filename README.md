@@ -26,7 +26,7 @@ User-facing docs: [`docs/published/`](docs/published/) ([overview](docs/publishe
 | **Ontology** | Mode badge + entity/relation tree; Ontology Viewer webview with a helpful exploratory empty state, **Load Ontology…**, and an Advanced section (open `ontology.json`, explain mode) |
 | **Knowledge** | Inspect and create assertions: list/empty states, **Create Assertion…** (minimal fields), **Show Assertion** / **Show on Graph**, plus Advanced attach-evidence / assess-confidence / record-status commands |
 | **Results** | Interactive table in the bottom Panel; expandable nested JSON and row/cell selection linked to matching Result Graph nodes/edges |
-| **XYG visualizations** | Native graph, chart, map and timeline composition, one shared painter, explicit saved intent, and PNG/SVG exports |
+| **XYG visualizations** | Native graph, chart, map and timeline composition, one shared painter, explicit saved intent, and PNG/SVG plus offline HTML exports |
 | **Modules** | One Module Bay for default, non-removable Query/Visualize/Import modules, future GraphForge-catalog modules, and advanced side-loads |
 
 ## Requirements

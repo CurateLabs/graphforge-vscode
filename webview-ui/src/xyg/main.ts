@@ -100,6 +100,10 @@ window.addEventListener("message", async (event: MessageEvent) => {
     exportButton.disabled = !message.ready || !message.exportAvailable;
     exportButton.title = message.exportAvailable ? "Save this view as PNG and SVG"
       : "Time-axis image export is not available in this XYG build.";
+    const htmlExportButton = document.getElementById("export-html") as HTMLButtonElement;
+    htmlExportButton.disabled = !message.ready || !message.htmlExportAvailable;
+    htmlExportButton.title = message.htmlExportAvailable ? "Save this view as a self-contained HTML file"
+      : "HTML export is not available for this view.";
     if (message.title)
       document.getElementById("title")!.textContent = message.title;
     return;
@@ -112,6 +116,8 @@ window.addEventListener("message", async (event: MessageEvent) => {
     status.textContent = `${message.code}: ${message.message}`;
     status.setAttribute("role", "alert");
     chart.setAttribute("aria-busy", "false");
+    (document.getElementById("export") as HTMLButtonElement).disabled = true;
+    (document.getElementById("export-html") as HTMLButtonElement).disabled = true;
     (document.getElementById("relayout") as HTMLButtonElement).disabled = false;
     return;
   }
@@ -193,6 +199,9 @@ document
 document
   .getElementById("export")!
   .addEventListener("click", () => post("export"));
+document
+  .getElementById("export-html")!
+  .addEventListener("click", () => post("export", { format: "html" }));
 window.addEventListener("pagehide", () => {
   disposed = true;
   clearTimeout(viewportTimer);

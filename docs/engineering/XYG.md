@@ -2,7 +2,7 @@
 
 The extension uses one visualization engine and painter: XYG. Core owns queries,
 algorithms and Arrow schemas. XYG owns intent validation, composition, UUID
-joins, layout, geometry, styles, ticks, paint and PNG/SVG export. The extension
+joins, layout, geometry, styles, ticks, paint and PNG/SVG/HTML export. The extension
 resolves project files, binds explicit fields, relays typed messages and owns
 VS Code panels. There is no alternate renderer or layout fallback.
 
@@ -214,3 +214,11 @@ Inspector headings use meaningful property captions or entity identity; class
 labels remain badges. Results keeps Inspect actions within a true table cell
 and paints pinned cells over an opaque surface, including selected and hovered
 rows, so horizontally scrolled values cannot show through the controls.
+
+Graph, chart and timeline panels also provide Save HTML. The extension passes
+the exact acknowledged spec and bytes to XYG’s `toHtml()`; its standalone
+client, classic tick worker and WASM are colocated in `dist/xyg/node/client`.
+The artifact renders offline through XYG’s shared Rust tick lane. Maps retain
+PNG/SVG export until their painter payload has a standalone document contract.
+HTML exports contain the painted data and capture the chart snapshot; temporal
+playback and cursor/range/window export semantics remain unqualified.

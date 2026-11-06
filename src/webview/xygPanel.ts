@@ -276,7 +276,8 @@ export class XygVisualizationPanel implements VisualizationController {
     }
     if (message.type === "export") {
       try {
-        await this.exportPair();
+        if (message.format === "html") await this.exportHtml();
+        else await this.exportPair();
       } catch (error) {
         this.post({
           type: "notice",
@@ -393,6 +394,7 @@ export class XygVisualizationPanel implements VisualizationController {
       title: this.spec.name,
       ready: false,
       exportAvailable: this.spec.kind !== "temporal",
+      htmlExportAvailable: false,
       width: width,
       height: height,
     });
@@ -503,6 +505,7 @@ export class XygVisualizationPanel implements VisualizationController {
         message: `XYG ready · ${this.result.rowCount.toLocaleString()} result rows`,
         ready: true,
         exportAvailable: this.spec.kind !== "temporal",
+        htmlExportAvailable: !!this.payload?.spec,
         width: width,
         height: height,
       });
@@ -568,6 +571,33 @@ export class XygVisualizationPanel implements VisualizationController {
   rowsForSelection(selection: EntityInspectSelection) {
     return resultRowsForGraphSelection(this.result, selection);
   }
+  async exportHtml() {
+    if (!this.isReady || this.disposed || this.needsRender || !this.acceptedFrame)
+      throw new Error("XYG_EXPORT_NOT_READY");
+    // Geographic views currently acknowledge painter bytes without a spec.
+    // Only export payloads admitted by XYG's public standalone API.
+    if (!this.payload?.spec)
+      throw new Error("XYG_HTML_EXPORT_UNAVAILABLE: HTML export is not available for this view.");
+    const generation = this.renderGeneration;
+    const directory = path.join(this.projectRoot, "visualizations", "exports");
+    const stem = this.spec.name.replace(/[^a-zA-Z0-9_-]+/g, "-") || "visualization";
+    const htmlPath = path.join(directory, stem + ".html");
+    // Use the exact acknowledged spec and bytes, including its theme and axes.
+    let html: string;
+    try {
+      html = this.xy.toHtml({ spec: this.payload.spec, buffers: this.payload.buffer });
+    } catch (error) {
+      if (error instanceof Error && (error.message.includes("Host-neutral paint client missing") || ("code" in error && error.code === "XYG_HTML_ASSET_MISSING")))
+        throw new Error("XYG_HTML_CLIENT_MISSING: Reinstall the GraphForge extension to restore the HTML export client.");
+      throw error;
+    }
+    await fs.mkdir(directory, { recursive: true });
+    if (!this.isReady || this.disposed || this.needsRender || generation !== this.renderGeneration)
+      throw new Error("XYG_EXPORT_NOT_READY");
+    await fs.writeFile(htmlPath, html);
+    this.post({ type: "notice", message: "Saved HTML in visualizations/exports." });
+    return { htmlPath };
+  }
   async exportPair() {
     if (!this.isReady || this.disposed) throw new Error("XYG_EXPORT_NOT_READY");
     if (this.spec.kind === "result-graph") {
@@ -615,10 +645,10 @@ export class XygVisualizationPanel implements VisualizationController {
         .asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", ...parts))
         .toString();
     const config = JSON.stringify({
-      clientUri: uri("xyg", "client", "index.js"),
-      workerUri: uri("xyg", "client", "wasm-worker.js"),
-      wasmUri: uri("xyg", "client", "xyg-wasm.wasm"),
+      clientUri: uri("xyg", "node", "client", "index.js"),
+      workerUri: uri("xyg", "node", "client", "wasm-worker.js"),
+      wasmUri: uri("xyg", "node", "client", "xyg-wasm.wasm"),
     }).replace(/</g, "\\u003c");
-    return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'; worker-src ${webview.cspSource} blob:; connect-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${uri("webview-ui", "xyg.css")}"></head><body><header><h1 id="title"></h1><span id="status" role="status">Loading XYG…</span><nav aria-label="Visualization controls"><button id="fit" disabled>Fit</button><button id="relayout" disabled>Re-layout</button><button id="export" disabled>Save PNG + SVG</button></nav></header><p id="notice" role="status"></p><main id="chart" aria-label="XYG visualization"></main><script id="xyg-config" type="application/json" nonce="${nonce}">${config}</script><script type="module" nonce="${nonce}" src="${uri("webview-ui", "xyg.js")}"></script></body></html>`;
+    return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'; worker-src ${webview.cspSource} blob:; connect-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${uri("webview-ui", "xyg.css")}"></head><body><header><h1 id="title"></h1><span id="status" role="status">Loading XYG…</span><nav aria-label="Visualization controls"><button id="fit" disabled>Fit</button><button id="relayout" disabled>Re-layout</button><button id="export" disabled>Save PNG + SVG</button><button id="export-html" disabled>Save HTML</button></nav></header><p id="notice" role="status"></p><main id="chart" aria-label="XYG visualization"></main><script id="xyg-config" type="application/json" nonce="${nonce}">${config}</script><script type="module" nonce="${nonce}" src="${uri("webview-ui", "xyg.js")}"></script></body></html>`;
   }
 }
