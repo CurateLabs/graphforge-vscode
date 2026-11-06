@@ -185,6 +185,25 @@ suite("XYG air-routes integration", () => {
         );
         assert.equal(result.lifecycle.renderer, "xyg");
         instances.add(result.instanceId);
+        const htmlExport = await vscode.commands.executeCommand<any>(
+          "graphforge.exportVisualization", { format: "html" },
+        );
+        if (spec.kind === "geospatial") {
+          assert.match(htmlExport?.error ?? "", /XYG_HTML_EXPORT_UNAVAILABLE/);
+        } else {
+          assert.ok(htmlExport?.htmlPath, "Ready plot views export standalone HTML");
+          const html = fs.readFileSync(htmlExport.htmlPath, "utf8");
+          assert.match(html, /xy\.renderStandalone/);
+          assert.match(html, /connect-src 'none'/);
+          if (spec.kind === "temporal") {
+            const repeated = await vscode.commands.executeCommand<any>("graphforge.exportVisualization", { format: "html" });
+            assert.ok(repeated?.htmlPath && repeated.htmlPath !== htmlExport.htmlPath, "Repeated export preserves the first HTML file");
+            assert.equal(fs.readFileSync(htmlExport.htmlPath, "utf8"), html);
+            assert.equal(fs.readFileSync(repeated.htmlPath, "utf8"), html);
+          }
+          if (spec.kind === "temporal" && process.env.GRAPHFORGE_XYG_SCENARIOS)
+            fs.copyFileSync(htmlExport.htmlPath, path.join(path.dirname(process.env.GRAPHFORGE_XYG_SCENARIOS), "temporal.html"));
+        }
         const exported = await vscode.commands.executeCommand<any>(
           "graphforge.exportVisualization",
         );
@@ -313,6 +332,7 @@ suite("XYG air-routes integration", () => {
         fs.writeFileSync(process.env.GRAPHFORGE_XYG_SCENARIOS, JSON.stringify({
           fourViews: "passed", arrowEditReopen: "passed", themes: 4,
           retainedViews: "passed", explicitTemporalExportLimit: "passed",
+          standaloneHtmlExport: "passed",
           savedReopenWithoutQuery: "passed", resize: { wide, narrow },
         }, null, 2));
     } finally {

@@ -63,10 +63,11 @@ fs.cpSync(
   path.join(output, "node/src"),
   { recursive: true },
 );
-fs.mkdirSync(path.join(output, "client"), { recursive: true });
-for (const file of ["index.js", "standalone.js", "wasm-worker.js", "xyg-wasm.wasm", "xyg-wasm.manifest.json"])
-  fs.copyFileSync(path.join(source, "packages/xy-client/dist", file), path.join(output, "client", file));
-fs.copyFileSync(path.join(source, "packages/xy-client/package.json"), path.join(output, "client/package.json"));
+// Keep all browser assets beside the Node exporter's standalone client.
+fs.mkdirSync(path.join(output, "node/client"), { recursive: true });
+for (const file of ["index.js", "standalone.js", "wasm-worker.js", "wasm-standalone-worker.js", "xyg-wasm.wasm", "xyg-wasm.manifest.json"])
+  fs.copyFileSync(path.join(source, "packages/xy-client/dist", file), path.join(output, "node/client", file));
+fs.copyFileSync(path.join(source, "packages/xy-client/package.json"), path.join(output, "node/client/package.json"));
 fs.copyFileSync(
   path.join(source, "packages/xy-node/package.json"),
   path.join(output, "node/package.json"),

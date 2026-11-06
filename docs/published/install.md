@@ -11,7 +11,7 @@
 2. Use the bundled Node runtime and **Try the air-routes sample**. Set up Python separately only if you choose that runtime. The visible project defaults to `~/Downloads/graphforge-quickstart`.
 3. Run `queries/templates/routes-overview.cypher` and inspect the saved result.
 4. Open the saved XYG route network, route-distance chart, airport map or illustrative timeline.
-5. Use Fit, Re-layout and Save PNG + SVG. Intent and source data remain in the project.
+5. Use Fit, Re-layout, Save PNG + SVG, or Save HTML. Graphs, charts and timelines can export self-contained HTML for offline viewing. Maps currently export PNG/SVG; timeline PNG/SVG export remains unavailable. Exports include the painted data and are saved in `visualizations/exports`.
 
 This source build replaces all legacy renderers with XYG. Older visualization
 files require a new `xyg.intent/v1` intent and a rerun preserving Core Arrow;

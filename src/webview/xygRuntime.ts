@@ -154,7 +154,7 @@ export function composeChart(
         if (!Number.isFinite(value)) throw new Error("XYG_TIMESTAMP_INVALID");
         return value;
       });
-      fig.setAxis("x", { scale: "time" });
+      fig.setAxis("x", { type: "time" });
     } else if (categories) {
       x = Float64Array.from(subset.rows, (row) =>
         categories.indexOf(String(row[xName])),
