@@ -133,6 +133,6 @@ export class NodeEngineBackend implements EngineBackend {
   }
 
   async dispose(): Promise<void> {
-    // No explicit close on the Node binding today; GC handles the handle.
+    this.forge.close?.();
   }
 }

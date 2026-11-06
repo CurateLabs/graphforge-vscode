@@ -122,7 +122,7 @@ async function main() {
   try {
     phase = "install";
     const { downloadAndUnzipVSCode, runTests } = require("@vscode/test-electron");
-    const executable = await downloadAndUnzipVSCode({ version: vscodeVersion });
+    const executable = process.env.GRAPHFORGE_VSCODE_EXECUTABLE ?? await downloadAndUnzipVSCode({ version: vscodeVersion });
     const profiles = [`--extensions-dir=${extensions}`, `--user-data-dir=${userData}`];
     const cli = process.platform === "darwin"
       ? path.resolve(path.dirname(executable), "..", "Resources", "app", "out", "cli.js")

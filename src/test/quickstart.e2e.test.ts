@@ -43,7 +43,7 @@ suite("XYG air-routes integration", () => {
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await vscode.commands.executeCommand("graphforge.closeProject");
-      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
     }
   });
   test("Core query → persisted Arrow → independent XYG graph/chart/map/timeline", async function () {
@@ -284,6 +284,10 @@ suite("XYG air-routes integration", () => {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await vscode.commands.executeCommand("graphforge.closeProject");
       await vscode.commands.executeCommand("graphforge.openProject", root);
+      // Keep both groups populated: VS Code may collapse an empty split group,
+      // making both requested ratios produce the same actual graph viewport.
+      const anchor = await vscode.workspace.openTextDocument(vscode.Uri.file(queryPath));
+      await vscode.window.showTextDocument(anchor, { viewColumn: vscode.ViewColumn.One, preview: false });
       const saved = { path: graphSpec.path, waitForReady: true };
       const reopenedSaved = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", saved);
       assert.equal(reopenedSaved.lifecycle?.type, "graphforge/renderReady");
@@ -309,7 +313,7 @@ suite("XYG air-routes integration", () => {
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await vscode.commands.executeCommand("graphforge.closeProject");
-      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
     }
   });
 });

@@ -42,6 +42,13 @@ sizes and timings; they contain no source rows, coordinates or embedding values.
   storage, and runs the same installed paint/reopen/theme/resize scenarios.
   The runner asserts `vscode.env.remoteName === "dev-container"` and Linux.
   A local container process or headless Node/WASM comparison is not this proof.
+  Candidate `331fddd` passed this actual remote lane in VS Code 1.142.0 with
+  Dev Containers 0.469.0: Linux x64 extension host, macOS arm64 desktop and
+  explicitly selected Docker `linux/amd64`. Both installed scenarios passed,
+  including saved reopen and distinct split-editor viewport paint generations.
+  The test harness kept both editor groups populated for the resize check.
+  [Bounded remote receipt](evidence/xyg-remote-qualification.json) records the
+  package hash, platform distinction and remaining acceptance boundaries.
 - Keyboard-only and screen-reader companion behavior needs rendered accessibility
   evidence. Source checks and theme paint acknowledgements do not certify WCAG.
 - Temporal intervals, playback, streaming/LOD, coordinated time-filtered graphs,
