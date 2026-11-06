@@ -195,6 +195,12 @@ suite("XYG air-routes integration", () => {
           const html = fs.readFileSync(htmlExport.htmlPath, "utf8");
           assert.match(html, /xy\.renderStandalone/);
           assert.match(html, /connect-src 'none'/);
+          if (spec.kind === "temporal") {
+            const repeated = await vscode.commands.executeCommand<any>("graphforge.exportVisualization", { format: "html" });
+            assert.ok(repeated?.htmlPath && repeated.htmlPath !== htmlExport.htmlPath, "Repeated export preserves the first HTML file");
+            assert.equal(fs.readFileSync(htmlExport.htmlPath, "utf8"), html);
+            assert.equal(fs.readFileSync(repeated.htmlPath, "utf8"), html);
+          }
           if (spec.kind === "temporal" && process.env.GRAPHFORGE_XYG_SCENARIOS)
             fs.copyFileSync(htmlExport.htmlPath, path.join(path.dirname(process.env.GRAPHFORGE_XYG_SCENARIOS), "temporal.html"));
         }

@@ -581,7 +581,6 @@ export class XygVisualizationPanel implements VisualizationController {
     const generation = this.renderGeneration;
     const directory = path.join(this.projectRoot, "visualizations", "exports");
     const stem = this.spec.name.replace(/[^a-zA-Z0-9_-]+/g, "-") || "visualization";
-    const htmlPath = path.join(directory, stem + ".html");
     // Use the exact acknowledged spec and bytes, including its theme and axes.
     let html: string;
     try {
@@ -592,11 +591,33 @@ export class XygVisualizationPanel implements VisualizationController {
       throw error;
     }
     await fs.mkdir(directory, { recursive: true });
-    if (!this.isReady || this.disposed || this.needsRender || generation !== this.renderGeneration)
-      throw new Error("XYG_EXPORT_NOT_READY");
-    await fs.writeFile(htmlPath, html);
-    this.post({ type: "notice", message: "Saved HTML in visualizations/exports." });
-    return { htmlPath };
+    for (let attempt = 1; ; attempt++) {
+      if (!this.isReady || this.disposed || this.needsRender || generation !== this.renderGeneration)
+        throw new Error("XYG_EXPORT_NOT_READY");
+      const htmlPath = path.join(directory, stem + (attempt === 1 ? "" : `-${attempt}`) + ".html");
+      let file: fs.FileHandle;
+      try {
+        file = await fs.open(htmlPath, "wx");
+      } catch (error) {
+        if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") continue;
+        throw error;
+      }
+      try {
+        try {
+          if (!this.isReady || this.disposed || this.needsRender || generation !== this.renderGeneration)
+            throw new Error("XYG_EXPORT_NOT_READY");
+          await file.writeFile(html);
+        } finally {
+          await file.close();
+        }
+      } catch (error) {
+        // Remove only the file this invocation exclusively reserved.
+        await fs.unlink(htmlPath).catch(() => undefined);
+        throw error;
+      }
+      this.post({ type: "notice", message: "Saved HTML in visualizations/exports." });
+      return { htmlPath };
+    }
   }
   async exportPair() {
     if (!this.isReady || this.disposed) throw new Error("XYG_EXPORT_NOT_READY");
