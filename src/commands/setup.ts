@@ -213,7 +213,7 @@ async function runSetupNativeBinding(context: vscode.ExtensionContext, session: 
       const installRoot = fs.mkdtempSync(path.join(context.globalStorageUri.fsPath, "native-"));
       const token = randomUUID();
       const task = new vscode.Task({ type: "graphforge-native-install", token }, vscode.TaskScope.Global,
-        "Install GraphForge Core", "GraphForge", new vscode.ShellExecution("npm", ["install", "--prefix", installRoot, spec]));
+        "Install GraphForge Core", "GraphForge", new vscode.ShellExecution("npm", ["install", "--include=optional", "--prefix", installRoot, spec]));
       task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, panel: vscode.TaskPanelKind.Dedicated };
       try {
         const exitCode = await new Promise<number | undefined>((resolve, reject) => {
