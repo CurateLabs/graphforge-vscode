@@ -67,6 +67,8 @@ test("XYG remote lane uses bundled Core and an admitted temporary volume", () =>
   assert.match(config.postCreateCommand, /mocha@11\.8\.0/);
   assert.doesNotMatch(config.postCreateCommand, /@curatelabs\/graphforge/);
   assert.equal(config.remoteEnv.TMPDIR, "/gfwork");
+  assert.equal(config.remoteEnv.GRAPHFORGE_XYG_MOCHA, "/gfwork/test-runner/node_modules/mocha");
+  assert.equal(config.remoteEnv.NODE_PATH, undefined);
   assert.equal(config.remoteEnv.GRAPHFORGE_NATIVE_MODULE, "/workspaces/gfq-test/extensions/graphforge-linux-arm64/dist/core/node_modules/@curatelabs/graphforge");
   assert.equal(config.remoteEnv.GRAPHFORGE_XYG_SOURCE, "/workspaces/gfq-test/test-source");
   assert.equal(config.remoteEnv.GRAPHFORGE_QUALIFICATION_LANE, "dev-container");

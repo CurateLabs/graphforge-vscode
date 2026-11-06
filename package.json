@@ -561,7 +561,7 @@
         "graphforge.nativeModulePath": {
           "type": "string",
           "default": "",
-          "description": "Optional absolute path to a built @curatelabs/graphforge package (directory containing index.js). Leave empty to resolve from node_modules or sibling monorepo."
+          "description": "Optional absolute path to a built @curatelabs/graphforge package (directory containing index.js). Leave empty to use bundled Core, then node_modules or a sibling build."
         },
         "graphforge.openResultGraphOnQuery": {
           "type": "boolean",

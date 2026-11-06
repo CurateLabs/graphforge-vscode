@@ -38,7 +38,7 @@ function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, 
       GRAPHFORGE_QUALIFICATION_REJECT_BIND: `${workspace}/rejected-bind`,
       ...(xygSuite ? {
         TMPDIR: "/gfwork",
-        NODE_PATH: "/gfwork/test-runner/node_modules",
+        GRAPHFORGE_XYG_MOCHA: "/gfwork/test-runner/node_modules/mocha",
         GRAPHFORGE_REQUIRE_NATIVE: "1",
         GRAPHFORGE_REDUCED_MOTION_REQUIRED: "1",
         GRAPHFORGE_XYG_REPORT: `${workspace}/report.json`,

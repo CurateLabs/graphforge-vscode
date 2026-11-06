@@ -8,7 +8,7 @@
 ## Quick start
 
 1. Open GraphForge's Get Started view and follow Environment → Project → Query → Result → Visualize.
-2. Set up a Core runtime, then use **Try the air-routes sample**. The visible project defaults to `~/Downloads/graphforge-quickstart`.
+2. Use the bundled Node runtime and **Try the air-routes sample**. Set up Python separately only if you choose that runtime. The visible project defaults to `~/Downloads/graphforge-quickstart`.
 3. Run `queries/templates/routes-overview.cypher` and inspect the saved result.
 4. Open the saved XYG route network, route-distance chart, airport map or illustrative timeline.
 5. Use Fit, Re-layout and Save PNG + SVG. Intent and source data remain in the project.
@@ -16,8 +16,8 @@
 This source build replaces all legacy renderers with XYG. Older visualization
 files require a new `xyg.intent/v1` intent and a rerun preserving Core Arrow;
 opening them never rewrites the original file. Install a VSIX built for your
-extension host's OS and architecture. XYG is bundled; a separate Core runtime
-is still required.
+extension host's OS and architecture. Both XYG and the exact Node Core runtime
+are bundled; no separate Node runtime installation is required.
 
 The Python notebook and Streamlit app use GraphForge and XYG directly. Their
 source installation commands are in the copied project; XYG's package cohort

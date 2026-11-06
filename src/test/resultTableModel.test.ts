@@ -89,6 +89,15 @@ suite("result table ↔ graph linking", () => {
     );
   });
 
+  test("native membership overrides repeated relationship UUID/endpoints without widening rows", () => {
+    const repeated = { ...result, rows: [result.rows[0], result.rows[0]], rowCount: 2 };
+    const selection = { kind: "edge" as const, item: payload.edges[0] };
+    assert.deepEqual(resultRowsForGraphSelection(repeated, selection), [0, 1]);
+    assert.deepEqual(resultRowsForGraphSelection(repeated, selection, [0]), [0]);
+    assert.deepEqual(resultRowsForGraphSelection(repeated, selection, []), []);
+    assert.deepEqual(resultRowsForGraphSelection(repeated, selection, [-1, 2]), []);
+  });
+
   test("offers node and edge Entity Inspect actions from a result row", () => {
     assert.deepEqual(resultEntityLinks(result, payload, 0), [
       { kind: "node", id: "ATL", label: "Source" },

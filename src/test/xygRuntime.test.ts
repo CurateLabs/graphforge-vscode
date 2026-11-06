@@ -15,6 +15,7 @@ import {
   resultEntitiesFromXygRow,
   requireVisualComposition,
   graphResultId,
+  resultRowsFromXygChart,
 } from "../webview/xygRuntime";
 import {
   createResultGraphSpec,
@@ -40,9 +41,14 @@ suite("XYG ownership and native composition", () => {
       assert.equal(input.base, undefined);
       assert.ok("layers" in input);
       assert.equal(input.layers[0].resultId, graphResultId(spec, result));
-      const c = xy.composeGraphForge(input);
+      const c = xy.composeGraphForge({ ...input, layers: input.layers.map(layer => ({ ...layer, rows: Array.from({ length: result.rowCount }, (_, i) => result.rowCount - 1 - i) })) });
       assert.equal(c.kind, intent);
-      assert.ok(xy.graphforgeChart(c, { width: 480, height: 320 }).buildPayload().buffers.byteLength > 0);
+      const fig = xy.graphforgeChart(c, { width: 480, height: 320 });
+      assert.ok(fig.buildPayload().buffers.byteLength > 0);
+      const index = intent === "parallel-coordinates" ? c.vectors.dimensions - 1 : 1;
+      const rows = intent === "parallel-coordinates" ? c.vectors.resultRows : c.chart.resultRows;
+      assert.deepEqual(resultRowsFromXygChart(fig, c, { trace: 0, index }, result.rowCount), [rows[1]]);
+      assert.deepEqual(resultRowsFromXygChart(fig, c, { trace: 999, index }, result.rowCount), []);
     }
   });
   test("derived and aggregate picks use bounded native result provenance", () => {

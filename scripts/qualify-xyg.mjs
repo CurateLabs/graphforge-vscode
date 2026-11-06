@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyXygCoverage } from "./xyg-coverage.mjs";
 
@@ -11,11 +12,18 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
+/** Read the bytes once and verify that exact snapshot against the owning Git pin. */
+export function readPinnedFixture(source, revision, relative) {
+  const bytes = fs.readFileSync(path.join(source, relative));
+  const pinned = execFileSync("git", ["show", `${revision}:${relative}`], { cwd: source, maxBuffer: 64 * 1024 * 1024 });
+  assert.equal(digest(bytes), digest(pinned), "Arrow fixture differs from the pinned XYG tree");
+  return bytes;
+}
+
 export async function qualifyXyg(corePath, evidence, extensionRoot = root) {
   fs.mkdirSync(evidence, { recursive: true });
   // Reuse the owner's hash-bound engine-produced corpus. Do not reauthor algorithm
   // calls, schemas or dispositions here. Live contracts must agree with its versions.
-  const work = path.join(root, "vendor/xyg/tests/fixtures/graphforge/results-0.6.0-rc.5");
   const report = { status: "running", sourceHead: process.env.GITHUB_SHA ?? null, platform: `${process.platform}-${process.arch}`, scope: "Core live catalog and real Arrow corpus; bundled native/WASM composition equivalence, not browser paint or full release acceptance" };
   const started = performance.now();
   let disposeWasm;
@@ -32,9 +40,15 @@ export async function qualifyXyg(corePath, evidence, extensionRoot = root) {
     report.coverage = verifyXygCoverage(contracts, ledger);
     report.xyg = JSON.parse(fs.readFileSync(path.join(extensionRoot, "dist/xyg/provenance.json")));
     assert.equal(report.xyg.dirty, false, "Qualification requires clean pinned XYG sources");
-    const manifestBytes = fs.readFileSync(path.join(work, "manifest.json"));
+    const source = path.join(root, "vendor/xyg");
+    const fixtures = new Map();
+    const readFixture = relative => {
+      if (!fixtures.has(relative)) fixtures.set(relative, readPinnedFixture(source, report.xyg.revision, `tests/fixtures/graphforge/${relative}`));
+      return fixtures.get(relative);
+    };
+    const manifestBytes = readFixture("results-0.6.0-rc.5/manifest.json");
     const manifest = JSON.parse(manifestBytes);
-    const generation = JSON.parse(fs.readFileSync(path.join(work, "generation.json")));
+    const generation = JSON.parse(readFixture("results-0.6.0-rc.5/generation.json"));
     assert.equal(digest(manifestBytes), generation.manifestSha256, "XYG-owned fixture provenance");
     assert.deepEqual(Object.keys(manifest.failures), [], "Every live Core contract must produce a fixture");
     report.fixtureCoreVersion = manifest.graphforgeVersion;
@@ -60,7 +74,7 @@ export async function qualifyXyg(corePath, evidence, extensionRoot = root) {
       assert.equal(w.xyg_wasm_graphforge_compose(handle, 0, request.byteLength), 0, "WASM compose");
       return new Uint8Array(w.memory.buffer, w.xyg_wasm_output_ptr(handle) >>> 0, w.xyg_wasm_output_len(handle) >>> 0).slice();
     };
-    const read = name => fs.readFileSync(path.join(work, `${name}.arrow`));
+    const read = name => readFixture(`results-0.6.0-rc.5/${name}.arrow`);
     report.cases = [];
     const compare = (schema, intent, input, expectedCode) => {
       const request = xy.encodeGraphForgeRequest(input);
@@ -104,11 +118,11 @@ export async function qualifyXyg(corePath, evidence, extensionRoot = root) {
       compare("table-only", name, { base: { tables: [read(name)], generation: base.generation } }, "GF_BASE_SCHEMA");
     compare("node-score", "unsupported-schema-version", {
       base: { tables: [read(base.nodes), read(base.edges)], generation: base.generation },
-      layers: [{ result: fs.readFileSync(path.join(root, "vendor/xyg/tests/fixtures/graphforge/derived/pagerank-schema-v2.arrow")), intent: "graph", generation: base.generation }],
+      layers: [{ result: readFixture("derived/pagerank-schema-v2.arrow"), intent: "graph", generation: base.generation }],
     }, "GF_RESULT_SCHEMA_VERSION");
     compare("embedding", "explicit-coordinates", { layers: [{
-      result: fs.readFileSync(path.join(root, "vendor/xyg/tests/fixtures/graphforge/results/node2vec.arrow")), intent: "embedding-coordinates",
-      coordinates: fs.readFileSync(path.join(root, "vendor/xyg/tests/fixtures/graphforge/derived/node2vec-coordinates.arrow")),
+      result: readFixture("results/node2vec.arrow"), intent: "embedding-coordinates",
+      coordinates: readFixture("derived/node2vec-coordinates.arrow"),
     }] });
     compare("node-score", "graph", { base: { tables: [read(base.nodes), read(base.edges)], generation: base.generation }, layers: [{ result: read("pagerank"), intent: "graph", generation: manifest.bases.dag.generation }] }, "GF_COMPOSE_GENERATION_STALE");
     report.status = "passed";

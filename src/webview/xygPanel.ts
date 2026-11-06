@@ -17,14 +17,14 @@ import {
   type VisualizationController,
   type VisualizationKind,
 } from "./visualizationInstanceRegistry";
-import { loadXyg, graphInput, composeChart, composeMap, resultEntitySelection, sameArrowResult, resultRowsFromXygPick, resultEntitiesFromXygRow, requireVisualComposition, graphResultId } from "./xygRuntime";
+import { loadXyg, graphInput, composeChart, composeMap, resultEntitySelection, sameArrowResult, resultRowsFromXygPick, resultRowsFromXygChart, resultEntitiesFromXygRow, requireVisualComposition, graphResultId } from "./xygRuntime";
 import { resultRowsForGraphSelection } from "./resultTableModel";
 
 const READY_TIMEOUT_MS = 60000;
 
 export class XygVisualizationPanel implements VisualizationController {
   private static readonly selection = new vscode.EventEmitter<
-    EntityInspectSelection & { source: QueryResult; projectRoot: string }
+    EntityInspectSelection & { source: QueryResult; projectRoot: string; rowIndices?: number[] }
   >();
   static readonly onDidSelect = XygVisualizationPanel.selection.event;
   private static readonly rowSelection = new vscode.EventEmitter<{ source: QueryResult; projectRoot: string; rowIndices: number[] }>();
@@ -40,6 +40,7 @@ export class XygVisualizationPanel implements VisualizationController {
   private payload: any;
   private figure: any;
   private composition: any;
+  private resultId: string | undefined;
   private xy: any;
   private selected: string[] = [];
   private frame = 0;
@@ -291,17 +292,23 @@ export class XygVisualizationPanel implements VisualizationController {
         message.index < 0
       )
         return;
-      if (this.spec.kind === "result-graph" && this.payload) {
+      if (this.spec.kind === "result-graph" && (this.payload || this.composition)) {
         this.composition ??= this.xy.composeGraphForge(
           graphInput(this.spec, this.result, this.base),
         );
+        if (this.composition.kind !== "graph") {
+          const rowIndices = resultRowsFromXygChart(this.figure, this.composition, message, this.result.rowCount);
+          if (rowIndices.length)
+            XygVisualizationPanel.rowSelection.fire({ source: this.result, projectRoot: this.projectRoot, rowIndices });
+          return;
+        }
         const identity = this.xy.graphforgePick(
           this.payload,
           this.composition,
           { trace: message.trace, index: message.index },
         );
-        const rowIndices = resultRowsFromXygPick(identity, graphResultId(this.spec, this.result), this.result.rowCount);
-        if (rowIndices.length)
+        const rowIndices = resultRowsFromXygPick(identity, this.resultId ?? "", this.result.rowCount);
+        if (rowIndices.length && !identity?.uuid)
           XygVisualizationPanel.rowSelection.fire({ source: this.result, projectRoot: this.projectRoot, rowIndices });
         if (
           identity?.uuid &&
@@ -316,9 +323,11 @@ export class XygVisualizationPanel implements VisualizationController {
             item,
             source: this.result,
             projectRoot: this.projectRoot,
+            ...(this.spec.intent ? { rowIndices } : {}),
           } as EntityInspectSelection & {
             source: QueryResult;
             projectRoot: string;
+          rowIndices?: number[];
           });
           this.selected = [identity.uuid];
           this.post({
@@ -377,6 +386,7 @@ export class XygVisualizationPanel implements VisualizationController {
     const { signal, context } = this.lifecycle.beginRender();
     const generation = context.renderGeneration;
     this.composition = undefined;
+    this.resultId = undefined;
     this.post({
       type: "status",
       message: "Preparing XYG…",
@@ -401,6 +411,7 @@ export class XygVisualizationPanel implements VisualizationController {
           this.base,
           this.selected,
         );
+        this.resultId = "layers" in input ? input.layers[0].resultId : undefined;
         if (this.spec.intent) this.composition = this.xy.composeGraphForge(input);
         if (this.composition) requireVisualComposition(this.composition);
         if (this.composition && this.composition.kind !== "graph") {
@@ -546,7 +557,7 @@ export class XygVisualizationPanel implements VisualizationController {
     )
       return { nodeIds: [], edgeIds: [] };
     const selection = this.spec.intent && this.xy
-      ? resultEntitiesFromXygRow(this.composition ??= this.xy.composeGraphForge(graphInput(this.spec, this.result, this.base)), graphResultId(this.spec, this.result), rowIndex)
+      ? resultEntitiesFromXygRow(this.composition ??= this.xy.composeGraphForge(graphInput(this.spec, this.result, this.base)), this.resultId ??= graphResultId(this.spec, this.result), rowIndex)
       : resultEntitySelection(result.rows[rowIndex], column);
     const hadSelection = this.selected.length > 0;
     this.selected = [...selection.nodeIds, ...selection.edgeIds];

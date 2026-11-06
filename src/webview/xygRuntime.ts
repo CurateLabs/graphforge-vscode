@@ -279,6 +279,24 @@ export function resultRowsFromXygPick(identity: any, resultId: string, rowCount:
   return [...rows].sort((a, b) => a - b);
 }
 
+/** Coordinate a chart hit using XYG's authored trace identity and native result-row map. */
+export function resultRowsFromXygChart(figure: any, composition: any, hit: { trace: number; index: number }, rowCount: number): number[] {
+  if (!Number.isInteger(hit.trace) || !Number.isInteger(hit.index) || hit.trace < 0 || hit.index < 0) return [];
+  const trace = figure?.traces?.[hit.trace];
+  if (!trace) return [];
+  let row;
+  if (composition?.kind === "bar-chart") row = composition.chart.resultRows[hit.index];
+  else if (composition?.kind === "parallel-coordinates" || composition?.kind === "scatter") {
+    // A parallel-coordinate source row has several rendered segments. The
+    // XYG trace's tooltip identity names the UUID for the exact picked segment.
+    const id = trace.tooltip_rows?.[hit.index]?.id;
+    const source = composition.vectors ?? composition.points;
+    const index = typeof id === "string" ? source.uuid.indexOf(id) : -1;
+    if (index >= 0) row = source.resultRows[index];
+  }
+  return Number.isSafeInteger(row) && row >= 0 && row < rowCount ? [row] : [];
+}
+
 /** Select only persisted UUIDs belonging to XYG's source-row membership. */
 export function resultEntitiesFromXygRow(composition: any, resultId: string, row: number) {
   const nodes = new Set<string>(), edges = new Set<string>();

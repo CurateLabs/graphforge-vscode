@@ -15,7 +15,9 @@ const assetAbort = new AbortController();
 const client = import(/* @vite-ignore */ config.clientUri);
 const post = (type: string, extra: Record<string, unknown> = {}) =>
   vscode.postMessage({ type, ...context, ...extra });
-const tickWorker = () => workerReady ??= (async () => {
+const tickWorker = () => {
+  if (workerReady) return workerReady;
+  const pending = (async () => {
   const xy = await client;
   const [source, wasm] = await Promise.all([config.workerUri, config.wasmUri].map(async uri => {
     const response = await fetch(uri, { signal: assetAbort.signal });
@@ -37,7 +39,11 @@ const tickWorker = () => workerReady ??= (async () => {
     await worker?.dispose();
     throw error;
   } finally { URL.revokeObjectURL(url); }
-})();
+  })();
+  workerReady = pending;
+  void pending.catch(() => { if (workerReady === pending) workerReady = undefined; });
+  return pending;
+};
 const motionChanged = () => post("motionPreference", { reducedMotion: motionPreference.matches });
 motionPreference.addEventListener("change", motionChanged);
 const nextFrame = () =>

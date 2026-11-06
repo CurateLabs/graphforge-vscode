@@ -1,4 +1,6 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 import * as vscode from "vscode";
 import {
   CoreReport,
@@ -94,7 +96,7 @@ export function registerSetup(
     ),
 
     vscode.commands.registerCommand("graphforge.setupNativeBinding", async () => {
-      await runSetupNativeBinding(session);
+      await runSetupNativeBinding(context, session);
     }),
 
     vscode.commands.registerCommand("graphforge.initializeProjectHere", async () => {
@@ -153,7 +155,7 @@ type BindingChoice = {
   action: "link" | "path" | "install";
 };
 
-async function runSetupNativeBinding(session: GraphForgeSession): Promise<void> {
+async function runSetupNativeBinding(context: vscode.ExtensionContext, session: GraphForgeSession): Promise<void> {
   const sibling = detectSiblingBindingPath();
   const choices: BindingChoice[] = [];
   if (sibling) {
@@ -170,7 +172,7 @@ async function runSetupNativeBinding(session: GraphForgeSession): Promise<void> 
   });
   choices.push({
     label: "$(cloud-download) Install @curatelabs/graphforge from npm",
-    detail: "Runs npm install in a terminal",
+    detail: "Install and select a Core version in extension-managed storage",
     action: "install",
   });
 
@@ -207,12 +209,29 @@ async function runSetupNativeBinding(session: GraphForgeSession): Promise<void> 
         return;
       }
       const spec = npmEngineSpec(version);
-      const terminal = vscode.window.createTerminal("GraphForge Setup");
-      terminal.show();
-      terminal.sendText(`npm install ${spec}`);
-      void vscode.window.showInformationMessage(
-        `GraphForge: running npm install ${spec} — rerun Check Environment once it finishes.`,
-      );
+      fs.mkdirSync(context.globalStorageUri.fsPath, { recursive: true });
+      const installRoot = fs.mkdtempSync(path.join(context.globalStorageUri.fsPath, "native-"));
+      const token = randomUUID();
+      const task = new vscode.Task({ type: "graphforge-native-install", token }, vscode.TaskScope.Global,
+        "Install GraphForge Core", "GraphForge", new vscode.ShellExecution("npm", ["install", "--prefix", installRoot, spec]));
+      task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, panel: vscode.TaskPanelKind.Dedicated };
+      try {
+        const exitCode = await new Promise<number | undefined>((resolve, reject) => {
+          const listener = vscode.tasks.onDidEndTaskProcess(event => {
+            if (event.execution.task.definition.token !== token) return;
+            listener.dispose();
+            resolve(event.exitCode);
+          });
+          context.subscriptions.push(listener);
+          void Promise.resolve(vscode.tasks.executeTask(task)).catch(error => { listener.dispose(); reject(error); });
+        });
+        if (exitCode !== 0) throw new Error("Core installation did not complete successfully.");
+      } catch {
+        fs.rmSync(installRoot, { recursive: true, force: true });
+        void vscode.window.showErrorMessage("GraphForge: Core installation failed or was cancelled. The previously selected runtime is unchanged; see the installation task for details.");
+        break;
+      }
+      await applyNativeModulePath(session, path.join(installRoot, "node_modules/@curatelabs/graphforge"));
       break;
     }
   }

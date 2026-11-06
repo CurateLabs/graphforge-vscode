@@ -289,7 +289,10 @@ export function resolveResultEntitySelection(
 export function resultRowsForGraphSelection(
   result: QueryResult,
   selection: GraphSelection,
+  nativeRows?: readonly number[],
 ): number[] {
+  if (nativeRows !== undefined)
+    return [...new Set(nativeRows.filter(row => Number.isSafeInteger(row) && row >= 0 && row < result.rowCount))];
   const rows: number[] = [];
   const itemKeys =
     selection.kind === "node"

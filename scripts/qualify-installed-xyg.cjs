@@ -28,7 +28,7 @@ exports.run = async () => {
     report.coreVersion = require(process.env.GRAPHFORGE_NATIVE_MODULE).version();
     assert.equal(report.coreVersion, report.requestedCore);
     await extension.activate();
-    const Mocha = require("mocha");
+    const Mocha = require(process.env.GRAPHFORGE_XYG_MOCHA ?? "mocha");
     report.tests = [];
     const mocha = new Mocha({ ui: "tdd", timeout: 600000, reporter: function SafeReporter(runner) {
       runner.on("pass", test => report.tests.push({ name: test.fullTitle(), status: "passed", durationMs: test.duration }));
@@ -89,7 +89,7 @@ async function main() {
     await qualifyXyg(core, evidence, installed);
     await runTests({
       vscodeExecutablePath: executable, extensionDevelopmentPath: installed, extensionTestsPath: __filename,
-      launchArgs: [...profiles, "--no-sandbox", "--sync", "off", "--disable-extension", "GitHub.copilot-chat", "--skip-welcome", "--skip-release-notes", "--force-prefers-reduced-motion", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"],
+      launchArgs: [...profiles, ...(process.env.CI ? ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] : []), "--no-sandbox", "--sync", "off", "--disable-extension", "GitHub.copilot-chat", "--skip-welcome", "--skip-release-notes", "--force-prefers-reduced-motion", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"],
       extensionTestsEnv: { ELECTRON_RUN_AS_NODE: undefined, GRAPHFORGE_NATIVE_MODULE: core, GRAPHFORGE_REQUIRE_NATIVE: "1", GRAPHFORGE_REDUCED_MOTION_REQUIRED: "1", GRAPHFORGE_XYG_INSTALLED: installed, GRAPHFORGE_XYG_SOURCE: process.cwd(), GRAPHFORGE_XYG_REPORT: reportPath, GRAPHFORGE_XYG_SCENARIOS: path.join(evidence, "scenarios.json") },
     });
     assert.equal(JSON.parse(fs.readFileSync(reportPath)).status, "passed");

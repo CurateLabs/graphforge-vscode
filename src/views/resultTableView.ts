@@ -37,8 +37,10 @@ export class ResultTableViewProvider
     private readonly session: GraphForgeSession,
   ) {
     this.graphSelectionDisposable = vscode.Disposable.from(XygVisualizationPanel.onDidSelect((selection) => {
-      if (!this.state || this.state.source !== selection.source) return;
-      const rowIndices = resultRowsForGraphSelection(this.state.result, selection);
+      if (!this.state || this.state.source !== selection.source || this.session.project?.rootPath !== selection.projectRoot) return;
+      const rowIndices = resultRowsForGraphSelection(this.state.result, selection, selection.rowIndices);
+      if (selection.rowIndices && rowIndices.length === 0)
+        this.post({ type: "graphforge/highlightResultRows", rowIndices });
       if (rowIndices.length === 0) return;
       void this.reveal();
       this.post({ type: "graphforge/highlightResultRows", rowIndices });
