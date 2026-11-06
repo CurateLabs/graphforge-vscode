@@ -271,6 +271,8 @@ export const DEFAULT_BELIEF_POLICY: BeliefPolicySettings = {
 export interface GraphForgeNative {
   path: string | null;
   ontologyMode: string;
+  /** Releases project handles; optional for compatibility with older bindings. */
+  close?(): void;
   execute(cypher: string, params?: Record<string, unknown>): Buffer;
   /** Module manifests registered by GraphForge itself (optional on older bindings). */
   moduleCatalog?(): unknown[];

@@ -1,5 +1,11 @@
 # Testing
 
+## XYG packaged and schema qualification (#80, #82, #90)
+
+See [the acceptance matrix](XYG_QUALIFICATION.md) for the required live Core ledger
+guard, real result corpus, native/WASM comparisons, per-platform installed VSIX
+lanes, reproduction commands and the separately outstanding release gates.
+
 ## Packaged Hub clone storage qualification (#94)
 
 The existing CI workflow has an opt-in `qualify_hub_clone` dispatch input. It builds

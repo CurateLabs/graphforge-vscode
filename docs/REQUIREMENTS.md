@@ -14,7 +14,7 @@ See [ADR-0006](engineering/adrs/0006-xyg-only-visualization.md) and the [XYG con
 |---|---|---|---|
 | NFR-1 | Compatibility | VS Code `^1.96`, Node `>=20` | Aligns with engine Node bindings. |
 | NFR-2 | Correctness boundary | No reimplementation of Cypher/verb/epistemic semantics in the extension (Node **or** Python path) | Engine is source of truth. |
-| NFR-3 | Portability | Native addon resolved via optional peer, config path, or sibling monorepo | Dev and CI can work without published npm binary. |
+| NFR-3 | Portability | Each platform VSIX bundles exact, lockfile-bound Core and XYG native packages plus the matching browser WASM/client cohort. Core resolves from an explicit config override, the bundle, node_modules, then a sibling build. | A clean install works without a separately configured Node binding; each supported platform is qualified independently. |
 | NFR-4 | License | Apache-2.0, publisher CurateLabsAI | Matches GraphForge engine. |
 | NFR-5 | Default runtime | `@curatelabs/graphforge` remains the global default for Node-ish and ambiguous workspaces; Python is preferred in `auto` only for Python-first workspaces (or as a fallback when Node is unavailable), and an explicit `graphforge.runtime` setting always overrides project-kind detection | Issue #12 constraint from product. |
 | NFR-6 | Fail-closed dual runtime | When neither runtime is usable, error messages and recovery actions must cover both setup paths | Issue #12 — no dead-end failures. |

@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 import type { ProjectVisualizationSpec } from "../session/visualizationRegistry";
 import type { QueryResult } from "../session/types";
 
@@ -57,19 +58,20 @@ export function graphInput(
       "XYG_ARROW_REQUIRED: Open the source query and run it again to save original Core Arrow results. The JSON result remains available as a table.",
     );
   if (spec.intent) {
-    if (!base?.ipc)
+    if ((spec.intent === "graph" || base) && !base?.ipc)
       throw new Error(
         "XYG_BASE_REQUIRED: Provide a saved canonical base graph for the analytical layer.",
       );
-    if (!base.generationUuid || !result.generationUuid)
+    if (base && (!base.generationUuid || !result.generationUuid))
       throw new Error(
         "XYG_GENERATION_REQUIRED: Regenerate the base graph and analytical result with generation identity.",
       );
     return {
-      base: { tables: [base.ipc], generation: base.generationUuid },
+      ...(base?.ipc ? { base: { tables: [base.ipc], generation: base.generationUuid } } : {}),
       layers: [
         {
           result: result.ipc,
+          resultId: graphResultId(spec, result),
           intent: spec.intent,
           generation: result.generationUuid,
         },
@@ -81,6 +83,11 @@ export function graphInput(
     base: { tables: [result.ipc], generation: result.generationUuid },
     select: selected,
   };
+}
+
+/** Opaque, bounded XYG identity bound to the source reference, generation and exact Arrow. */
+export function graphResultId(spec: ProjectVisualizationSpec, result: QueryResult): string {
+  return `result:${createHash("sha256").update(spec.result).update("\0").update(result.generationUuid ?? "").update("\0").update(result.ipc ?? new Uint8Array()).digest("hex")}`;
 }
 
 /** Exact Arrow bytes and generation identify an unchanged saved graph source. */
@@ -224,9 +231,18 @@ export function validateVisualization(
   result: QueryResult,
   base?: QueryResult,
 ): void {
-  if (spec.kind === "result-graph") xy.composeGraphForge(graphInput(spec, result, base));
+  if (spec.kind === "result-graph") {
+    const c = xy.composeGraphForge(graphInput(spec, result, base));
+    requireVisualComposition(c);
+  }
   else if (spec.kind === "geospatial") composeMap(xy, spec, result, 1100, 650).compile();
   else composeChart(xy, spec, result, 1100, 650, "light").buildPayload();
+}
+
+/** XYG decides table-only disposition. A graph panel must not feed it to a layout worker. */
+export function requireVisualComposition(composition: { kind: string }): void {
+  if (composition.kind === "table")
+    throw Object.assign(new Error("XYG_TABLE_ONLY: This composition is table-only. Open the source result in Results, or choose an explicit supported chart intent."), { code: "XYG_TABLE_ONLY" });
 }
 
 /** Canonical cell identity wins; scalar cells coordinate with their entire source row. */
@@ -245,5 +261,60 @@ export function resultEntitySelection(row: Record<string, unknown>, column?: str
   else if (column === "edge_uuid" && typeof row[column] === "string") edges.add(row[column]);
   else if (column) visit(row[column]);
   if (!nodes.size && !edges.size) visit(row);
+  return { nodeIds: [...nodes], edgeIds: [...edges] };
+}
+
+/** Relay XYG-owned membership, including derived/aggregate edges with no persisted UUID. */
+export function resultRowsFromXygPick(identity: any, resultId: string, rowCount: number): number[] {
+  const rows = new Set<number>();
+  const collect = (pick: any) => {
+    for (const member of pick?.layers ?? []) {
+      if (member.resultId === resultId && Number.isSafeInteger(member.row) && member.row >= 0 && member.row < rowCount)
+        rows.add(member.row);
+    }
+    // Aggregates carry the native member list, which may be explicitly truncated.
+    for (const edge of pick?.edges ?? []) collect(edge);
+  };
+  collect(identity);
+  return [...rows].sort((a, b) => a - b);
+}
+
+/** Coordinate a chart hit using XYG's authored trace identity and native result-row map. */
+export function resultRowsFromXygChart(figure: any, composition: any, hit: { trace: number; index: number }, rowCount: number): number[] {
+  if (!Number.isInteger(hit.trace) || !Number.isInteger(hit.index) || hit.trace < 0 || hit.index < 0) return [];
+  const trace = figure?.traces?.[hit.trace];
+  if (!trace) return [];
+  let row;
+  if (composition?.kind === "bar-chart") row = composition.chart.resultRows[hit.index];
+  else if (composition?.kind === "parallel-coordinates" || composition?.kind === "scatter") {
+    // A parallel-coordinate source row has several rendered segments. The
+    // XYG trace's tooltip identity names the UUID for the exact picked segment.
+    const id = trace.tooltip_rows?.[hit.index]?.id;
+    const source = composition.vectors ?? composition.points;
+    const index = typeof id === "string" ? source.uuid.indexOf(id) : -1;
+    if (index >= 0) row = source.resultRows[index];
+  }
+  return Number.isSafeInteger(row) && row >= 0 && row < rowCount ? [row] : [];
+}
+
+/** Select only persisted UUIDs belonging to XYG's source-row membership. */
+export function resultEntitiesFromXygRow(composition: any, resultId: string, row: number) {
+  const nodes = new Set<string>(), edges = new Set<string>();
+  if (composition?.kind !== "graph" || !Number.isSafeInteger(row) || row < 0)
+    return { nodeIds: [], edgeIds: [] };
+  for (const kind of ["node", "edge"] as const) {
+    const count = kind === "node" ? composition.nodes.count : composition.edges.count;
+    for (let index = 0; index < count; index++) {
+      const identity = composition.identify(kind, index);
+      if (!identity.layers.some((member: { resultId: string; row: number }) => member.resultId === resultId && member.row === row)) continue;
+      if (identity.uuid) (kind === "node" ? nodes : edges).add(identity.uuid);
+      else if (kind === "edge") {
+        // A derived relationship has no persisted UUID. Its native endpoints
+        // may be selected; never synthesize a relationship identity.
+        if (identity.source) nodes.add(identity.source);
+        if (identity.target) nodes.add(identity.target);
+      }
+    }
+  }
   return { nodeIds: [...nodes], edgeIds: [...edges] };
 }

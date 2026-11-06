@@ -20,10 +20,11 @@ suite("Supported-Core declaration (#95)", () => {
     assert.ok(semver.valid(QUALIFIED_CORE.refuseBelow));
   });
 
-  test("the peerDependencies range admits the declared lower bound", () => {
-    const min = semver.minVersion(QUALIFIED_CORE.range)!;
+  test("the bundled Core is exact and within the declared qualified range", () => {
+    const version = pkg.dependencies["@curatelabs/graphforge"];
+    assert.equal(semver.valid(version), version);
     assert.ok(
-      semver.satisfies(min, pkg.peerDependencies["@curatelabs/graphforge"], { includePrerelease: true }),
+      semver.satisfies(version, QUALIFIED_CORE.range, { includePrerelease: true }),
     );
   });
 

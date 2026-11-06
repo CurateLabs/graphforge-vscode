@@ -47,6 +47,18 @@ function injectCapabilities(session: GraphForgeSession, capabilities: string[]):
 }
 
 suite("GraphForgeSession result generation", () => {
+  test("closing a project releases its native handle before returning", async () => {
+    const session = new GraphForgeSession();
+    let closed = 0;
+    injectForge(session, makeStubForge({ close: () => { closed++; } }));
+    try {
+      await session.closeProject();
+      assert.equal(closed, 1);
+      await session.closeProject();
+      assert.equal(closed, 1, "An already detached backend is not closed again");
+    } finally { session.dispose(); }
+  });
+
   for (const method of ["execute", "rank"] as const) {
     test(`${method} retains the read generation across a concurrent mutation`, async () => {
       const session = new GraphForgeSession();

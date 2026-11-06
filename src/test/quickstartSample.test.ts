@@ -176,24 +176,27 @@ suite("quickstartSample (#63)", () => {
     assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), []);
   });
 
-  test("upgrades the unchanged legacy sample query with a preserved backup", () => {
-    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-xyg-upgrade-"));
-    const dataset = loadQuickstartDataset(REPO_ROOT);
-    materializeQuickstartProjectFiles(projectRoot, dataset);
-    const relative = "queries/templates/routes-overview.cypher";
-    const file = path.join(projectRoot, relative);
-    const legacy = fs.readFileSync(path.join(__dirname, "fixtures/legacy-routes-overview.cypher"));
-    fs.writeFileSync(file, legacy);
-    try {
-      assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), [relative]);
-      assert.match(fs.readFileSync(file, "utf8"), /RETURN a, r, b,/);
-      assert.deepEqual(fs.readFileSync(`${file}.pre-xyg`), legacy);
-      assert.equal(scanProjectArtifacts(projectRoot).queryTemplates.length, 1);
-      assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), []);
-    } finally {
-      fs.rmSync(projectRoot, { recursive: true, force: true });
-    }
-  });
+  for (const lineEnding of ["LF", "CRLF"] as const) {
+    test(`upgrades the unchanged ${lineEnding} legacy sample query with a preserved backup`, () => {
+      const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gf-qs-xyg-upgrade-"));
+      const dataset = loadQuickstartDataset(REPO_ROOT);
+      materializeQuickstartProjectFiles(projectRoot, dataset);
+      const relative = "queries/templates/routes-overview.cypher";
+      const file = path.join(projectRoot, relative);
+      const text = fs.readFileSync(path.join(__dirname, "fixtures/legacy-routes-overview.cypher"), "utf8").replace(/\r\n/g, "\n");
+      const legacy = Buffer.from(lineEnding === "CRLF" ? text.replace(/\n/g, "\r\n") : text);
+      fs.writeFileSync(file, legacy);
+      try {
+        assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), [relative]);
+        assert.match(fs.readFileSync(file, "utf8"), /RETURN a, r, b,/);
+        assert.deepEqual(fs.readFileSync(`${file}.pre-xyg`), legacy);
+        assert.equal(scanProjectArtifacts(projectRoot).queryTemplates.length, 1);
+        assert.deepEqual(repairQuickstartProjectFiles(projectRoot, dataset), []);
+      } finally {
+        fs.rmSync(projectRoot, { recursive: true, force: true });
+      }
+    });
+  }
 
   for (const hasLegacyQuery of [true, false]) {
     test(`rejects an escaping query directory before repair writes (existing query: ${hasLegacyQuery})`, () => {

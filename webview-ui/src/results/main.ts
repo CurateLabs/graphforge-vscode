@@ -247,7 +247,16 @@ function renderResults(
 }
 
 function highlightRows(rowIndices: number[]): void {
-  if (!result || rowIndices.length === 0) return;
+  if (!result) return;
+  if (rowIndices.length === 0) {
+    selectedRows.clear();
+    updateSelectionClasses();
+    if (linkStatus) {
+      linkStatus.textContent = "No result rows selected.";
+      linkStatus.classList.remove("linked", "unlinked");
+    }
+    return;
+  }
   rowIndices = rowIndices.filter(index => Number.isSafeInteger(index) && index >= 0 && index < result!.rows.length);
   if (!rowIndices.length) return;
   selectedRows = new Set(rowIndices);

@@ -35,11 +35,19 @@ const forbidden = files.filter(
 
 const required = [
   "dist/extension.js",
+  "dist/core/provenance.json",
+  "dist/core/node_modules/@curatelabs/graphforge/index.js",
+  "dist/core/node_modules/@curatelabs/graphforge/LICENSE",
+  "dist/core/node_modules/@curatelabs/graphforge/NOTICE",
+  "dist/core/node_modules/@curatelabs/graphforge/THIRD_PARTY_NOTICES.md",
   "dist/webview-ui/getStarted.js",
   "dist/webview-ui/getStarted.css",
   "dist/webview-ui/xyg.js",
   "dist/webview-ui/xyg.css",
   "dist/xyg/client/index.js",
+  "dist/xyg/client/wasm-worker.js",
+  "dist/xyg/client/xyg-wasm.wasm",
+  "dist/xyg/client/xyg-wasm.manifest.json",
   "dist/xyg/node/src/index.js",
   "dist/xyg/node/src/intent.cjs",
   "dist/xyg/node/node_modules/koffi/index.cjs",
@@ -53,6 +61,9 @@ const required = [
   "README.md",
 ];
 const platform = `${process.platform}-${process.arch}`;
+const coreSuffix = process.platform === "linux" ? "-gnu" : process.platform === "win32" ? "-msvc" : "";
+const coreNative = `dist/core/node_modules/@curatelabs/graphforge-${platform}${coreSuffix}`;
+required.push(`${coreNative}/graphforge.${platform}${coreSuffix}.node`, `${coreNative}/LICENSE`, `${coreNative}/NOTICE`, `${coreNative}/THIRD_PARTY_NOTICES.md`);
 const library =
   process.platform === "darwin"
     ? "libxyg_core.dylib"
@@ -86,8 +97,10 @@ const totalBytes = files.reduce((sum, file) => {
   const absolute = path.join(cwd, file);
   return sum + (fs.existsSync(absolute) ? fs.statSync(absolute).size : 0);
 }, 0);
-const maxFiles = 180;
-const maxBytes = 15 * 1024 * 1024;
+// Core's complete native engine is now included, rather than an external prerequisite.
+// Keep one platform binary; the old 15 MiB limit covered only XYG and the editor.
+const maxFiles = 240;
+const maxBytes = 256 * 1024 * 1024;
 
 if (
   forbidden.length > 0 ||

@@ -449,17 +449,10 @@ const NO_PROJECT_STRUCTURED_RESULTS: ReadonlyArray<readonly [string, unknown]> =
   ],
   // CLI adoption (Part F) — no binding ⇒ CLI unavailable, fails closed with nextAction.
   ["graphforge.runCli", { args: ["status"] }],
-  // Clone from Hub (#88) — agent call with a destination never prompts. No binding
-  // ⇒ CLI_UNAVAILABLE; a binding without `gf clone` ⇒ CLONE_UNSUPPORTED. The
-  // repository does not exist, so a 0.6 binding with `gf clone` fails with a Hub
-  // error instead of downloading a real project.
-  [
-    "graphforge.cloneFromHub",
-    {
-      repository: "graphforge-ci/does-not-exist",
-      destination: `${os.tmpdir()}/gf-clone-ci-${process.pid}-does-not-exist`,
-    },
-  ],
+  // Clone needs no open project. With bundled Core a valid request reaches the
+  // network and OS credential store, even for a nonexistent repository. Keep
+  // its offline failure coverage in the argument-validation suite below; real
+  // clone behavior belongs to the opt-in installed Hub qualification runner.
   // Publish to Hub (#91) — agent calls never prompt and none of these can reach
   // Core: no binding ⇒ CLI_UNAVAILABLE; no `gf publish` ⇒ PUBLISH_UNSUPPORTED;
   // no project ⇒ HUB_PUBLISH_PROJECT_REQUIRED; no confirm ⇒ CONFIRMATION_REQUIRED;

@@ -19,12 +19,22 @@ npm run compile
 The source build requires XYG's pinned Rust toolchain.
 `scripts/build-xyg.mjs` bundles the matching native library for the build
 platform, the host-neutral painter, the Node facade and
-its exact native FFI dependency into `dist/xyg`. `provenance.json` records the
+its exact native FFI dependency into `dist/xyg`. The matching browser WASM
+module, worker and version/hash manifest ship with the painter. `provenance.json` records the
 source revision, platform and dirty status. Native loading retains XYG's platform and ABI
 checks and never searches system libraries. A build is platform-specific;
 package each supported platform separately. Source builds are used while XYG's
 npm cohort remains unpublished. A local Mac build is not a public release or
 proof of another platform.
+
+`scripts/build-core.mjs` also bundles the lockfile-pinned Core facade and exactly
+one native platform package under `dist/core`, including their licenses and
+notices. The installed extension resolves this bundled Core by default; an
+explicit `graphforge.nativeModulePath` remains an override. Core provenance
+records the exact registry integrities, platform, native size and SHA-256.
+The complete native engine changes the package budget from the former
+XYG-only 15 MiB to 256 MiB unpacked and 240 files. Every platform lane checks
+the actual package rather than assuming the Mac size applies elsewhere.
 
 ## Durable data and authoring
 
@@ -62,6 +72,17 @@ A property graph query must return canonical entities, for example
 with explicit `intent` and a canonical `base` result. Both generation identities
 are required for joins; XYG rejects stale or incompatible inputs. The runtime
 coverage ledger in XYG is the schema authority; the editor keeps no copy.
+The [coverage guard](RESULT_SCHEMAS.md) compares the live Core catalog with that
+runtime ledger. Analytical source IDs are opaque hashes of the result reference,
+generation and original Arrow. Native pick membership relays exact source rows,
+including derived relationships and aggregate members without persisted UUIDs.
+Table selection uses XYG's membership; derived relationships highlight their
+native endpoint UUIDs without inventing relationship IDs.
+
+Explicit `bar-chart` and `parallel-coordinates` compositions use XYG's chart
+builder without an invented base graph. Table-only compositions report
+`XYG_TABLE_ONLY` and direct the analyst to Results; they are never passed into
+a graph-layout worker or saved as an unusable visualization.
 
 Plain graphs also retain the source generation UUID. XYG chooses captions from
 the first non-empty text `name`, `title`, `label`, or `code`, then a short UUID;
@@ -90,11 +111,13 @@ acknowledged paint frame and resolves them through XYG's membership contract.
 Paint readiness requires a real webview acknowledgement. Closing a view
 cancels work, rejects pending acknowledgements and disposes its resources.
 
-Dynamic ticks use XYG's shared adapter and its explicit native host transport.
-The editor relays bounded packed XYTK/XYTO bytes to `tickResolvePacked`; Rust
-owns their generation and formatting. This avoids the webview's cross-origin
-module-Worker restriction without a JavaScript tick algorithm or runtime host
-fallback. This extension uses the native host explicitly and ships no unused WASM cohort.
+Dynamic ticks use XYG's shared adapter and its bundled Rust/WASM worker directly
+in the webview. The self-contained local worker starts from a Blob to respect
+VS Code's cross-origin resource rules. Its matching module validates the ABI,
+Scene and palette contract before attachment. Each panel borrows one worker
+across its frames and disposes it on unload; superseded views retire their own
+tick handles. Graph composition/layout and static exports use the native host.
+There is no JavaScript tick algorithm, native tick-message relay, or host fallback.
 
 The Result table is the accessible data companion. Selection is scoped to the
 same source result. XYG supplies keyboard/gesture behavior and reduced-motion
@@ -158,6 +181,21 @@ publication or external processes; this is not a filesystem-wide transaction.
 - `npm run verify:package` inventories packaged assets. A green source build
   does not establish the full platform, accessibility or large-scale release
   matrix; record those results explicitly before publication.
+- `npm run qualify:xyg -- <Core package directory> <evidence directory>` requires
+  every live Core algorithm to match XYG's ledger and its engine-produced corpus,
+  then compares native/WASM request framing, composition bytes, identity and
+  bounded Scene output for supported fixtures. Reports name the live catalog
+  and fixture-producing Core versions separately.
+- `npm run qualify:xyg:installed -- <platform VSIX> <evidence directory>` installs
+  the package into an isolated profile, uses its bundled Core with no path
+  override, qualifies the installed native/WASM artifacts, and exercises real
+  analytical charts plus the full quickstart matrix, durable reopen and split
+  resize. Qualification cannot skip its tests.
+- `.github/workflows/xyg-qualification.yml` runs the installed lane on Linux
+  x64/arm64, macOS x64/arm64, and Windows x64. Each lane builds its own VSIX,
+  checks the actual host architecture, and retains its exact package and reports.
+  Remote hosts and full release acceptance remain separate evidence; see
+  [the qualification matrix](XYG_QUALIFICATION.md).
 
 Local qualification (2026-11-03, macOS arm64): the installed VSIX opened the
 air-routes project and received paint acknowledgements for all four views.

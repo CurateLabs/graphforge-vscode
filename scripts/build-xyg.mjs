@@ -33,10 +33,29 @@ if (
   !fs.existsSync(dependencyStamp) ||
   fs.readFileSync(dependencyStamp, "utf8") !== lockDigest
 ) {
-  run("npm", ["ci"]);
+  // npm.cmd is a shell wrapper on Windows. Invoke npm's JS entrypoint directly.
+  const npmCli = process.env.npm_execpath ?? path.join(path.dirname(process.execPath),
+    process.platform === "win32" ? "node_modules/npm/bin/npm-cli.js" : "../lib/node_modules/npm/bin/npm-cli.js");
+  run(process.execPath, [npmCli, "ci"]);
   fs.writeFileSync(dependencyStamp, lockDigest);
 }
 run(process.execPath, ["js/build.mjs"]);
+run("rustup", ["target", "add", "wasm32-unknown-unknown"]);
+run("cargo", ["build", "--release", "-p", "xyg-wasm", "--target", "wasm32-unknown-unknown"]);
+// Cargo caches compilation; bind the expensive packaging pass to all its
+// producer inputs and output hashes rather than trusting file existence.
+const hashFile = file => createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+const wasmInputs = ["target/wasm32-unknown-unknown/release/xyg_wasm.wasm", "js/package-wasm.mjs", "js/optimize-wasm.mjs", "package-lock.json", "spec/wasm/abi.json", "packages/xy-client/dist/wasm-inline-worker.js"];
+const wasmOutputs = ["xyg-wasm.wasm", "xyg-wasm.manifest.json", "xyg-wasm-inline.js"].map(file => path.join(source, "packages/xy-client/dist", file));
+const wasmKey = wasmInputs.map(file => hashFile(path.join(source, file))).join(":");
+const wasmStamp = path.join(root, "node_modules/.cache/graphforge-xyg-wasm.json");
+let previous;
+try { previous = JSON.parse(fs.readFileSync(wasmStamp, "utf8")); } catch { /* first build */ }
+if (previous?.key !== wasmKey || wasmOutputs.some((file, i) => !fs.existsSync(file) || hashFile(file) !== previous.outputs?.[i])) {
+  run(process.execPath, ["js/package-wasm.mjs"]);
+  fs.mkdirSync(path.dirname(wasmStamp), { recursive: true });
+  fs.writeFileSync(wasmStamp, JSON.stringify({ key: wasmKey, outputs: wasmOutputs.map(hashFile) }));
+}
 fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
 fs.cpSync(
@@ -45,10 +64,9 @@ fs.cpSync(
   { recursive: true },
 );
 fs.mkdirSync(path.join(output, "client"), { recursive: true });
-fs.copyFileSync(
-  path.join(source, "packages/xy-client/dist/index.js"),
-  path.join(output, "client/index.js"),
-);
+for (const file of ["index.js", "standalone.js", "wasm-worker.js", "xyg-wasm.wasm", "xyg-wasm.manifest.json"])
+  fs.copyFileSync(path.join(source, "packages/xy-client/dist", file), path.join(output, "client", file));
+fs.copyFileSync(path.join(source, "packages/xy-client/package.json"), path.join(output, "client/package.json"));
 fs.copyFileSync(
   path.join(source, "packages/xy-node/package.json"),
   path.join(output, "node/package.json"),

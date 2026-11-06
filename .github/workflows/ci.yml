@@ -72,6 +72,8 @@ jobs:
       - name: Qualification runner regression tests
         run: |
           node --test scripts/qualify-hub-clone.test.cjs
+          node --test scripts/xyg-coverage.test.mjs
+          node --test scripts/qualify-xyg.test.mjs
           PYTHONDONTWRITEBYTECODE=1 python3 src/test/fixtures/pythonHostGeneration.test.py
 
       - name: Compile
@@ -79,6 +81,18 @@ jobs:
 
       - name: Verify VSIX contents
         run: npm run verify:package
+
+      - name: Verify live Core catalog and native/WASM result coverage
+        run: npm run qualify:xyg -- "${{ github.workspace }}/dist/core/node_modules/@curatelabs/graphforge" "${{ runner.temp }}/xyg-schema-evidence"
+
+      - name: Preserve schema qualification report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xyg-schema-coverage
+          path: ${{ runner.temp }}/xyg-schema-evidence/report.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Unit tests
         run: npm run test:unit
