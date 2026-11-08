@@ -118,9 +118,65 @@ suite("GraphForgeSession bounded command pages", () => {
       injectForge(session, makeStubForge());
       assert.throws(() => session.readResultPage({ resultId: replacedBackendPage.resultId }), /RESULT_PAGE_STALE/);
       assert.throws(() => session.resultPage(original), /RESULT_PAGE_STALE/);
-      const replacement = session.resultPage({ columns: [], rows: [], rowCount: 0 });
+      assert.throws(() => session.resultPage({ columns: [], rows: [], rowCount: 0 }), /RESULT_PAGE_STALE/);
+      session.restoreResult({ columns: [], rows: [], rowCount: 0 });
+      const replacement = session.resultPage(session.getLastResult()!);
       await session.closeProject();
       assert.throws(() => session.readResultPage({ resultId: replacement.resultId }), /RESULT_PAGE_STALE/);
+    } finally { session.dispose(); }
+  });
+});
+
+suite("GraphForgeSession command-result ownership", () => {
+  const calls: Array<[keyof GraphForgeNative, (session: GraphForgeSession) => Promise<QueryResult>]> = [
+    ["listAssertions", session => session.listAssertions()],
+    ["listCheckpoints", session => session.listCheckpoints()],
+    ["listAlgorithmRuns", session => session.listAlgorithmRuns()],
+    ["attachEvidence", session => session.attachEvidence({ assertionUuid: "assertion", sourceUuid: "source", sourceKind: "document", role: "supports" })],
+    ["createAssertion", async session => (await session.createAssertion({ claim: "fixture", graphRefs: [{ graphUuid: "node", graphKind: "node", role: "subject", ordinal: 0 }] })).result],
+  ];
+  for (const [method, run] of calls) {
+    test(`${method} rejects an async result from the previous backend`, async () => {
+      const session = new GraphForgeSession();
+      let release!: (ipc: Buffer) => void;
+      const response = new Promise<Buffer>(resolve => { release = resolve; });
+      injectForge(session, makeStubForge({ [method]: () => response }));
+      try {
+        const result = run(session);
+        injectForge(session, makeStubForge());
+        release(encodeSimpleTable(["value"], [{ value: "original" }]));
+        await assert.rejects(result, (error: unknown) => (error as { code?: string }).code === "SESSION_CHANGED");
+        assert.throws(() => session.readResultPage({ resultId: "unknown" }), /RESULT_PAGE_STALE/);
+      } finally { session.dispose(); }
+    });
+    test(`${method} binds a successful result before command exposure`, async () => {
+      const session = new GraphForgeSession();
+      injectForge(session, makeStubForge({ [method]: () => Promise.resolve(encodeSimpleTable(["value"], [{ value: "current" }])) }));
+      try {
+        const result = await run(session);
+        const page = session.resultPage(result);
+        assert.deepEqual(session.readResultPage({ resultId: page.resultId }).rows, [{ value: "current" }]);
+        injectForge(session, makeStubForge());
+        assert.throws(() => session.resultPage(result), /RESULT_PAGE_STALE/);
+      } finally { session.dispose(); }
+    });
+  }
+
+  test("a checkpoint query keeps its opening backend across delayed command input", () => {
+    const session = new GraphForgeSession();
+    let executions = 0;
+    injectForge(session, makeStubForge({ openCheckpoint: () => ({
+      checkpointUuid: "checkpoint", generationUuid: "generation",
+      execute: () => { executions++; return encodeSimpleTable(["value"], [{ value: "checkpoint" }]); },
+      projectCapabilities: () => Buffer.alloc(0), inspectAdjacency: () => ({}),
+    }) }));
+    try {
+      const view = session.openCheckpointView("fixture");
+      const result = view.execute("read");
+      assert.deepEqual(session.resultPage(result).rows, [{ value: "checkpoint" }]);
+      injectForge(session, makeStubForge());
+      assert.throws(() => view.execute("delayed read"), (error: unknown) => (error as { code?: string }).code === "SESSION_CHANGED");
+      assert.equal(executions, 1, "never execute the stale handle against another project session");
     } finally { session.dispose(); }
   });
 });

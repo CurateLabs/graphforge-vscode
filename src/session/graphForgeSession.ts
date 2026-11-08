@@ -323,7 +323,7 @@ export class GraphForgeSession implements vscode.Disposable {
   ): Promise<QueryResult> {
     const backend = this.requireBackend();
     const buf = await backend.execute(cypher, params);
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     result.generationUuid = this.resultGeneration(backend, buf);
     this.rememberResult(result, "Cypher result");
     return result;
@@ -345,7 +345,7 @@ export class GraphForgeSession implements vscode.Disposable {
     params?: Record<string, unknown>,
   ): Promise<QueryResult> {
     const backend = this.requireBackend();
-    const result = decodeTable(await backend.execute(cypher, params));
+    const result = this.decodeResult(backend, await backend.execute(cypher, params));
     this._onDidChange.fire();
     return result;
   }
@@ -420,7 +420,7 @@ export class GraphForgeSession implements vscode.Disposable {
       default:
         throw new Error(`Unknown verb: ${verb}`);
     }
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     result.generationUuid = this.resultGeneration(backend, buf);
     this.rememberResult(result, verb);
     return result;
@@ -544,6 +544,7 @@ export class GraphForgeSession implements vscode.Disposable {
     name: string,
     description?: string,
   ): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("checkpoint");
     if (typeof forge.checkpoint !== "function") {
       throw new UnsupportedByBindingError("checkpoint");
@@ -553,30 +554,43 @@ export class GraphForgeSession implements vscode.Disposable {
       description,
       idempotencyKey: randomOperationId(),
     });
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     this._onDidChange.fire();
     return result;
   }
 
   async listCheckpoints(limit?: number, after?: string): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("listCheckpoints");
     if (typeof forge.listCheckpoints !== "function") {
       throw new UnsupportedByBindingError("listCheckpoints");
     }
     const buf = await forge.listCheckpoints({ limit, after });
-    return decodeTable(buf);
+    return this.decodeResult(backend, buf);
   }
 
   /** Immutable, lease-pinned read handle over one named checkpoint. */
-  openCheckpointView(name: string): CheckpointViewNative {
+  openCheckpointView(name: string): Pick<CheckpointViewNative, "checkpointUuid" | "generationUuid"> & {
+    execute(cypher: string): QueryResult;
+  } {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("openCheckpoint");
     if (typeof forge.openCheckpoint !== "function") {
       throw new UnsupportedByBindingError("openCheckpoint");
     }
-    return forge.openCheckpoint(name);
+    const view = forge.openCheckpoint(name);
+    return {
+      checkpointUuid: view.checkpointUuid,
+      generationUuid: view.generationUuid,
+      execute: cypher => {
+        this.assertResultBackend(backend);
+        return this.decodeResult(backend, view.execute(cypher));
+      },
+    };
   }
 
   async deleteCheckpoint(name: string): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("deleteCheckpoint");
     if (typeof forge.deleteCheckpoint !== "function") {
       throw new UnsupportedByBindingError("deleteCheckpoint");
@@ -585,7 +599,7 @@ export class GraphForgeSession implements vscode.Disposable {
       name,
       idempotencyKey: randomOperationId(),
     });
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     this._onDidChange.fire();
     return result;
   }
@@ -596,16 +610,18 @@ export class GraphForgeSession implements vscode.Disposable {
     scope: string,
     detail: string,
   ): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("diffCheckpoints");
     if (typeof forge.diffCheckpoints !== "function") {
       throw new UnsupportedByBindingError("diffCheckpoints");
     }
     const buf = await forge.diffCheckpoints({ from, to, scope, detail });
-    return decodeTable(buf);
+    return this.decodeResult(backend, buf);
   }
 
   /** Restore a checkpoint as a new committed generation. Destructive — callers must hard-confirm. */
   async revertToCheckpoint(name: string, reason: string): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("revertToCheckpoint");
     if (typeof forge.revertToCheckpoint !== "function") {
       throw new UnsupportedByBindingError("revertToCheckpoint");
@@ -615,7 +631,7 @@ export class GraphForgeSession implements vscode.Disposable {
       reason,
       idempotencyKey: randomOperationId(),
     });
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     this._onDidChange.fire();
     return result;
   }
@@ -626,12 +642,13 @@ export class GraphForgeSession implements vscode.Disposable {
 
   /** Live capability manifest from the open engine (distinct from the on-disk manifest read in {@link capabilities}). */
   async liveCapabilities(): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("projectCapabilities");
     if (typeof forge.projectCapabilities !== "function") {
       throw new UnsupportedByBindingError("projectCapabilities");
     }
     const buf = await forge.projectCapabilities();
-    return decodeTable(buf);
+    return this.decodeResult(backend, buf);
   }
 
   async enableCapability(
@@ -639,6 +656,7 @@ export class GraphForgeSession implements vscode.Disposable {
     capabilityVersion: number,
     actorUuid?: string,
   ): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("enableCapability");
     if (typeof forge.enableCapability !== "function") {
       throw new UnsupportedByBindingError("enableCapability");
@@ -649,7 +667,7 @@ export class GraphForgeSession implements vscode.Disposable {
       capabilityVersion,
       actorUuid,
     });
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     this._onDidChange.fire();
     return result;
   }
@@ -911,33 +929,36 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   invokeDescriptor(descriptor: InvocationDescriptorNative): QueryResult {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("invokeDescriptor");
     if (typeof forge.invokeDescriptor !== "function") {
       throw new UnsupportedByBindingError("invokeDescriptor");
     }
     const buf = forge.invokeDescriptor(descriptor);
-    return decodeTable(buf);
+    return this.decodeResult(backend, buf);
   }
 
   async listAlgorithmRuns(
     algorithm?: string,
     limit?: number,
   ): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("listAlgorithmRuns");
     if (typeof forge.listAlgorithmRuns !== "function") {
       throw new UnsupportedByBindingError("listAlgorithmRuns");
     }
     const buf = await forge.listAlgorithmRuns({ algorithm, limit });
-    return decodeTable(buf);
+    return this.decodeResult(backend, buf);
   }
 
   async algorithmRun(runUuid: string): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("algorithmRun");
     if (typeof forge.algorithmRun !== "function") {
       throw new UnsupportedByBindingError("algorithmRun");
     }
     const buf = await forge.algorithmRun(runUuid);
-    return decodeTable(buf);
+    return this.decodeResult(backend, buf);
   }
 
   // ======================================================================
@@ -945,12 +966,13 @@ export class GraphForgeSession implements vscode.Disposable {
   // ======================================================================
 
   publishCompositeTransaction(request: unknown): QueryResult {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("publishCompositeTransaction");
     if (typeof forge.publishCompositeTransaction !== "function") {
       throw new UnsupportedByBindingError("publishCompositeTransaction");
     }
     const buf = forge.publishCompositeTransaction(request);
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     this._onDidChange.fire();
     return result;
   }
@@ -1109,7 +1131,7 @@ export class GraphForgeSession implements vscode.Disposable {
       limit: request?.limit,
       after: request?.after,
     });
-    return decodeTable(buf);
+    return this.decodeResult(backend, buf);
   }
 
   /**
@@ -1169,6 +1191,7 @@ export class GraphForgeSession implements vscode.Disposable {
     graphRefs: CreateAssertionInput["graphRefs"];
     actorUuid?: string;
   }): Promise<{ assertionUuid: string; result: QueryResult }> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("createAssertion");
     if (typeof forge.createAssertion !== "function") {
       throw new UnsupportedByBindingError("createAssertion");
@@ -1188,7 +1211,7 @@ export class GraphForgeSession implements vscode.Disposable {
         actorUuid: input.actorUuid,
       }),
     );
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     this._onDidChange.fire();
     return { assertionUuid, result };
   }
@@ -1197,6 +1220,7 @@ export class GraphForgeSession implements vscode.Disposable {
   async attachEvidence(
     input: Omit<AttachEvidenceInput, "operationUuid" | "evidenceUuid">,
   ): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("attachEvidence");
     if (typeof forge.attachEvidence !== "function") {
       throw new UnsupportedByBindingError("attachEvidence");
@@ -1208,7 +1232,7 @@ export class GraphForgeSession implements vscode.Disposable {
         ...input,
       }),
     );
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     this._onDidChange.fire();
     return result;
   }
@@ -1217,6 +1241,7 @@ export class GraphForgeSession implements vscode.Disposable {
   async assessConfidence(
     input: Omit<AssessConfidenceInput, "operationUuid" | "confidenceUuid">,
   ): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("assessConfidence");
     if (typeof forge.assessConfidence !== "function") {
       throw new UnsupportedByBindingError("assessConfidence");
@@ -1228,7 +1253,7 @@ export class GraphForgeSession implements vscode.Disposable {
         ...input,
       }),
     );
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     this._onDidChange.fire();
     return result;
   }
@@ -1240,6 +1265,7 @@ export class GraphForgeSession implements vscode.Disposable {
       "operationUuid" | "statusEventUuid"
     >,
   ): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("recordAssertionStatus");
     if (typeof forge.recordAssertionStatus !== "function") {
       throw new UnsupportedByBindingError("recordAssertionStatus");
@@ -1251,7 +1277,7 @@ export class GraphForgeSession implements vscode.Disposable {
         ...input,
       }),
     );
-    const result = decodeTable(buf);
+    const result = this.decodeResult(backend, buf);
     this._onDidChange.fire();
     return result;
   }
@@ -1260,6 +1286,7 @@ export class GraphForgeSession implements vscode.Disposable {
   async listAssertionStatus(
     request?: ListAssertionStatusInput,
   ): Promise<QueryResult> {
+    const backend = this.requireBackend();
     const forge = this.requireNodeForge("listAssertionStatus");
     if (typeof forge.listAssertionStatus !== "function") {
       throw new UnsupportedByBindingError("listAssertionStatus");
@@ -1271,7 +1298,7 @@ export class GraphForgeSession implements vscode.Disposable {
         after: request?.after,
       }),
     );
-    return decodeTable(buf);
+    return this.decodeResult(backend, buf);
   }
 
   /**
@@ -1487,10 +1514,9 @@ export class GraphForgeSession implements vscode.Disposable {
   /** Expose one bounded command page, retaining only the most recently exposed source. */
   resultPage(result: QueryResult): ResultPage {
     const owner = this.resultBackends.get(result);
-    if (!this.backend || (owner && owner !== this.backend))
+    if (!this.backend || owner !== this.backend)
       throw new Error("RESULT_PAGE_STALE: Open the project and run the command again.");
     const page = queryResultPage(result);
-    this.resultBackends.set(result, this.backend);
     this.publicResult = result;
     return page;
   }
@@ -1505,6 +1531,7 @@ export class GraphForgeSession implements vscode.Disposable {
 
   /** Restore a durable project result as the active table/graph/figure source. */
   restoreResult(result: QueryResult, title = "Saved result"): void {
+    this.resultBackends.set(result, this.requireBackend());
     this.rememberResult(result, title);
   }
 
@@ -1519,18 +1546,28 @@ export class GraphForgeSession implements vscode.Disposable {
     this._onDidChange.fire();
   }
 
-  private resultGeneration(backend: EngineBackend, ipc: Buffer): string | undefined {
+  private assertResultBackend(backend: EngineBackend): void {
     if (backend !== this.backend) {
-      throw Object.assign(new Error("The project session changed while reading. Run the query again."), {
+      throw Object.assign(new Error("The project session changed while waiting for the result. Check the original project before retrying."), {
         code: "SESSION_CHANGED",
       });
     }
+  }
+
+  private decodeResult(backend: EngineBackend, ipc: Buffer): QueryResult {
+    this.assertResultBackend(backend);
+    const result = decodeTable(ipc);
+    this.resultBackends.set(result, backend);
+    return result;
+  }
+
+  private resultGeneration(backend: EngineBackend, ipc: Buffer): string | undefined {
+    this.assertResultBackend(backend);
     return backend.resultGeneration?.(ipc);
   }
 
   private rememberResult(result: QueryResult, title?: string): void {
     this.lastResult = result;
-    if (this.backend) this.resultBackends.set(result, this.backend);
     this.publicResult = undefined;
     this.lastResultTitle = title;
     this._onDidChange.fire();

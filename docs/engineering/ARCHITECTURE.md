@@ -198,7 +198,7 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 
 ## Key flows
 
-Node and Python backends capture generation identity with each read and associate it with that exact returned Buffer. Session reads reject a backend replacement before remembering the result. Python hosts without the Core identity capability omit the field rather than inventing an identity.
+Node and Python backends capture generation identity with each read and associate it with that exact returned Buffer. Session reads and mutations bind each decoded result to the backend captured before the call. They reject backend replacement before exposure; paging cannot establish ownership for an unregistered result. Checkpoint query handles retain their opening backend across delayed input. Python hosts without the Core identity capability omit the field rather than inventing an identity.
 
 ### Run Cypher
 

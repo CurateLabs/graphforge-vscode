@@ -1,6 +1,5 @@
 import { queryResultPage, type ResultPage } from "../session/resultRows";
 import * as vscode from "vscode";
-import { decodeTable } from "../session/arrowCodec";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { QueryResult, TableRow } from "../session/types";
 import { DIFF_DETAIL_OPTIONS, DIFF_SCOPE_OPTIONS } from "./pickerCopy";
@@ -264,7 +263,7 @@ async function runOpenCheckpoint(
     let query: ResultPage | undefined;
     if (cypher?.trim()) {
       const result = await withEngineProgress("querying checkpoint…", async () =>
-        decodeTable(view.execute(cypher)),
+        view.execute(cypher),
       );
       query = session.resultPage(result);
       await showResultDoc(`Open Checkpoint "${name}" — query`, result);

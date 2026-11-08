@@ -16,6 +16,8 @@ concurrent current/history consistency. `resultTableModel.test.ts` and
 `resultTablePaging.test.ts` verify page-local Inspect, later-page native selection,
 clearing, stale contexts and superseded asynchronous projections. Session tests
 verify the command page API does not reexecute and rejects replaced/closed IDs.
+Delayed ledger/checkpoint/power responses must reject backend replacement before
+exposure; checkpoint handles also reject delayed reads after a session change.
 The installed quickstart exercises actual command paging and authoritative saved
 reopen. Owner GraphForge tests cover native/WASM analytical selected planes,
 reordered/filtered source membership, overlay picks, and actionable unknown schemas.
