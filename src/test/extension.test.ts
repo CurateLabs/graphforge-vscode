@@ -8,8 +8,8 @@ import {
 
 /**
  * Full public command surface for this branch (mirrors
- * `package.json#contributes.commands`). This is the contract a coding agent
- * (Cursor agent, Copilot-style agent, etc.) can rely on: every one of these
+ * `package.json#contributes.commands` plus programmatic-only paging). This is
+ * the contract a coding agent (Cursor agent, Copilot-style agent, etc.) can rely on: every one of these
  * IDs must be registered after activation, callable via
  * `vscode.commands.executeCommand("graphforge.<id>", ...)` without going
  * through the Command Palette UI.
@@ -29,6 +29,7 @@ const ALL_COMMAND_IDS = [
   "graphforge.closeProject",
   "graphforge.refreshExplorer",
   "graphforge.runQuery",
+  "graphforge.readResultPage",
   "graphforge.runQueryWithParams",
   "graphforge.runProjectQuery",
   "graphforge.saveProjectQuery",
@@ -226,7 +227,12 @@ suite("GraphForge agent interop — safe commands (no binding, no project)", () 
     assert.ok(
       context.commands.some((command) => command.id === "graphforge.openSampleStreamlit"),
     );
-    assert.match(context.contracts.result, /columns/);
+    for (const field of ["resultId", "columns", "rows", "rowCount", "offset", "nextOffset"]) {
+      assert.ok(context.contracts.result.includes(field), `result discovery must describe ${field}`);
+    }
+    const paging = context.commands.find(command => command.id === "graphforge.readResultPage");
+    assert.ok(paging, "discovery must expose result continuation");
+    assert.match(paging.args, /resultId/);
   });
 
   test("agent.listArtifacts fails closed when no project is open or specified", async () => {

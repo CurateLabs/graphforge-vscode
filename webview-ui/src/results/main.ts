@@ -1,12 +1,12 @@
-import type { QueryResult } from "../../../src/session/types";
+import type { ResultPage } from "../../../src/session/resultRows";
 import type {
   HostToWebview,
   ResultEntityLink,
+  ResultMessageContext,
   WebviewToHost,
 } from "../../../src/webview/protocol";
 import "./results.css";
 
-const PAGE_SIZE = 500;
 const vscode = acquireVsCodeApi();
 const title = document.getElementById("title");
 const summary = document.getElementById("summary");
@@ -21,9 +21,11 @@ const renderCount = document.getElementById("render-count");
 const loadMore = document.getElementById("load-more") as HTMLButtonElement | null;
 const previousPage = document.getElementById("previous-rows") as HTMLButtonElement | null;
 
-let result: QueryResult | undefined;
+let result: ResultPage | undefined;
+let context: ResultMessageContext | undefined;
+let loading = false;
+let previousOffsets: number[] = [];
 let columns: string[] = [];
-let pageStart = 0;
 let hasEntityLinks = false;
 let selectedRows = new Set<number>();
 let entityLinks: Record<string, ResultEntityLink[]> = {};
@@ -32,7 +34,7 @@ function post(message: WebviewToHost): void {
   vscode.postMessage(message);
 }
 
-function deriveColumns(current: QueryResult): string[] {
+function deriveColumns(current: ResultPage): string[] {
   if (current.columns.length > 0) return current.columns;
   const names = new Set<string>();
   for (const row of current.rows) {
@@ -74,9 +76,10 @@ function appendValue(cell: HTMLTableCellElement, value: unknown): void {
 }
 
 function select(rowIndex: number, column?: string): void {
+  if (loading || !context) return;
   selectedRows = new Set([rowIndex]);
   updateSelectionClasses();
-  post({ type: "graphforge/selectResult", rowIndex, column });
+  post({ type: "graphforge/selectResult", ...context, rowIndex, column });
 }
 
 function renderHeader(): void {
@@ -106,9 +109,9 @@ function renderHeader(): void {
 function renderBody(): void {
   if (!result || !tableBody) return;
   const fragment = document.createDocumentFragment();
-  const visible = result.rows.slice(pageStart, pageStart + PAGE_SIZE);
+  const visible = result.rows;
   for (const [offset, rowValue] of visible.entries()) {
-    const rowIndex = pageStart + offset;
+    const rowIndex = result.offset + offset;
     const row = document.createElement("tr");
     row.dataset.rowIndex = String(rowIndex);
     row.tabIndex = offset === 0 ? 0 : -1;
@@ -143,10 +146,11 @@ function renderBody(): void {
         button.title = `Open ${link.kind} in Entity Inspect. Shift-click to open a new tab.`;
         button.addEventListener("click", (event) => {
           event.stopPropagation();
+          if (loading || !context) return;
           selectedRows = new Set([rowIndex]);
           updateSelectionClasses();
           post({
-            type: "graphforge/openResultEntity",
+            type: "graphforge/openResultEntity", ...context,
             rowIndex,
             kind: link.kind,
             id: link.id,
@@ -186,16 +190,26 @@ function renderBody(): void {
 
 function updateFooter(): void {
   if (!result || !footer || !renderCount || !loadMore) return;
-  const shown = Math.min(pageStart + PAGE_SIZE, result.rows.length);
+  const shown = result.offset + result.rows.length;
   footer.hidden = result.rows.length === 0;
   renderCount.textContent =
-    `Rows ${(pageStart + 1).toLocaleString()}–${shown.toLocaleString()} of ${result.rows.length.toLocaleString()}`;
-  loadMore.hidden = result.rows.length <= PAGE_SIZE;
-  loadMore.disabled = shown >= result.rows.length;
+    `Rows ${(result.offset + 1).toLocaleString()}–${shown.toLocaleString()} of ${result.rowCount.toLocaleString()}`;
+  const canGoBack = previousOffsets.length > 0 || result.offset > 0;
+  loadMore.hidden = result.nextOffset === undefined && !canGoBack;
+  loadMore.disabled = loading || result.nextOffset === undefined;
   if (previousPage) {
-    previousPage.hidden = result.rows.length <= PAGE_SIZE;
-    previousPage.disabled = pageStart === 0;
+    previousPage.hidden = loadMore.hidden;
+    previousPage.disabled = loading || !canGoBack;
+    previousPage.textContent = previousOffsets.length === 0 && result.offset > 0 ? "First rows" : "Previous rows";
   }
+}
+
+function setLoading(value: boolean): void {
+  loading = value;
+  table?.setAttribute("aria-busy", String(value));
+  tableBody?.querySelectorAll<HTMLButtonElement>("button").forEach(button => { button.disabled = value; });
+  documentActions?.querySelectorAll<HTMLButtonElement>("button").forEach(button => { button.disabled = value; });
+  updateFooter();
 }
 
 function updateSelectionClasses(): void {
@@ -209,21 +223,21 @@ function updateSelectionClasses(): void {
 }
 
 function renderResults(
-  current: QueryResult,
+  current: ResultPage,
   currentTitle: string,
   persisted: boolean,
   links: Record<string, ResultEntityLink[]>,
+  inspectNotice?: string,
 ): void {
   result = current;
   columns = deriveColumns(current);
-  pageStart = 0;
   selectedRows.clear();
   entityLinks = links;
   hasEntityLinks = Object.keys(links).length > 0;
   if (title) title.textContent = currentTitle;
   if (summary) {
     const columnLabel = `${columns.length} column${columns.length === 1 ? "" : "s"}`;
-    summary.textContent = `${current.rowCount.toLocaleString()} row${current.rowCount === 1 ? "" : "s"} · ${columnLabel}`;
+    summary.textContent = `${current.rowCount.toLocaleString()} row${current.rowCount === 1 ? "" : "s"} · ${columnLabel}${inspectNotice ? ` · ${inspectNotice}` : ""}`;
   }
   if (documentActions) documentActions.hidden = !persisted;
   if (linkStatus) {
@@ -240,79 +254,131 @@ function renderResults(
   }
   if (table) {
     table.hidden = !hasRows;
-    table.setAttribute("aria-rowcount", String(current.rows.length + 1));
+    table.setAttribute("aria-rowcount", String(current.rowCount + 1));
   }
   renderHeader();
   renderBody();
 }
 
-function highlightRows(rowIndices: number[]): void {
+function highlightRows(rowIndices: number[], selectedCount: number, focusRow?: number): void {
   if (!result) return;
-  if (rowIndices.length === 0) {
-    selectedRows.clear();
-    updateSelectionClasses();
-    if (linkStatus) {
-      linkStatus.textContent = "No result rows selected.";
-      linkStatus.classList.remove("linked", "unlinked");
-    }
-    return;
+  selectedRows = new Set(rowIndices.filter(index => Number.isSafeInteger(index) &&
+    index >= result!.offset && index < result!.offset + result!.rows.length));
+  updateSelectionClasses();
+  if (focusRow !== undefined && selectedRows.has(focusRow)) {
+    tableBody?.querySelector<HTMLTableRowElement>(`tr[data-row-index="${focusRow}"]`)
+      ?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }
-  rowIndices = rowIndices.filter(index => Number.isSafeInteger(index) && index >= 0 && index < result!.rows.length);
-  if (!rowIndices.length) return;
-  selectedRows = new Set(rowIndices);
-  const first = rowIndices.reduce((minimum, index) => Math.min(minimum, index), Infinity);
-  if (first < pageStart || first >= pageStart + PAGE_SIZE) {
-    pageStart = Math.floor(first / PAGE_SIZE) * PAGE_SIZE;
-    renderBody();
-  } else {
-    updateSelectionClasses();
-  }
-  tableBody
-    ?.querySelector<HTMLTableRowElement>(`tr[data-row-index="${first}"]`)
-    ?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   if (linkStatus) {
-    linkStatus.textContent = `Result Graph selection appears in ${rowIndices.length} row(s).`;
-    linkStatus.classList.add("linked");
+    linkStatus.textContent = selectedCount === 0 ? "No result rows selected."
+      : `Visualization selection appears in ${selectedCount.toLocaleString()} row(s); ${selectedRows.size.toLocaleString()} on this page.`;
+    linkStatus.classList.toggle("linked", selectedCount > 0);
     linkStatus.classList.remove("unlinked");
   }
 }
 
+function requestPage(offset: number, direction: "next" | "previous"): void {
+  if (loading || !context) return;
+  post({ type: "graphforge/requestResultPage", ...context, offset, direction });
+  setLoading(true);
+}
+
 loadMore?.addEventListener("click", () => {
-  if (!result) return;
-  pageStart = Math.min(Math.floor((result.rows.length - 1) / PAGE_SIZE) * PAGE_SIZE, pageStart + PAGE_SIZE);
-  renderBody();
-  tableBody?.querySelector<HTMLTableRowElement>("tr")?.focus();
+  if (result?.nextOffset !== undefined) requestPage(result.nextOffset, "next");
 });
 previousPage?.addEventListener("click", () => {
-  pageStart = Math.max(0, pageStart - PAGE_SIZE);
-  renderBody();
-  tableBody?.querySelector<HTMLTableRowElement>("tr")?.focus();
+  // Reloaded webviews have no visited boundaries. Returning to zero preserves
+  // byte-shortened page boundaries when the user resumes forward navigation.
+  const offset = previousOffsets.at(-1) ?? (result && result.offset > 0 ? 0 : undefined);
+  if (offset !== undefined) requestPage(offset, "previous");
 });
 document.getElementById("open-json")?.addEventListener("click", () => {
-  post({ type: "graphforge/openResultDocument", kind: "json" });
+  if (!loading && context) post({ type: "graphforge/openResultDocument", ...context, kind: "json" });
 });
 document.getElementById("open-markdown")?.addEventListener("click", () => {
-  post({ type: "graphforge/openResultDocument", kind: "markdown" });
+  if (!loading && context) post({ type: "graphforge/openResultDocument", ...context, kind: "markdown" });
 });
+
+function sameContext(incoming: ResultMessageContext): boolean {
+  return context !== undefined && incoming.resultId === context.resultId &&
+    incoming.revision === context.revision && incoming.pageVersion === context.pageVersion;
+}
+
+/** Only a page/loading response can advance identity. Older async responses never replace the current source. */
+function acceptContext(incoming: ResultMessageContext): boolean {
+  if (!Number.isSafeInteger(incoming.revision) || !Number.isSafeInteger(incoming.pageVersion) ||
+      typeof incoming.resultId !== "string") return false;
+  if (context && (incoming.revision < context.revision ||
+      (incoming.revision === context.revision && (incoming.resultId !== context.resultId || incoming.pageVersion < context.pageVersion)))) return false;
+  if (!context || incoming.revision > context.revision) {
+    result = undefined;
+    previousOffsets = [];
+    selectedRows.clear();
+    entityLinks = {};
+    tableBody?.replaceChildren();
+    tableHead?.replaceChildren();
+    if (table) table.hidden = true;
+    if (footer) footer.hidden = true;
+  }
+  context = { resultId: incoming.resultId, revision: incoming.revision, pageVersion: incoming.pageVersion };
+  return true;
+}
 
 window.addEventListener("message", (event: MessageEvent<HostToWebview>) => {
   const message = event.data;
   if (!message || typeof message !== "object") return;
-  if (message.type === "graphforge/results") {
-    renderResults(
-      message.result,
-      message.title,
-      Boolean(message.persisted),
-      message.entityLinks ?? {},
-    );
+  if (message.type === "graphforge/resultsCleared") {
+    if (!acceptContext(message)) return;
+    setLoading(false);
+    if (documentActions) documentActions.hidden = true;
+    if (title) title.textContent = "Query results";
+    if (summary) summary.textContent = message.message;
+    if (empty) { empty.hidden = false; empty.textContent = message.message; }
+    if (linkStatus) {
+      linkStatus.textContent = message.message;
+      linkStatus.classList.remove("linked", "unlinked");
+    }
+  } else if (message.type === "graphforge/resultsLoading") {
+    if (!acceptContext(message)) return;
+    setLoading(true);
+    if (title) title.textContent = message.title;
+    if (summary) summary.textContent = `${message.rowCount.toLocaleString()} row(s) · Loading page…`;
+    if (documentActions) documentActions.hidden = !message.persisted;
+    if (!result && empty) { empty.hidden = false; empty.textContent = "Loading result rows…"; }
+    if (linkStatus) {
+      linkStatus.textContent = "Loading result rows…";
+      linkStatus.classList.remove("linked", "unlinked");
+    }
+  } else if (message.type === "graphforge/results") {
+    if (message.result.resultId !== message.resultId || !acceptContext(message)) return;
+    const priorOffset = result?.offset;
+    if (priorOffset !== undefined && priorOffset !== message.result.offset) {
+      if (message.direction === "previous") previousOffsets.pop();
+      else if (message.direction === "next" || message.direction === "selection") previousOffsets.push(priorOffset);
+    }
+    renderResults(message.result, message.title, Boolean(message.persisted), message.entityLinks ?? {}, message.inspectNotice);
+    setLoading(false);
+    highlightRows(message.selectedRows ?? [], message.selectedCount ?? 0, message.focusRow);
+    if (message.direction === "next" || message.direction === "previous") tableBody?.querySelector<HTMLTableRowElement>("tr")?.focus();
+  } else if (message.type === "graphforge/resultsError") {
+    if (!sameContext(message)) return;
+    setLoading(false);
+    if (summary) summary.textContent = result ? `${result.rowCount.toLocaleString()} row(s) · Page could not be loaded` : "Results could not be loaded";
+    if (!result && empty) { empty.hidden = false; empty.textContent = message.message; }
+    if (linkStatus) {
+      linkStatus.textContent = message.message;
+      linkStatus.classList.add("unlinked");
+      linkStatus.classList.remove("linked");
+    }
   } else if (message.type === "graphforge/resultSelection") {
+    if (!sameContext(message) || loading) return;
     if (linkStatus) {
       linkStatus.textContent = message.message;
       linkStatus.classList.toggle("linked", message.linked);
       linkStatus.classList.toggle("unlinked", !message.linked);
     }
   } else if (message.type === "graphforge/highlightResultRows") {
-    highlightRows(message.rowIndices);
+    if (sameContext(message) && !loading) highlightRows(message.rowIndices, message.selectedCount, message.focusRow);
   }
 });
 

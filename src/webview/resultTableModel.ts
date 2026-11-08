@@ -1,3 +1,4 @@
+import { RESULT_PAGE_SIZE, queryResultPage, resultRow, type ResultPage } from "../session/resultRows";
 import type {
   GraphEdge,
   GraphNode,
@@ -9,12 +10,17 @@ import type { GraphSelection } from "./resultGraphModel";
 import type {
   EntityInspectSelection,
   ResultEntityLink,
+  ResultMessageContext,
 } from "./protocol";
 
 export interface GraphElementHighlight {
   nodeIds: string[];
   edgeIds: string[];
 }
+
+export const RESULT_INSPECT_BYTES = 256 * 1024;
+export const RESULT_INSPECT_NOTICE = "Inspect links are unavailable for this page. Open the saved JSON or Markdown document to inspect its entities.";
+function inspectLimit(): Error { return new Error(`RESULT_INSPECT_LIMIT: ${RESULT_INSPECT_NOTICE}`); }
 
 const IDENTITY_KEY =
   /(^|_)(id|uuid|code)$|^(node|edge|source|target|start|end)(Id|Uuid)?$/i;
@@ -91,18 +97,15 @@ function matchesAny(aliases: Set<string>, keys: Set<string>): boolean {
 }
 
 interface GraphLookup {
-  nodeIdsByAlias: Map<string, string[]>;
-  edgeIdsByAlias: Map<string, string[]>;
-  edgeIdsByEndpoints: Map<string, string[]>;
+  nodeIdsByAlias: Map<string, Set<string>>;
+  edgeIdsByAlias: Map<string, Set<string>>;
+  edgeIdsByEndpoints: Map<string, Set<string>>;
 }
 
-function append(map: Map<string, string[]>, key: string, id: string): void {
-  const values = map.get(key);
-  if (values) {
-    if (!values.includes(id)) values.push(id);
-  } else {
-    map.set(key, [id]);
-  }
+function append(map: Map<string, Set<string>>, key: string, id: string): void {
+  let values = map.get(key);
+  if (!values) map.set(key, values = new Set());
+  values.add(id);
 }
 
 function endpointKey(source: string, target: string): string {
@@ -132,12 +135,17 @@ function buildGraphLookup(payload: GraphPayload): GraphLookup {
 function resolveKeysFromLookup(
   lookup: GraphLookup,
   keys: Set<string>,
+  maxMatches = Infinity,
 ): GraphElementHighlight {
   const nodeIds = new Set<string>();
   const edgeIds = new Set<string>();
   for (const key of keys) {
-    lookup.nodeIdsByAlias.get(key)?.forEach((id) => nodeIds.add(id));
-    lookup.edgeIdsByAlias.get(key)?.forEach((id) => edgeIds.add(id));
+    const add = (set: Set<string>, id: string) => {
+      if (!set.has(id) && nodeIds.size + edgeIds.size >= maxMatches) throw inspectLimit();
+      set.add(id);
+    };
+    lookup.nodeIdsByAlias.get(key)?.forEach((id) => add(nodeIds, id));
+    lookup.edgeIdsByAlias.get(key)?.forEach((id) => add(edgeIds, id));
   }
   return { nodeIds: [...nodeIds], edgeIds: [...edgeIds] };
 }
@@ -176,7 +184,7 @@ export function resolveResultGraphHighlight(
   rowIndex: number,
   column?: string,
 ): GraphElementHighlight {
-  const row = result.rows[rowIndex];
+  const row = resultRow(result, rowIndex);
   if (!payload || !row) {
     return { nodeIds: [], edgeIds: [] };
   }
@@ -202,6 +210,21 @@ export function resolveResultGraphHighlight(
   };
 }
 
+/** Canonical relationship identity is independent of the user's Cypher alias. */
+function canonicalEdgeIds(value: unknown): Set<string> {
+  const ids = new Set<string>();
+  const visit = (current: unknown): void => {
+    if (!current || typeof current !== "object") return;
+    if (Array.isArray(current)) { current.forEach(visit); return; }
+    const item = current as Record<string, unknown>;
+    if (typeof item.edge_uuid === "string" && typeof item.src_uuid === "string" && typeof item.dst_uuid === "string") {
+      ids.add(item.edge_uuid);
+    } else Object.values(item).forEach(visit);
+  };
+  visit(value);
+  return ids;
+}
+
 function linkLabel(column: string, kind: ResultEntityLink["kind"]): string {
   const normalized = column
     .replace(/[_-]+/g, " ")
@@ -223,8 +246,9 @@ function resultEntityLinksWithLookup(
   payload: GraphPayload | undefined,
   rowIndex: number,
   lookup: GraphLookup | undefined,
+  maxLinks = Infinity,
 ): ResultEntityLink[] {
-  const row = result.rows[rowIndex];
+  const row = resultRow(result, rowIndex);
   if (!payload || !row || !lookup) return [];
 
   const links: ResultEntityLink[] = [];
@@ -232,6 +256,7 @@ function resultEntityLinksWithLookup(
   const add = (kind: ResultEntityLink["kind"], id: string, label: string) => {
     const key = `${kind}:${id}`;
     if (seen.has(key)) return;
+    if (links.length >= maxLinks) throw inspectLimit();
     seen.add(key);
     links.push({ kind, id, label });
   };
@@ -241,8 +266,22 @@ function resultEntityLinksWithLookup(
     ...Object.keys(row).filter((column) => !result.columns.includes(column)),
   ];
   for (const column of columns) {
-    const direct = resolveKeysFromLookup(lookup, identityKeys(row[column]));
-    if (EDGE_IDENTITY_KEY.test(column)) {
+    const value = row[column];
+    if (column === "edge_uuid" && typeof value === "string") {
+      if (lookup.edgeIdsByAlias.get(value)?.has(value)) add("edge", value, linkLabel(column, "edge"));
+      continue;
+    }
+    const keys = identityKeys(value);
+    let hasCanonicalEdges = false;
+    if (value && typeof value === "object") {
+      for (const edgeId of canonicalEdgeIds(value)) {
+        hasCanonicalEdges = true;
+        keys.delete(edgeId);
+        if (lookup.edgeIdsByAlias.get(edgeId)?.has(edgeId)) add("edge", edgeId, linkLabel(column, "edge"));
+      }
+    }
+    const direct = resolveKeysFromLookup(lookup, keys, maxLinks);
+    if (EDGE_IDENTITY_KEY.test(column) && !hasCanonicalEdges) {
       direct.edgeIds.forEach((id) => add("edge", id, linkLabel(column, "edge")));
     } else {
       direct.nodeIds.forEach((id) => add("node", id, linkLabel(column, "node")));
@@ -261,12 +300,26 @@ function resultEntityLinksWithLookup(
 export function resultEntityLinksByRow(
   result: QueryResult,
   payload: GraphPayload | undefined,
+  rowOffset = 0,
+  bounded = false,
 ): Record<string, ResultEntityLink[]> {
+  if (bounded && payload && (payload.nodes.length + payload.edges.length > 4096 ||
+      Buffer.byteLength(JSON.stringify(payload)) > RESULT_INSPECT_BYTES)) throw inspectLimit();
   const links: Record<string, ResultEntityLink[]> = {};
+  let count = 0;
+  let bytes = 2;
   const lookup = payload && buildGraphLookup(payload);
   for (let index = 0; index < result.rows.length; index += 1) {
-    const rowLinks = resultEntityLinksWithLookup(result, payload, index, lookup);
-    if (rowLinks.length > 0) links[String(index)] = rowLinks;
+    const rowLinks = resultEntityLinksWithLookup(result, payload, index, lookup, bounded ? 32 : Infinity);
+    if (rowLinks.length > 0) {
+      count += rowLinks.length;
+      const key = String(rowOffset + index);
+      if (bounded) {
+        bytes += Buffer.byteLength(JSON.stringify(key)) + Buffer.byteLength(JSON.stringify(rowLinks)) + 2;
+        if (count > 4000 || bytes > RESULT_INSPECT_BYTES) throw inspectLimit();
+      }
+      links[key] = rowLinks;
+    }
   }
   return links;
 }
@@ -285,6 +338,16 @@ export function resolveResultEntitySelection(
   return item ? { kind, item } : undefined;
 }
 
+function graphSelectionMatchesRow(selection: GraphSelection): (row: TableRow) => boolean {
+  const keys = selection.kind === "node" ? nodeAliases(selection.item) : edgeAliases(selection.item);
+  return (row: TableRow): boolean => {
+    if (matchesAny(keys, identityKeys(row))) return true;
+    if (selection.kind !== "edge") return false;
+    const endpoints = rowEndpoints(row);
+    return endpoints.source === selection.item.source && endpoints.target === selection.item.target;
+  };
+}
+
 /** Find result rows represented by a graph selection for reverse linking. */
 export function resultRowsForGraphSelection(
   result: QueryResult,
@@ -293,31 +356,62 @@ export function resultRowsForGraphSelection(
 ): number[] {
   if (nativeRows !== undefined)
     return [...new Set(nativeRows.filter(row => Number.isSafeInteger(row) && row >= 0 && row < result.rowCount))];
+  const matches = graphSelectionMatchesRow(selection);
   const rows: number[] = [];
-  const itemKeys =
-    selection.kind === "node"
-      ? nodeAliases(selection.item)
-      : edgeAliases(selection.item);
-
   for (const [index, row] of result.rows.entries()) {
-    const rowKeys = identityKeys(row);
-    let matches = matchesAny(itemKeys, rowKeys);
-    if (!matches && selection.kind === "edge") {
-      const endpoints = rowEndpoints(row);
-      matches =
-        endpoints.source === selection.item.source &&
-        endpoints.target === selection.item.target;
-    }
-    if (matches) rows.push(index);
+    if (matches(row)) rows.push(index);
   }
   return rows;
 }
 
-/** Webview messages cannot carry bigint values; keep the table JSON-safe. */
-export function jsonSafeQueryResult(result: QueryResult): QueryResult {
-  return JSON.parse(
-    JSON.stringify({ columns: result.columns, rows: result.rows, rowCount: result.rowCount, algorithm: result.algorithm }, (_key, value) =>
-      typeof value === "bigint" ? value.toString() : value,
-    ),
-  ) as QueryResult;
+/** Plain base-graph picks have no native layer membership. Read source rows on
+ * demand in yielding batches; retain only matching indices, never a full row copy.
+ * Undefined means a newer selection or project replaced this scan.
+ */
+export async function resultRowsForGraphSelectionBatched(
+  result: QueryResult,
+  selection: GraphSelection,
+  isCurrent: () => boolean,
+): Promise<number[] | undefined> {
+  const matches = graphSelectionMatchesRow(selection);
+  const rows: number[] = [];
+  let deadline = performance.now() + 8;
+  for (let index = 0; index < result.rowCount; index++) {
+    if (!isCurrent()) return undefined;
+    const row = resultRow(result, index);
+    if (row && matches(row)) rows.push(index);
+    // A single row is indivisible; release the host between costly rows as
+    // well as at the row ceiling so pending picks and closes can cancel work.
+    if (index + 1 < result.rowCount && ((index + 1) % RESULT_PAGE_SIZE === 0 || performance.now() >= deadline)) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      deadline = performance.now() + 8;
+    }
+  }
+  return isCurrent() ? rows : undefined;
+}
+
+/** Compatibility helper: wire callers receive one bounded, JSON-safe page. */
+export function jsonSafeQueryResult(result: QueryResult): ResultPage {
+  return queryResultPage(result);
+}
+
+export function resultPageContainsRow(page: ResultPage, index: number): boolean {
+  return Number.isSafeInteger(index) && index >= page.offset && index < page.offset + page.rows.length;
+}
+
+/** Preserve global source indices without sending off-page membership. */
+export function resultPageSelection(page: ResultPage, selected: ReadonlySet<number>): number[] {
+  const visible: number[] = [];
+  for (let index = page.offset; index < page.offset + page.rows.length; index++) {
+    if (selected.has(index)) visible.push(index);
+  }
+  return visible;
+}
+
+export function resultMessageMatches(message: unknown, current: ResultMessageContext): boolean {
+  if (!message || typeof message !== "object") return false;
+  const incoming = message as Partial<ResultMessageContext>;
+  return typeof incoming.resultId === "string" && incoming.resultId === current.resultId &&
+    Number.isSafeInteger(incoming.revision) && incoming.revision === current.revision &&
+    Number.isSafeInteger(incoming.pageVersion) && incoming.pageVersion === current.pageVersion;
 }

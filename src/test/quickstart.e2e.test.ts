@@ -51,6 +51,46 @@ suite("XYG air-routes integration", () => {
         fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
     }
   });
+  test("checkpoint records continue through Core pages with distinct opaque cursors", async function () {
+    this.timeout(120000);
+    const root = fs.mkdtempSync(path.join(qualificationWork ?? os.tmpdir(), "gf-core-diff-pages-"));
+    try {
+      const opened = await vscode.commands.executeCommand<any>("graphforge.openSampleProject", { path: root });
+      if (opened?.code === "RUNTIME_UNAVAILABLE") {
+        if (process.env.GRAPHFORGE_REQUIRE_NATIVE) assert.fail("Native Core is required");
+        this.skip();
+      }
+      const before = await vscode.commands.executeCommand<any>("graphforge.createCheckpoint", { name: "page-before", description: "Cursor fixture" });
+      assert.ok(!before?.error, "The first checkpoint must succeed");
+      const created = await vscode.commands.executeCommand<any>("graphforge.runQuery", {
+        cypher: "UNWIND $rows AS row CREATE (:CheckpointPageProbe {id: row})",
+        params: { rows: Array.from({ length: 150 }, (_, index) => index) },
+      });
+      assert.ok(!created?.error, "The bounded fixture query must succeed");
+      const after = await vscode.commands.executeCommand<any>("graphforge.createCheckpoint", { name: "page-after", description: "Cursor fixture" });
+      assert.ok(!after?.error, "The second checkpoint must succeed");
+      const args = { from: "page-before", to: "page-after", scope: "graph", detail: "records", limit: 100 };
+      const first = await vscode.commands.executeCommand<any>("graphforge.diffCheckpoints", args);
+      assert.equal(first.rows?.length, 100);
+      assert.equal(typeof first.nextPageToken, "string");
+      assert.equal(first.nextOffset, undefined);
+      const last = await vscode.commands.executeCommand<any>("graphforge.diffCheckpoints", { ...args, after: first.nextPageToken });
+      assert.equal(last.rows?.length, 50);
+      assert.equal(last.nextPageToken, undefined);
+      assert.equal(new Set([...first.rows, ...last.rows].map(row => row.record_uuid)).size, 150);
+      const invalid = await vscode.commands.executeCommand<any>("graphforge.diffCheckpoints", { ...args, limit: 50, after: first.nextPageToken });
+      assert.equal(invalid.code, "GF_PAGE_INVALID");
+      const currentArgs = { ...args, to: "current" };
+      const current = await vscode.commands.executeCommand<any>("graphforge.diffCheckpoints", currentArgs);
+      await vscode.commands.executeCommand("graphforge.runQuery", { cypher: "CREATE (:CheckpointPageProbe {id: 150})" });
+      const stale = await vscode.commands.executeCommand<any>("graphforge.diffCheckpoints", { ...currentArgs, after: current.nextPageToken });
+      assert.equal(stale.code, "GF_PAGE_SNAPSHOT_GONE");
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      await vscode.commands.executeCommand("graphforge.closeProject");
+      if (!qualificationWork) fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+    }
+  });
   test("Core query → persisted Arrow → independent XYG graph/chart/map/timeline", async function () {
     // The retained-view/theme matrix contains multiple independently bounded
     // 60-second readiness phases, plus Core seeding, edits and exports.
@@ -60,6 +100,8 @@ suite("XYG air-routes integration", () => {
     )!;
     await extension.activate();
     const root = fs.mkdtempSync(path.join(qualificationWork ?? os.tmpdir(), "gf-xyg-e2e-"));
+    let exportReadinessRetries = 0;
+    let resizeReceiptChecks = 0;
     try {
       const opened = await vscode.commands.executeCommand<any>(
         "graphforge.openSampleProject",
@@ -96,6 +138,22 @@ suite("XYG air-routes integration", () => {
       );
       assert.ok(!query?.error, JSON.stringify(query));
       assert.equal(query.sourceQuery, "queries/templates/routes-overview.cypher");
+      assert.equal(query.rows.length, 500);
+      assert.ok(query.rowCount > query.rows.length);
+      assert.equal(query.offset, 0);
+      assert.equal(query.nextOffset, 500);
+      assert.equal("ipc" in query, false);
+      const nextPage = await vscode.commands.executeCommand<any>("graphforge.readResultPage", {
+        resultId: query.resultId, offset: query.nextOffset,
+      });
+      assert.equal(nextPage.resultId, query.resultId);
+      assert.equal(nextPage.offset, 500);
+      assert.ok(nextPage.rows.length > 0 && nextPage.rows.length <= 500);
+      const savedPageSource = JSON.parse(fs.readFileSync(path.join(root, "results/query-result.json"), "utf8"));
+      assert.equal(savedPageSource.rows.length, query.rowCount);
+      assert.deepEqual(nextPage.rows[0], savedPageSource.rows[500]);
+      const invalidPage = await vscode.commands.executeCommand<any>("graphforge.readResultPage", { resultId: query.resultId, offset: -1 });
+      assert.equal(invalidPage.code, "RESULT_PAGE_INVALID");
       const invalidFilter = await vscode.commands.executeCommand<any>("graphforge.createProjectVisualization", {
         name: "rejected-filter", kind: "result-graph", result: "results/query-result.json",
         filter: { column: "region", operator: "equals", value: "US-TX" },
@@ -158,6 +216,8 @@ suite("XYG air-routes integration", () => {
           params: { id: { $uuid: node_uuid } },
         },
       );
+      const stalePage = await vscode.commands.executeCommand<any>("graphforge.readResultPage", { resultId: query.resultId, offset: 0 });
+      assert.equal(stalePage.code, "RESULT_PAGE_STALE");
       assert.equal(
         verified.rows?.[0]?.verified,
         true,
@@ -185,9 +245,23 @@ suite("XYG air-routes integration", () => {
         );
         assert.equal(result.lifecycle.renderer, "xyg");
         instances.add(result.instanceId);
-        const htmlExport = await vscode.commands.executeCommand<any>(
-          "graphforge.exportVisualization", { format: "html" },
-        );
+        const exportWhenReady = async (format?: "html") => {
+          const deadline = Date.now() + 60_000;
+          for (;;) {
+            const exported = await vscode.commands.executeCommand<any>("graphforge.exportVisualization", { format });
+            if (exported?.error !== "XYG_EXPORT_NOT_READY") return exported;
+            exportReadinessRetries++;
+            // A viewport update may supersede the receipt while asynchronous
+            // export I/O runs. Rejoin actual paint readiness; do not retry
+            // native export failures or the explicit temporal limitation.
+            assert.ok(Date.now() < deadline, "Export must reach a painted viewport");
+            const repainted = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", {
+              path: spec.path, waitForReady: true,
+            });
+            assert.equal(repainted.lifecycle?.type, "graphforge/renderReady");
+          }
+        };
+        const htmlExport = await exportWhenReady("html");
         if (spec.kind === "geospatial") {
           assert.match(htmlExport?.error ?? "", /XYG_HTML_EXPORT_UNAVAILABLE/);
         } else {
@@ -196,7 +270,7 @@ suite("XYG air-routes integration", () => {
           assert.match(html, /xy\.renderStandalone/);
           assert.match(html, /connect-src 'none'/);
           if (spec.kind === "temporal") {
-            const repeated = await vscode.commands.executeCommand<any>("graphforge.exportVisualization", { format: "html" });
+            const repeated = await exportWhenReady("html");
             assert.ok(repeated?.htmlPath && repeated.htmlPath !== htmlExport.htmlPath, "Repeated export preserves the first HTML file");
             assert.equal(fs.readFileSync(htmlExport.htmlPath, "utf8"), html);
             assert.equal(fs.readFileSync(repeated.htmlPath, "utf8"), html);
@@ -204,9 +278,7 @@ suite("XYG air-routes integration", () => {
           if (spec.kind === "temporal" && process.env.GRAPHFORGE_XYG_SCENARIOS)
             fs.copyFileSync(htmlExport.htmlPath, path.join(path.dirname(process.env.GRAPHFORGE_XYG_SCENARIOS), "temporal.html"));
         }
-        const exported = await vscode.commands.executeCommand<any>(
-          "graphforge.exportVisualization",
-        );
+        const exported = await exportWhenReady();
         if (spec.kind === "temporal") {
           assert.match(
             exported?.error ?? "",
@@ -316,16 +388,28 @@ suite("XYG air-routes integration", () => {
       const reopenedSaved = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", saved);
       assert.equal(reopenedSaved.lifecycle?.type, "graphforge/renderReady");
       assert.equal(reopenedSaved.lifecycle.nodeCount, 579, "Saved Arrow reopens without rerunning its query");
-      const resize = async (left: number) => {
+      const resize = async (left: number, previous: { width: number; renderGeneration: number }) => {
         await vscode.commands.executeCommand("vscode.setEditorLayout", { orientation: 0, groups: [{ size: left }, { size: 1 - left }] });
-        // ResizeObserver deliberately debounces host recomposition by 100 ms.
-        await new Promise(resolve => setTimeout(resolve, 300));
-        const resized = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", saved);
-        assert.equal(resized.lifecycle?.type, "graphforge/renderReady");
-        assert.equal(resized.lifecycle.nodeCount, 579);
-        return resized.lifecycle;
+        // A completed command/layout does not acknowledge the webview's
+        // debounced ResizeObserver. Wait for a painted, changed viewport rather
+        // than accepting the retained receipt after an arbitrary sleep.
+        const deadline = Date.now() + 60_000;
+        let lifecycle = previous;
+        do {
+          resizeReceiptChecks++;
+          const resized = await vscode.commands.executeCommand<any>("graphforge.openProjectVisualization", saved);
+          assert.equal(resized.lifecycle?.type, "graphforge/renderReady");
+          assert.equal(resized.lifecycle.nodeCount, 579);
+          lifecycle = resized.lifecycle;
+          if (lifecycle.width !== previous.width && lifecycle.renderGeneration > previous.renderGeneration) return lifecycle;
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } while (Date.now() < deadline);
+        assert.fail(`Split-editor resize was not painted: ${JSON.stringify({
+          beforeWidth: previous.width, afterWidth: lifecycle.width,
+          beforeGeneration: previous.renderGeneration, afterGeneration: lifecycle.renderGeneration,
+        })}`);
       };
-      const wide = await resize(0.25), narrow = await resize(0.75);
+      const wide = await resize(0.25, reopenedSaved.lifecycle), narrow = await resize(0.75, wide);
       assert.notEqual(wide.width, narrow.width, "Actual split-editor viewport change must recompose");
       assert.ok(narrow.renderGeneration > wide.renderGeneration);
       if (process.env.GRAPHFORGE_XYG_SCENARIOS)
@@ -333,6 +417,7 @@ suite("XYG air-routes integration", () => {
           fourViews: "passed", arrowEditReopen: "passed", themes: 4,
           retainedViews: "passed", explicitTemporalExportLimit: "passed",
           standaloneHtmlExport: "passed",
+          exportReadinessRetries, resizeReceiptChecks,
           savedReopenWithoutQuery: "passed", resize: { wide, narrow },
         }, null, 2));
     } finally {

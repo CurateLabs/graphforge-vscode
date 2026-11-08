@@ -40,8 +40,9 @@ the actual package rather than assuming the Mac size applies elsewhere.
 
 A successful Core query keeps its original Arrow IPC in memory and persists it
 beside both canonical and historical JSON/Markdown results as `.arrow`. The
-JSON records its Arrow SHA-256. Reopen verifies that digest and decodes data
-and numeric types from the original Arrow before rendering;
+small `.resultmeta` publication pointer records its Arrow SHA-256 and source metadata.
+Reopen verifies that digest and exposes lazy row reads from the original Arrow
+without reading or parsing the complete JSON companion;
 a missing or mismatched pair requires rerunning the query. Readable JSON is
 for inspection, not a replacement for canonical Arrow types or metadata.
 
@@ -127,8 +128,13 @@ project's `visualizations/exports/` directory. XYG currently rejects static
 time-axis export (`XYG_SCENE_UNSUPPORTED_PUBLIC_AXIS`); the timeline remains
 interactive and that export failure is reported without changing its axis.
 
-The workbench keeps Results pages bounded to 500 rows, including selection of
-later rows. Previous/Next retain original row numbers; row arrow keys and native
+The workbench and command API keep Results pages bounded to 500 rows and
+4 MiB of encoded row data. Arrow rows decode on demand; IPC and the complete
+result remain host-owned. Result IDs, view revisions and page versions reject
+stale replies/actions. Byte-shortened pages resume at `nextOffset`. Inspect links
+are page-local and have separate entity/link limits; exceeding them omits optional
+Inspect affordances while keeping the row page available. Native picks retain
+full source membership and reveal off-page rows. Previous/Next retain original row numbers; row arrow keys and native
 Inspect/expand activation remain available. Selected text uses selection
 foreground tokens. Inspector editing preserves focus and drafts on failure.
 
@@ -156,12 +162,24 @@ intermediate scenes. Final positions and cancellation stay native-owned. The
 engine retains its default 30-second layout bound and the panel retains its
 60-second readiness deadline.
 
-Result saves prepare JSON, Markdown and Arrow in a private staging directory,
-then publish their files without yielding to other reads or writers in the same
+Result saves stream complete JSON/Markdown through a bounded write buffer, then
+prepare Arrow and a small `.resultmeta` pointer in a private staging directory,
+then publish their files with metadata last, without yielding to other reads or writers in the same
 extension host. The digest still rejects mismatches caused by interrupted
 publication or external processes; this is not a filesystem-wide transaction.
 
 ## Proof
+
+`resultRows.test.ts`, `resultDocument.test.ts` and `resultTablePaging.test.ts`
+cover bounded/lazy access, byte-shortened pages, complete documents, Arrow-first
+reopen, concurrent publication and stale UI actions. Session tests exercise
+page continuation without rerunning and invalidation on replacement/close.
+Native analytical selection uses XYG `selectedRows`, separate from row filters;
+Rust emits aligned selection planes and XYG maps picks through native provenance
+(including filtered/gathered marks). The extension never infers analytical
+identity from a displayed trace index. Unknown canonical schemas include a
+rerun/version/explicit-composition recovery action from XYG.
+
 
 - `npm run check` checks host, browser and benchmark types.
 - `npm run test:unit` includes intent validation, typed binding, source-file
@@ -222,3 +240,14 @@ The artifact renders offline through XYG’s shared Rust tick lane. Maps retain
 PNG/SVG export until their painter payload has a standalone document contract.
 HTML exports contain the painted data and capture the chart snapshot; temporal
 playback and cursor/range/window export semantics remain unqualified.
+
+Result publication checks the source session/result immediately before its
+synchronous metadata-last rename phase. Superseded saves never replace current
+or named result files. Command completion validates its exposed result ID after
+asynchronous UI work without replacing a newer source. Project/backend pairs
+are installed together after preparation; checkpoint reads keep their pinned
+generation. Core `graphforge.next_page_token` metadata remains distinct from
+local offsets and is relayed only after the Arrow response's local pages end.
+Plain graph picks use cancellable 500-row scanning batches when native membership
+is absent; empty native membership remains authoritative. Edge-only Inspect
+pages retain actual edges, and a reloaded later page offers First rows.

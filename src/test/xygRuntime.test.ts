@@ -51,6 +51,33 @@ suite("XYG ownership and native composition", () => {
       assert.deepEqual(resultRowsFromXygChart(fig, c, { trace: 999, index }, result.rowCount), []);
     }
   });
+  test("analytical table selections relay exact native rows and selected-overlay picks", async () => {
+    const xy = await loadXyg(root);
+    const fixture = path.join(root, "vendor/xyg/tests/fixtures/graphforge");
+    for (const [name, intent, key] of [
+      ["triad_census", "bar-chart", "chart"],
+      ["node2vec", "parallel-coordinates", "vectors"],
+      ["node2vec-2d", "embedding-coordinates", "points"],
+    ] as const) {
+      const result = decodeTable(fs.readFileSync(path.join(fixture, name === "node2vec-2d" ? "derived" : "results", `${name}.arrow`)));
+      const spec = createResultGraphSpec({ name, result: `results/${name}.json`, intent });
+      const input = graphInput(spec, result, undefined, [], [0]);
+      assert.ok("layers" in input);
+      assert.deepEqual(input.layers[0].selectedRows, [0]);
+      assert.equal(input.layers[0].result, result.ipc);
+      const c = xy.composeGraphForge({ ...input, layers: input.layers.map(layer => ({ ...layer, rows: [2, 0, 1] })) });
+      assert.deepEqual([...c[key].selected], [0, 1, 0]);
+      assert.deepEqual(resultEntitiesFromXygRow(c, graphResultId(spec, result), 0), { nodeIds: [], edgeIds: [], rowIndices: [0] });
+      assert.deepEqual(resultEntitiesFromXygRow(c, "another-result", 0), { nodeIds: [], edgeIds: [], rowIndices: [] });
+      assert.deepEqual(resultEntitiesFromXygRow(c, graphResultId(spec, result), 3), { nodeIds: [], edgeIds: [], rowIndices: [] });
+      const fig = xy.graphforgeChart(c, { width: 480, height: 320 });
+      assert.ok(fig.buildPayload().buffers.byteLength > 0);
+      assert.deepEqual(resultRowsFromXygChart(fig, c, { trace: 1, index: 0 }, result.rowCount), [0]);
+      assert.deepEqual(resultRowsFromXygChart(fig, c, { trace: 1, index: 999 }, result.rowCount), []);
+      const cleared = xy.composeGraphForge(graphInput(spec, result, undefined, [], []));
+      assert.ok([...cleared[key].selected].every(value => value === 0));
+    }
+  });
   test("derived and aggregate picks use bounded native result provenance", () => {
     const derived = { uuid: null, layers: [{ resultId: "results/a.json", row: 4 }, { resultId: "results/b.json", row: 2 }] };
     assert.deepEqual(resultRowsFromXygPick(derived, "results/a.json", 10), [4]);

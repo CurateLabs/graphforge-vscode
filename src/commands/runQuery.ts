@@ -4,7 +4,7 @@ import type { GraphForgeSession } from "../session/graphForgeSession";
 import {
   persistQueryResultDocuments,
 } from "../session/resultDocument";
-import type { QueryResult } from "../session/types";
+import type { ResultPage } from "../session/resultRows";
 import type { ResultTableViewProvider } from "../views/resultTableView";
 import {
   ensureProjectOrRecover,
@@ -31,7 +31,7 @@ export interface RunQueryArgs {
   sourceQuery?: string;
 }
 
-type RunQueryOutcome = SetupRecovery | QueryResult | { error: string; code?: string };
+type RunQueryOutcome = SetupRecovery | ResultPage | { error: string; code?: string };
 
 export function registerRunQuery(
   context: vscode.ExtensionContext,
@@ -39,6 +39,13 @@ export function registerRunQuery(
   results: ResultTableViewProvider,
 ): void {
   context.subscriptions.push(
+    vscode.commands.registerCommand("graphforge.readResultPage", (args: { resultId: string; offset?: number; limit?: number }) => {
+      try { return session.readResultPage(args); }
+      catch (error) {
+        const message = errorMessage(error);
+        return { error: message, code: message.split(":", 1)[0] };
+      }
+    }),
     vscode.commands.registerCommand(
       "graphforge.runQuery",
       async (args?: RunQueryArgs): Promise<RunQueryOutcome | undefined> => {
@@ -146,7 +153,7 @@ async function executeAndShowResult(
   params?: Record<string, unknown>,
   resultName?: string,
   sourceQuery?: string,
-): Promise<QueryResult | { error: string; code?: string }> {
+): Promise<ResultPage | { error: string; code?: string }> {
   try {
     // #31: lightweight in-flight indicator (status-bar spinner) so slow
     // queries aren't silent. Shared `withEngineProgress` (Window location, so
@@ -156,12 +163,17 @@ async function executeAndShowResult(
     const result = await withEngineProgress("running query…", () =>
       session.execute(cypher, params),
     );
-    const projectRoot = session.project?.rootPath;
+    if (sourceQuery) result.sourceQuery = sourceQuery;
+    const project = session.project;
+    const projectRoot = project?.rootPath;
     if (!projectRoot) {
       throw new Error("Query completed without an open GraphForge project.");
     }
-    if (sourceQuery) result.sourceQuery = sourceQuery;
-    const documents = await persistQueryResultDocuments(projectRoot, result, resultName);
+    const documents = await persistQueryResultDocuments(projectRoot, result, resultName, undefined,
+      () => session.project === project && session.getLastResult() === result);
+    if (session.project !== project || session.getLastResult() !== result)
+      throw new Error("RESULT_PAGE_STALE: The project changed while saving. Open the saved result in its original project or run the query again.");
+    const page = session.resultPage(result);
     // Refresh project-backed query/result lists after files are durable.
     session.notifyChanged();
     await results.show(result, "Cypher result", documents);
@@ -171,6 +183,7 @@ async function executeAndShowResult(
       .get<boolean>("openResultGraphOnQuery", false);
     if (openGraph) {
       const commands = await vscode.commands.getCommands(true);
+      session.assertResultPageCurrent(page.resultId);
       if (commands.includes("graphforge.showResultGraph")) {
         await vscode.commands.executeCommand("graphforge.showResultGraph", {
           title: "Cypher result",
@@ -181,7 +194,8 @@ async function executeAndShowResult(
     void vscode.window.showInformationMessage(
       `GraphForge: ${result.rowCount} row(s) · saved to ${path.relative(projectRoot, documents.historyJsonPath ?? documents.jsonPath)}`,
     );
-    return result;
+    session.assertResultPageCurrent(page.resultId);
+    return page;
   } catch (err) {
     // Curated toast (#28); the query echo and full raw engine message go to
     // the error output channel and the structured result, not the toast.

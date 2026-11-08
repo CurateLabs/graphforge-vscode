@@ -12,6 +12,9 @@ import {
 } from "../session/resultDocument";
 import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { readProjectResult } from "../session/projectArtifacts";
+import { lazyResultRows } from "../session/resultRows";
+import { decodeTable } from "../session/arrowCodec";
+import { resultMetadataPath, LEGACY_RESULT_BYTES } from "../session/resultMetadata";
 import type { QueryResult } from "../session/types";
 
 suite("query result documents", () => {
@@ -174,6 +177,71 @@ suite("query result documents", () => {
         assert.deepEqual([...reopened.ipc!], [...results[index].ipc]);
       }
       assert.ok(!fs.readdirSync(path.join(root, "results")).some(file => file.startsWith(".publish-")));
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("a newer result during staging prevents stale current and named publication", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-stale-publication-"));
+    let owner = "old";
+    let currentSave: ReturnType<typeof persistQueryResultDocuments> | undefined;
+    const current: QueryResult = { columns: ["value"], rows: [{ value: "current" }], rowCount: 1 };
+    const old: QueryResult = { columns: ["value"], rowCount: 2, rows: lazyResultRows(2, value => {
+      if (!currentSave) {
+        owner = "current";
+        currentSave = persistQueryResultDocuments(root, current, "shared");
+      }
+      return { value };
+    }) };
+    try {
+      await assert.rejects(persistQueryResultDocuments(root, old, "shared", undefined, () => owner === "old"), /RESULT_PAGE_STALE/);
+      await currentSave;
+      assert.deepEqual(readProjectResult(root, "results/query-result.json").rows, current.rows);
+      assert.deepEqual(readProjectResult(root, "results/shared.json").rows, current.rows);
+      assert.ok(!fs.readdirSync(path.join(root, "results")).some(file => file.startsWith(".publish-")));
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("streams complete multi-page documents and reopens Arrow without reading the JSON companion", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-stream-result-"));
+    try {
+      const ipc = Buffer.from(tableToIPC(tableFromArrays({ value: Int32Array.from({ length: 1203 }, (_, index) => index) })));
+      const docs = await persistQueryResultDocuments(root, decodeTable(ipc));
+      const saved = JSON.parse(fs.readFileSync(docs.jsonPath, "utf8"));
+      assert.equal(saved.rows.length, 1203);
+      assert.deepEqual(saved.rows[1202], { value: 1202 });
+      assert.match(fs.readFileSync(docs.markdownPath, "utf8"), /\| 1202 \|/);
+      fs.writeFileSync(docs.jsonPath, "not JSON".repeat(LEGACY_RESULT_BYTES));
+      const reopened = readProjectResult(root, docs.jsonPath);
+      assert.equal(reopened.rowCount, 1203);
+      assert.deepEqual(reopened.rows[1202], { value: 1202 });
+      assert.deepEqual(reopened.ipc, ipc);
+      fs.writeFileSync(resultMetadataPath(docs.jsonPath), "{}");
+      assert.throws(() => readProjectResult(root, docs.jsonPath), /RESULT_METADATA_INVALID/);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("keeps bounded legacy snapshots readable and gives a recovery action for oversized legacy JSON", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-legacy-result-"));
+    try {
+      const ipc = Buffer.from(tableToIPC(tableFromArrays({ value: [42] })));
+      const docs = await persistQueryResultDocuments(root, decodeTable(ipc));
+      fs.unlinkSync(resultMetadataPath(docs.jsonPath));
+      assert.equal(readProjectResult(root, docs.jsonPath).rows[0].value, 42);
+      fs.writeFileSync(docs.jsonPath, " ".repeat(LEGACY_RESULT_BYTES + 1));
+      assert.throws(() => readProjectResult(root, docs.jsonPath), /RESULT_DOCUMENT_TOO_LARGE.*Run the query again/);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("publishing plain rows after Arrow never reuses the old sidecar", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-plain-after-arrow-"));
+    try {
+      const ipc = Buffer.from(tableToIPC(tableFromArrays({ value: [42] })));
+      await persistQueryResultDocuments(root, decodeTable(ipc), "same");
+      const docs = await persistQueryResultDocuments(root, { columns: ["value"], rows: [{ value: "plain" }], rowCount: 1 }, "same");
+      assert.deepEqual(readProjectResult(root, docs.jsonPath).rows, [{ value: "plain" }]);
+      assert.equal(readProjectResult(root, docs.jsonPath).ipc, undefined);
+      fs.appendFileSync(docs.jsonPath, " ");
+      assert.throws(() => readProjectResult(root, docs.jsonPath), /XYG_RESULT_MISMATCH/);
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 

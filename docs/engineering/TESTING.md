@@ -6,6 +6,41 @@ See [the acceptance matrix](XYG_QUALIFICATION.md) for the required live Core led
 guard, real result corpus, native/WASM comparisons, per-platform installed VSIX
 lanes, reproduction commands and the separately outstanding release gates.
 
+### Bounded results and analytical selection
+
+`resultRows.test.ts` verifies lazy access, complete identity, byte-shortened
+continuation and oversized/invalid requests. `resultDocument.test.ts` verifies
+complete streamed output, Arrow-first reopen despite an edited/oversized JSON
+companion, legacy bounds, corrupt bytes, plain-after-Arrow publication, and
+concurrent current/history consistency. `resultTableModel.test.ts` and
+`resultTablePaging.test.ts` verify page-local Inspect, later-page native selection,
+clearing, stale contexts and superseded asynchronous projections. Later on-page
+picks and clears must cancel off-page work; table/Inspect clicks must retain
+the host selection across Next/Previous navigation. Session tests
+verify the command page API does not reexecute and rejects replaced/closed IDs.
+Delayed ledger/checkpoint/power responses must reject backend replacement before
+exposure; checkpoint handles also reject delayed reads after a session change.
+The installed quickstart exercises actual command paging and authoritative saved
+reopen. Owner GraphForge tests cover native/WASM analytical selected planes,
+reordered/filtered source membership, overlay picks, and actionable unknown schemas.
+These are bounded regression fixtures; optional scale investigations remain
+separate under NFR-12.
+
+One opt-in numerical access probe (100,000 rows × 8 Float64 columns) records
+source hashes, IPC/page bytes, decode/page timing and heap/RSS deltas without
+logging cell values. It compiles the measured sources into a private temporary
+directory, checks source hashes across compilation/measurement, and records
+compiled artifact hashes. It preserves the original IPC identity and checks first/last
+page bounds. This is access evidence, not an end-to-end scale qualification:
+
+```sh
+node --expose-gc scripts/probe-result-access.cjs /tmp/gf-result-access.json
+```
+
+The retained [access receipt](evidence/issue-80-result-access.json) is a single
+macOS-arm64/Node 22 observation. Do not generalize its timings to Core computation,
+layout, paint, export, interaction, other platforms or the full release matrix.
+
 ## Packaged Hub clone storage qualification (#94)
 
 The existing CI workflow has an opt-in `qualify_hub_clone` dispatch input. It builds
@@ -309,3 +344,28 @@ multi-instance ownership, stable private saved identities, explicit
 coordination groups, stale-generation rejection, superseded-work cancellation,
 and deterministic disposal. Webview typechecking additionally verifies that
 graph, artifact, and figure messages carry the instance/revision context.
+
+The installed checkpoint scenario creates 150 temporary records between named
+checkpoints and retrieves 100+50 through the actual command API. It checks opaque
+cursor forwarding, final omission, changed-limit rejection and stale `current`
+snapshot rejection. Unit tests separate local byte/row paging from Core cursors,
+budget command metadata, and reject superseded saves before publication. A real
+extension-host scheduling regression observes a saved-result restore during
+backend installation and requires a coherent project/backend pair.
+
+The bounded-command suite captures the registered callbacks with isolated UI stubs: Find row/metadata failures remain structured, complete
+descriptor envelopes obey 4 MiB, and all three Node list commands forward opaque
+cursors and filters. Session regressions reject project attachments superseded
+by close/dispose and await backend disposal. Runtime-dependent installation
+checks skip only when no runtime is available; required-native acceptance fails.
+Canonical Inspect tests include conflicting legacy aliases. A costly-row scan
+regression proves cancellation runs before the row-count ceiling; slices yield
+after eight milliseconds of elapsed work between rows, with a 500-row ceiling.
+One row remains an indivisible decode/traversal unit.
+
+Viewport/export acceptance follows acknowledged paint rather than fixed sleeps.
+After split-layout changes, the scenario requires a changed-width receipt from
+a newer generation within a bounded wait. Export retries only the explicit
+`XYG_EXPORT_NOT_READY` response after rejoining paint readiness; native export
+errors and the temporal image limitation are still asserted directly. Scenario
+receipts retain readiness retry/check counts and the two viewport dimensions.

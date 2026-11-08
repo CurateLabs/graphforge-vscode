@@ -1,3 +1,6 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import * as assert from "node:assert/strict";
 import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { GraphForgeSession } from "../session/graphForgeSession";
@@ -94,6 +97,204 @@ suite("GraphForgeSession result generation", () => {
   }
 });
 
+suite("GraphForgeSession bounded command pages", () => {
+  test("pages an exposed result without rerunning and rejects replaced or closed results", async () => {
+    const session = new GraphForgeSession();
+    let executions = 0;
+    injectForge(session, makeStubForge({ execute: () => {
+      executions++;
+      return Buffer.from(tableToIPC(tableFromArrays({ value: Int32Array.from({ length: 1203 }, (_, index) => index) })));
+    } }));
+    try {
+      const result = await session.execute("fixture");
+      const first = session.resultPage(result);
+      assert.equal(first.rows.length, 500);
+      assert.equal(first.nextOffset, 500);
+      assert.ok(!("ipc" in first));
+      const second = session.readResultPage({ resultId: first.resultId, offset: first.nextOffset });
+      assert.equal(second.rows[0].value, 500);
+      assert.equal(executions, 1);
+      await session.execute("replacement");
+      assert.throws(() => session.readResultPage({ resultId: first.resultId }), /RESULT_PAGE_STALE/);
+      const original = session.getLastResult()!;
+      const replacedBackendPage = session.resultPage(original);
+      injectForge(session, makeStubForge());
+      assert.throws(() => session.readResultPage({ resultId: replacedBackendPage.resultId }), /RESULT_PAGE_STALE/);
+      assert.throws(() => session.resultPage(original), /RESULT_PAGE_STALE/);
+      assert.throws(() => session.resultPage({ columns: [], rows: [], rowCount: 0 }), /RESULT_PAGE_STALE/);
+      session.restoreResult({ columns: [], rows: [], rowCount: 0 });
+      const replacement = session.resultPage(session.getLastResult()!);
+      await session.closeProject();
+      assert.throws(() => session.readResultPage({ resultId: replacement.resultId }), /RESULT_PAGE_STALE/);
+    } finally { session.dispose(); }
+  });
+});
+
+suite("GraphForgeSession command-result ownership", () => {
+  const calls: Array<[keyof GraphForgeNative, (session: GraphForgeSession) => Promise<QueryResult>]> = [
+    ["listAssertions", session => session.listAssertions()],
+    ["listCheckpoints", session => session.listCheckpoints()],
+    ["listAlgorithmRuns", session => session.listAlgorithmRuns()],
+    ["attachEvidence", session => session.attachEvidence({ assertionUuid: "assertion", sourceUuid: "source", sourceKind: "document", role: "supports" })],
+    ["createAssertion", async session => (await session.createAssertion({ claim: "fixture", graphRefs: [{ graphUuid: "node", graphKind: "node", role: "subject", ordinal: 0 }] })).result],
+  ];
+  for (const [method, run] of calls) {
+    test(`${method} rejects an async result from the previous backend`, async () => {
+      const session = new GraphForgeSession();
+      let release!: (ipc: Buffer) => void;
+      const response = new Promise<Buffer>(resolve => { release = resolve; });
+      injectForge(session, makeStubForge({ [method]: () => response }));
+      try {
+        const result = run(session);
+        injectForge(session, makeStubForge());
+        release(encodeSimpleTable(["value"], [{ value: "original" }]));
+        await assert.rejects(result, (error: unknown) => (error as { code?: string }).code === "SESSION_CHANGED");
+        assert.throws(() => session.readResultPage({ resultId: "unknown" }), /RESULT_PAGE_STALE/);
+      } finally { session.dispose(); }
+    });
+    test(`${method} binds a successful result before command exposure`, async () => {
+      const session = new GraphForgeSession();
+      injectForge(session, makeStubForge({ [method]: () => Promise.resolve(encodeSimpleTable(["value"], [{ value: "current" }])) }));
+      try {
+        const result = await run(session);
+        const page = session.resultPage(result);
+        assert.deepEqual(session.readResultPage({ resultId: page.resultId }).rows, [{ value: "current" }]);
+        injectForge(session, makeStubForge());
+        assert.throws(() => session.resultPage(result), /RESULT_PAGE_STALE/);
+      } finally { session.dispose(); }
+    });
+  }
+
+  test("a checkpoint query keeps its opening backend across delayed command input", () => {
+    const session = new GraphForgeSession();
+    let executions = 0;
+    injectForge(session, makeStubForge({ openCheckpoint: () => ({
+      checkpointUuid: "checkpoint", generationUuid: "generation",
+      execute: () => { executions++; return encodeSimpleTable(["value"], [{ value: "checkpoint" }]); },
+      projectCapabilities: () => Buffer.alloc(0), inspectAdjacency: () => ({}),
+    }) }));
+    try {
+      const view = session.openCheckpointView("fixture");
+      const result = view.execute("read");
+      assert.equal(result.generationUuid, "generation");
+      assert.deepEqual(session.resultPage(result).rows, [{ value: "checkpoint" }]);
+      injectForge(session, makeStubForge());
+      assert.throws(() => view.execute("delayed read"), (error: unknown) => (error as { code?: string }).code === "SESSION_CHANGED");
+      assert.equal(executions, 1, "never execute the stale handle against another project session");
+    } finally { session.dispose(); }
+  });
+});
+
+suite("GraphForgeSession result completion boundaries", () => {
+  test("validating an older command does not replace the newer public result", async () => {
+    const session = new GraphForgeSession();
+    injectForge(session, makeStubForge({ execute: () => encodeSimpleTable(["value"], [{ value: "fixture" }]) }));
+    try {
+      const old = session.resultPage(await session.execute("old"), { verb: "rank", by: "fixture" });
+      const current = session.resultPage(await session.execute("current"));
+      await Promise.resolve();
+      assert.throws(() => session.assertResultPageCurrent(old.resultId), /RESULT_PAGE_STALE/);
+      session.assertResultPageCurrent(current.resultId);
+      assert.equal(session.readResultPage({ resultId: current.resultId }).resultId, current.resultId);
+    } finally { session.dispose(); }
+  });
+
+  test("checkpoint diff forwards the native cursor and preserves final-page omission", async () => {
+    const session = new GraphForgeSession();
+    const seen: unknown[] = [];
+    injectForge(session, makeStubForge({ diffCheckpoints: async args => {
+      seen.push(args);
+      const table = tableFromArrays({ value: Int32Array.from({ length: args.after ? 50 : 100 }, (_, i) => i + (args.after ? 100 : 0)) });
+      if (!args.after) table.schema.metadata.set("graphforge.next_page_token", "native opaque cursor");
+      return Buffer.from(tableToIPC(table));
+    } }));
+    try {
+      const first = session.resultPage(await session.diffCheckpoints("before", "after", "graph", "records", 100));
+      assert.equal(first.rows.length, 100);
+      assert.equal(first.nextPageToken, "native opaque cursor");
+      const last = session.resultPage(await session.diffCheckpoints("before", "after", "graph", "records", 100, first.nextPageToken));
+      assert.equal(last.rows.length, 50);
+      assert.equal(last.nextPageToken, undefined);
+      assert.deepEqual(seen, [
+        { from: "before", to: "after", scope: "graph", detail: "records", limit: 100, after: undefined },
+        { from: "before", to: "after", scope: "graph", detail: "records", limit: 100, after: "native opaque cursor" },
+      ]);
+    } finally { session.dispose(); }
+  });
+
+  test("native list continuations retain their filters and forward opaque cursors", async () => {
+    const session = new GraphForgeSession();
+    const seen: unknown[] = [];
+    const list = async (args: unknown) => {
+      seen.push(args);
+      const table = tableFromArrays({ value: [1] });
+      table.schema.metadata.set("graphforge.next_page_token", "next opaque cursor");
+      return Buffer.from(tableToIPC(table));
+    };
+    injectForge(session, makeStubForge({ listAssertions: list, listCheckpoints: list, listAlgorithmRuns: list }));
+    try {
+      for (const result of [
+        await session.listAssertions({ graphUuid: "graph", limit: 2, after: "opaque cursor" }),
+        await session.listCheckpoints(2, "opaque cursor"),
+        await session.listAlgorithmRuns("pagerank", 2, "opaque cursor"),
+      ]) assert.equal(session.resultPage(result).nextPageToken, "next opaque cursor");
+      assert.deepEqual(seen, [
+        { graphUuid: "graph", limit: 2, after: "opaque cursor" },
+        { limit: 2, after: "opaque cursor" },
+        { algorithm: "pagerank", limit: 2, after: "opaque cursor" },
+      ]);
+    } finally { session.dispose(); }
+  });
+
+  test("a scheduled saved-result restore observes an atomic backend/project switch", async function () {
+    const session = new GraphForgeSession();
+    if (!await session.hasUsableRuntime()) {
+      session.dispose();
+      if (process.env.GRAPHFORGE_REQUIRE_NATIVE) assert.fail("A runtime is required for installation acceptance");
+      this.skip();
+    }
+    injectForge(session, makeStubForge());
+    injectCapabilities(session, []);
+    const oldProject = session.project;
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-atomic-open-"));
+    const slot = session as unknown as { backend: EngineBackend | undefined };
+    let backend = slot.backend;
+    let observed: string | undefined;
+    Object.defineProperty(session, "backend", { configurable: true, get: () => backend, set: (next: EngineBackend | undefined) => {
+      backend = next;
+      if (next) queueMicrotask(() => {
+        observed = session.project?.rootPath;
+        if (session.project === oldProject) session.restoreResult({ columns: ["source"], rows: [{ source: "old" }], rowCount: 1 });
+      });
+    } });
+    try {
+      await session.initializeProject(root);
+      assert.equal(observed, root);
+      assert.equal(session.getLastResult(), undefined, "a previous-project result cannot survive the new session installation");
+    } finally { await session.closeProject(); session.dispose(); fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  for (const action of ["close", "dispose"] as const) {
+    test(`${action} cancels an outstanding project attachment`, async function () {
+      const session = new GraphForgeSession();
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-cancel-open-"));
+      try {
+        if (!await session.hasUsableRuntime()) {
+          if (process.env.GRAPHFORGE_REQUIRE_NATIVE) assert.fail("A runtime is required for installation acceptance");
+          this.skip();
+        }
+        const pending = session.initializeProject(root);
+        const rejected = assert.rejects(pending, (error: unknown) => (error as { code?: string }).code === "SESSION_CHANGED");
+        if (action === "close") await session.closeProject();
+        else session.dispose();
+        await rejected;
+        assert.equal(session.project, undefined);
+        assert.equal(session.activeRuntime, undefined);
+      } finally { await session.closeProject(); session.dispose(); fs.rmSync(root, { recursive: true, force: true }); }
+    });
+  }
+});
+
 suite("GraphForgeSession.algorithmCatalog", () => {
   test("falls back to static list when binding has no forge open", () => {
     const session = new GraphForgeSession();
@@ -176,6 +377,17 @@ suite("GraphForgeSession.toGraphPayload styling", () => {
     assert.equal(payload.styleMode, "class-only");
     assert.equal(payload.nodes.length, 0);
     session.dispose();
+  });
+
+  test("canonical edge-only pages retain Inspect data without synthesizing endpoint nodes", async () => {
+    const session = new GraphForgeSession();
+    try {
+      const payload = await session.toGraphPayload({ columns: ["r"], rows: [{ r: { edge_uuid: "edge", src_uuid: "source", dst_uuid: "target", rel_type: "ROUTE", dist: 9 } }], rowCount: 1 });
+      assert.deepEqual(payload.nodes, []);
+      assert.equal(payload.edges.length, 1);
+      assert.equal(payload.edges[0].id, "edge");
+      assert.deepEqual(payload.edges[0].properties, { dist: 9 });
+    } finally { session.dispose(); }
   });
 
   test("canonical entity inspection preserves airport properties and UUIDs", async () => {

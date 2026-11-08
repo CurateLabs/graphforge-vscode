@@ -33,6 +33,7 @@ export interface TableRow {
 
 export interface QueryResult {
   columns: string[];
+  /** Logical complete row collection. Core Arrow rows decode on demand and are immutable. */
   rows: TableRow[];
   rowCount: number;
   algorithm?: string;
@@ -42,6 +43,8 @@ export interface QueryResult {
   generationUuid?: string;
   /** Project query file to open for explicit rerun; never executed on reopen. */
   sourceQuery?: string;
+  /** Opaque Core continuation for this Arrow response, distinct from local row offsets. */
+  nextPageToken?: string;
 }
 
 export interface GraphNode {

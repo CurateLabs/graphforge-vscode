@@ -60,6 +60,14 @@ suite("decodeTable", () => {
     ]);
   });
 
+  test("preserves the opaque native continuation separately from row counts", () => {
+    const table = tableFromArrays({ value: [1, 2] });
+    table.schema.metadata.set("graphforge.next_page_token", "opaque+/Core=cursor");
+    const result = decodeTable(Buffer.from(tableToIPC(table)));
+    assert.equal(result.nextPageToken, "opaque+/Core=cursor");
+    assert.equal(result.rowCount, 2);
+  });
+
   test("keeps scalar numeric columns and nulls unchanged", () => {
     const ipc = Buffer.from(tableToIPC(tableFromArrays({ value: [1, null, 3] })));
     const result = decodeTable(ipc);

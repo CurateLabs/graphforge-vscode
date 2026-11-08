@@ -1,6 +1,7 @@
+import { assertResultReplySize, type ResultPage } from "../session/resultRows";
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { AnalystVerb, QueryResult, WriteMode, WRITE_MODES } from "../session/types";
+import { AnalystVerb, WriteMode, WRITE_MODES } from "../session/types";
 import { WRITE_MODE_OPTIONS } from "./pickerCopy";
 import {
   CommandOutcome,
@@ -50,6 +51,7 @@ export interface ExportInvocationDescriptorArgs {
 export interface ListAlgorithmRunsArgs {
   algorithm?: string;
   limit?: number;
+  after?: string;
 }
 export interface PublishCompositeTransactionArgs {
   /** Full composite transaction request; bypasses the JSON editor flow. */
@@ -112,7 +114,7 @@ async function showJson(title: string, value: unknown): Promise<void> {
 async function runEnableCapability(
   session: GraphForgeSession,
   args?: EnableCapabilityArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -166,11 +168,13 @@ async function runEnableCapability(
     const result = await withEngineProgress("enabling capability…", () =>
       session.enableCapability(capabilityId, version),
     );
-    await showJson("Enable Capability", result);
+    const page = session.resultPage(result);
+    await showJson("Enable Capability", page);
     void vscode.window.showInformationMessage(
       `GraphForge: capability "${capabilityId}" v${version} enabled.`,
     );
-    return result;
+    session.assertResultPageCurrent(page.resultId);
+    return page;
   } catch (err) {
     return reportEngineError("Enable Capability failed", err);
   }
@@ -240,7 +244,7 @@ interface InvocationDescriptorPayload {
   fingerprint: string;
   projectionFingerprint?: string;
   canonicalBytesBase64: string;
-  invocation?: { columns: string[]; rowCount: number; rows: QueryResult["rows"] };
+  invocation?: ResultPage;
 }
 
 /**
@@ -304,6 +308,7 @@ async function runExportInvocationDescriptor(
       projectionFingerprint: descriptor.projectionFingerprint,
       canonicalBytesBase64: descriptor.canonicalBytes.toString("base64"),
     };
+    assertResultReplySize(payload);
     const doc = await vscode.workspace.openTextDocument({
       content: JSON.stringify(payload, null, 2),
       language: "json",
@@ -324,13 +329,12 @@ async function runExportInvocationDescriptor(
     }
     if (invoke) {
       const result = session.invokeDescriptor(descriptor);
-      payload.invocation = {
-        columns: result.columns,
-        rowCount: result.rowCount,
-        rows: result.rows,
-      };
+      const page = session.resultPage(result);
+      payload.invocation = page;
+      assertResultReplySize(payload);
       await showJson(`Invoke Descriptor (${verb})`, payload.invocation);
     }
+    if (payload.invocation) session.assertResultPageCurrent(payload.invocation.resultId);
     return payload;
   } catch (err) {
     return reportEngineError("Export Invocation Descriptor failed", err);
@@ -340,7 +344,7 @@ async function runExportInvocationDescriptor(
 async function runListAlgorithmRuns(
   session: GraphForgeSession,
   args?: ListAlgorithmRunsArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -351,14 +355,12 @@ async function runListAlgorithmRuns(
   }
   try {
     const result = await withEngineProgress("listing algorithm runs…", () =>
-      session.listAlgorithmRuns(args?.algorithm, args?.limit ?? 100),
+      session.listAlgorithmRuns(args?.algorithm, args?.limit ?? 100, args?.after),
     );
-    await showJson("List Algorithm Runs", {
-      columns: result.columns,
-      rowCount: result.rowCount,
-      rows: result.rows,
-    });
-    return result;
+    const page = session.resultPage(result);
+    await showJson("List Algorithm Runs", page);
+    session.assertResultPageCurrent(page.resultId);
+    return page;
   } catch (err) {
     return reportEngineError("List Algorithm Runs failed", err);
   }
@@ -373,7 +375,7 @@ async function runListAlgorithmRuns(
 async function runPublishCompositeTransaction(
   session: GraphForgeSession,
   args?: PublishCompositeTransactionArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -438,15 +440,13 @@ async function runPublishCompositeTransaction(
   }
   try {
     const result = session.publishCompositeTransaction(request);
-    await showJson("Publish Composite Transaction", {
-      columns: result.columns,
-      rowCount: result.rowCount,
-      rows: result.rows,
-    });
+    const page = session.resultPage(result);
+    await showJson("Publish Composite Transaction", page);
     void vscode.window.showInformationMessage(
       "GraphForge: composite transaction published.",
     );
-    return result;
+    session.assertResultPageCurrent(page.resultId);
+    return page;
   } catch (err) {
     return reportEngineError("Publish Composite Transaction failed", err);
   }

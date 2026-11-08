@@ -1,6 +1,6 @@
+import type { ResultPage } from "../session/resultRows";
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import type { QueryResult } from "../session/types";
 import type { ResultTableViewProvider } from "../views/resultTableView";
 import {
   CommandOutcome,
@@ -12,7 +12,7 @@ import {
 
 /** Structured result of `graphforge.find`, returned to `executeCommand` callers (#36). */
 type FindOutcome = CommandOutcome<
-  QueryResult & { verb: "find"; query: string; label?: string }
+  ResultPage & { verb: "find"; query: string; label?: string }
 >;
 
 /**
@@ -62,32 +62,31 @@ async function runFind(
   }
   const label = labelPick === "(any)" ? undefined : labelPick;
 
-  let result: QueryResult;
   try {
-    result = await session.invokeVerb("find", { query, label, k: 10 });
-  } catch (err) {
-    return handleFindError(err, label);
-  }
+    const result = await session.invokeVerb("find", { query, label, k: 10 });
+    const page = session.resultPage(result, { verb: "find", query, label });
+    await results.show(result, `Find · ${query || "(all)"}`);
 
-  await results.show(result, `Find · ${query || "(all)"}`);
-
-  const hasUuids = result.columns.some((c) => /uuid/i.test(c));
-  const openGraph = vscode.workspace
-    .getConfiguration("graphforge")
-    .get<boolean>("openResultGraphOnQuery", false);
-  if (hasUuids && openGraph && result.rowCount > 0) {
-    const commands = await vscode.commands.getCommands(true);
-    if (commands.includes("graphforge.showResultGraph")) {
-      await vscode.commands.executeCommand("graphforge.showResultGraph", {
-        title: `find: ${query ?? "(all)"}`,
-      });
+    const hasUuids = result.columns.some((c) => /uuid/i.test(c));
+    const openGraph = vscode.workspace
+      .getConfiguration("graphforge")
+      .get<boolean>("openResultGraphOnQuery", false);
+    if (hasUuids && openGraph && result.rowCount > 0) {
+      const commands = await vscode.commands.getCommands(true);
+      session.assertResultPageCurrent(page.resultId);
+      if (commands.includes("graphforge.showResultGraph")) {
+        await vscode.commands.executeCommand("graphforge.showResultGraph", {
+          title: `find: ${query ?? "(all)"}`,
+        });
+      }
     }
-  }
 
-  void vscode.window.showInformationMessage(
-    `GraphForge Find: ${result.rowCount} hit(s)`,
-  );
-  return { ...result, verb: "find", query, label };
+    void vscode.window.showInformationMessage(`GraphForge Find: ${result.rowCount} hit(s)`);
+    session.assertResultPageCurrent(page.resultId);
+    return { ...page, verb: "find", query, label };
+  } catch (error) {
+    return handleFindError(error, label);
+  }
 }
 
 /**

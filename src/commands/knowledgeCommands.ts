@@ -1,3 +1,4 @@
+import type { ResultPage } from "../session/resultRows";
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import {
@@ -21,7 +22,6 @@ import type {
   EvidenceSourceKind,
   ExplicitAssertionStatus,
   GraphPayload,
-  QueryResult,
 } from "../session/types";
 
 /**
@@ -33,6 +33,7 @@ import type {
 export interface ListAssertionsArgs {
   graphUuid?: string;
   limit?: number;
+  after?: string;
 }
 export interface CreateAssertionArgs {
   claim?: string;
@@ -178,7 +179,7 @@ export function registerKnowledgeCommands(
 async function runListAssertions(
   session: GraphForgeSession,
   args?: ListAssertionsArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -187,13 +188,12 @@ async function runListAssertions(
     const result = await session.listAssertions({
       graphUuid: args?.graphUuid,
       limit: args?.limit ?? 100,
+      after: args?.after,
     });
-    await openJsonDoc({
-      rowCount: result.rowCount,
-      columns: result.columns,
-      rows: result.rows,
-    });
-    return result;
+    const page = session.resultPage(result);
+    await openJsonDoc(page);
+    session.assertResultPageCurrent(page.resultId);
+    return page;
   } catch (err) {
     return reportEngineError("List Assertions failed", err);
   }
@@ -397,7 +397,7 @@ async function runShowAssertionOnGraph(
 async function runAttachEvidence(
   session: GraphForgeSession,
   args?: AttachEvidenceArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -437,8 +437,10 @@ async function runAttachEvidence(
         role,
       }),
     );
+    const page = session.resultPage(result);
     void vscode.window.showInformationMessage("Evidence attached.");
-    return result;
+    session.assertResultPageCurrent(page.resultId);
+    return page;
   } catch (err) {
     return reportEngineError("Attach Evidence failed", err);
   }
@@ -448,7 +450,7 @@ async function runAttachEvidence(
 async function runAssessConfidence(
   session: GraphForgeSession,
   args?: AssessConfidenceArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -492,8 +494,10 @@ async function runAssessConfidence(
     const result = await withEngineProgress("assessing confidence…", () =>
       session.assessConfidence({ assertionUuid, policy, value }),
     );
+    const page = session.resultPage(result);
     void vscode.window.showInformationMessage("Confidence recorded.");
-    return result;
+    session.assertResultPageCurrent(page.resultId);
+    return page;
   } catch (err) {
     return reportEngineError("Assess Confidence failed", err);
   }
@@ -507,7 +511,7 @@ async function runAssessConfidence(
 async function runRecordAssertionStatus(
   session: GraphForgeSession,
   args?: RecordAssertionStatusArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -541,8 +545,10 @@ async function runRecordAssertionStatus(
         provenanceUuid,
       }),
     );
+    const page = session.resultPage(result);
     void vscode.window.showInformationMessage("Assertion status recorded.");
-    return result;
+    session.assertResultPageCurrent(page.resultId);
+    return page;
   } catch (err) {
     return reportEngineError("Record Status failed", err);
   }

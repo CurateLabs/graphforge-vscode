@@ -198,29 +198,31 @@ Epistemic statuses: `hypothesis | supported | refuted | disputed | retracted | s
 
 ## Key flows
 
-Node and Python backends capture generation identity with each read and associate it with that exact returned Buffer. Session reads reject a backend replacement before remembering the result. Python hosts without the Core identity capability omit the field rather than inventing an identity.
+Node and Python backends capture generation identity with each read and associate it with that exact returned Buffer. Session reads and mutations bind each decoded result to the backend captured before the call. They reject backend replacement before exposure; paging cannot establish ownership for an unregistered result. Checkpoint query handles retain their opening backend across delayed input. Python hosts without the Core identity capability omit the field rather than inventing an identity.
 
 ### Run Cypher
 
 1. User invokes Run Query — command
 2. Session ensures project open — GraphForgeSession
 3. `forge.execute` → IPC buffer — `@curatelabs/graphforge`
-4. Decode to rows — apache-arrow
-5. Persist canonical JSON + Markdown and timestamped history under `results/`;
+4. Keep Arrow authoritative and expose lazy row access — apache-arrow
+5. Stream complete JSON + Markdown and timestamped history under `results/`,
+   with original Arrow and a digest-checked `.resultmeta` publication pointer;
    reveal the Results `WebviewView` in the bottom Panel.
-6. When enabled, build `GraphPayload` and open Result Graph in the shared visualization editor group.
+6. Return a bounded `ResultPage`; the command page API and Results UI use at most
+   500 rows/4 MiB per page. When enabled, XYG composes original Arrow in the
+   shared visualization editor group. Inspect projects only the visible page.
 
 ### Link table and graph selections
 
-1. A Results row/cell click posts its row index and optional column.
-2. The host resolves exact node/edge IDs and identity-like values first; metric cells fall back
-   to the row's identities and `source`/`target` endpoints.
-3. If Result Graph is open, the host posts validated node/edge IDs for renderer highlighting.
-4. A Result Graph selection is resolved back to matching result rows and scrolls the bottom
-   table to the first match.
+1. Results posts a source row/cell with result ID, view revision and page version.
+2. The host rejects stale contexts and asks XYG for exact native membership.
+3. Graphs use canonical UUIDs; analytical compositions use selected source rows
+   within the exact result/generation contract, distinct from filtering rows.
+4. Native picks resolve back through owner provenance, including reordered,
+   filtered and gathered marks. The host retains membership and reveals the
+   appropriate bounded page. It never derives a source row from point order.
 
-Figure traces do not currently retain source-row provenance, so Figure selection linking is
-intentionally out of v0 rather than inferred from point order.
 
 ### Render and inspect a result graph
 
