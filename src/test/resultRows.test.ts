@@ -42,6 +42,21 @@ suite("bounded Arrow-backed result access", () => {
     assert.equal(first.resultId, second.resultId);
   });
 
+  test("budgets command metadata and exposes native continuation only after local rows", () => {
+    const result: QueryResult = { columns: ["text"], rows: Array.from({ length: 1200 }, (_, index) => ({ text: "x".repeat(8250), index })), rowCount: 1200, nextPageToken: "opaque Core cursor" };
+    const metadata = { verb: "find" as const, query: "q".repeat(100_000), label: "fixture" };
+    const first = queryResultPage(result, 0, 500, metadata);
+    assert.ok(Buffer.byteLength(JSON.stringify(first)) <= RESULT_PAGE_BYTES);
+    assert.ok(first.nextOffset !== undefined);
+    assert.ok(first.rows.length < 500, "command metadata must shorten a near-limit row page");
+    assert.equal(first.nextPageToken, undefined);
+    assert.equal(first.query, metadata.query);
+    const last = queryResultPage(result, 1199, 500, metadata);
+    assert.equal(last.nextOffset, undefined);
+    assert.equal(last.nextPageToken, "opaque Core cursor");
+    assert.throws(() => queryResultPage(result, 0, 500, { query: "q".repeat(RESULT_PAGE_BYTES) }), /RESULT_PAGE_METADATA_TOO_LARGE/);
+  });
+
   test("rejects an oversized row or columns and invalid ranges without truncation", () => {
     const result: QueryResult = { columns: ["text"], rows: [{ text: "x".repeat(RESULT_PAGE_BYTES) }], rowCount: 1 };
     assert.throws(() => queryResultPage(result), /RESULT_PAGE_ROW_TOO_LARGE.*saved JSON or Arrow/);

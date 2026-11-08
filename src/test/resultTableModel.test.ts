@@ -15,6 +15,7 @@ import {
   resultPageSelection,
   resultMessageMatches,
   resultRowsForGraphSelection,
+  resultRowsForGraphSelectionBatched,
 } from "../webview/resultTableModel";
 
 const result: QueryResult = {
@@ -193,6 +194,32 @@ suite("bounded result pages", () => {
       ({ id: `node-${index}`, labels: [], properties: { code: "shared" } })) };
     const rows: QueryResult = { columns: ["id"], rows: Array.from({ length: 500 }, () => ({ id: "shared" })), rowCount: 500 };
     assert.throws(() => resultEntityLinksByRow(rows, wide, 0, true), /RESULT_INSPECT_LIMIT/);
+  });
+
+  test("canonical edge Inspect does not depend on a relationship-looking column alias or endpoint nodes", () => {
+    const page = { resultId: "edge-only", columns: ["r"], rowCount: 501, offset: 500,
+      rows: [{ r: { edge_uuid: "route-1", src_uuid: "ATL", dst_uuid: "AUS", rel_type: "ROUTE" } }] };
+    const edgeOnly = { ...payload, nodes: [], edges: [{ ...payload.edges[0], id: "route-1" }] };
+    assert.deepEqual(resultEntityLinksByRow(page, edgeOnly, 500, true), {
+      "500": [{ kind: "edge", id: "route-1", label: "R" }],
+    });
+  });
+
+  test("plain selection scan can stop between bounded batches without retaining source rows", async () => {
+    let reads = 0;
+    let current = true;
+    const rows = new Proxy(new Array(1200), {
+      get(target, key, receiver) {
+        if (typeof key === "string" && /^\d+$/.test(key)) { reads++; return { id: key }; }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const pending = resultRowsForGraphSelectionBatched({ columns: ["id"], rows, rowCount: 1200 },
+      { kind: "node", item: { id: "811", labels: [], properties: {} } }, () => current);
+    assert.equal(reads, 500);
+    current = false;
+    assert.equal(await pending, undefined);
+    assert.equal(reads, 500);
   });
 
   test("native membership selects later rows without scanning the source", () => {

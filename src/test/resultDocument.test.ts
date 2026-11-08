@@ -12,6 +12,7 @@ import {
 } from "../session/resultDocument";
 import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { readProjectResult } from "../session/projectArtifacts";
+import { lazyResultRows } from "../session/resultRows";
 import { decodeTable } from "../session/arrowCodec";
 import { resultMetadataPath, LEGACY_RESULT_BYTES } from "../session/resultMetadata";
 import type { QueryResult } from "../session/types";
@@ -175,6 +176,27 @@ suite("query result documents", () => {
         assert.deepEqual(reopened.rows, results[index].rows);
         assert.deepEqual([...reopened.ipc!], [...results[index].ipc]);
       }
+      assert.ok(!fs.readdirSync(path.join(root, "results")).some(file => file.startsWith(".publish-")));
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("a newer result during staging prevents stale current and named publication", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-stale-publication-"));
+    let owner = "old";
+    let currentSave: ReturnType<typeof persistQueryResultDocuments> | undefined;
+    const current: QueryResult = { columns: ["value"], rows: [{ value: "current" }], rowCount: 1 };
+    const old: QueryResult = { columns: ["value"], rowCount: 2, rows: lazyResultRows(2, value => {
+      if (!currentSave) {
+        owner = "current";
+        currentSave = persistQueryResultDocuments(root, current, "shared");
+      }
+      return { value };
+    }) };
+    try {
+      await assert.rejects(persistQueryResultDocuments(root, old, "shared", undefined, () => owner === "old"), /RESULT_PAGE_STALE/);
+      await currentSave;
+      assert.deepEqual(readProjectResult(root, "results/query-result.json").rows, current.rows);
+      assert.deepEqual(readProjectResult(root, "results/shared.json").rows, current.rows);
       assert.ok(!fs.readdirSync(path.join(root, "results")).some(file => file.startsWith(".publish-")));
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });

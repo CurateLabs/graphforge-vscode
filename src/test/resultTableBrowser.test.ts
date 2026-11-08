@@ -91,6 +91,25 @@ suite("Results browser paging message contract", () => {
     assert.equal(f.element("previous-rows").disabled, true);
   });
 
+  test("reloaded later pages offer First rows and resume exact byte-shortened forward boundaries", () => {
+    const f = browserFixture();
+    // The host republishes its retained page after ready, without browser-only history.
+    f.send(page(811, 2, undefined, context(1, 6)));
+    assert.equal(f.element("previous-rows").hidden, false);
+    assert.equal(f.element("previous-rows").disabled, false);
+    assert.equal(f.element("previous-rows").textContent, "First rows");
+    f.element("previous-rows").click();
+    assert.equal((f.sent.at(-1) as { offset: number }).offset, 0);
+    assert.equal(f.element("previous-rows").disabled, true);
+    f.send(page(0, 3, 3, context(1, 7), "previous"));
+    f.element("load-more").click();
+    assert.equal((f.sent.at(-1) as { offset: number }).offset, 3);
+    f.send(page(3, 2, 5, context(1, 8), "next"));
+    assert.equal(f.element("previous-rows").textContent, "Previous rows");
+    f.element("previous-rows").click();
+    assert.equal((f.sent.at(-1) as { offset: number }).offset, 0);
+  });
+
   test("clears replaced sources, renders global selected rows and clears empty membership", () => {
     const f = browserFixture();
     f.send({ ...page(811, 2, 813), selectedRows: [811], selectedCount: 2, focusRow: 811 });

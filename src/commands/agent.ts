@@ -178,8 +178,8 @@ async function buildContext(
     contracts: {
       query: ".cypher/.cql text, or JSON { cypher: string, params?: object }",
       result: "Saved JSON companion + authoritative Arrow/.resultmeta; bounded ResultPage { " +
-        "resultId: string, columns: string[], rows: object[], rowCount: number, offset: number, nextOffset?: number, " +
-        "algorithm?: string, sourceQuery?: string, generationUuid?: string } (at most 500 rows / 4 MiB; rowCount is the total)",
+        "resultId: string, columns: string[], rows: object[], rowCount: number, offset: number, nextOffset?: number, nextPageToken?: string, " +
+        "algorithm?: string, sourceQuery?: string, generationUuid?: string } (at most 500 rows / 4 MiB; rowCount is this Arrow response's total)",
       visualization:
         "xyg.intent/v1 .gfviz.json (explicit bindings; canonical Core Arrow source)",
       mutation: ".cypher/.cql text, applied only with explicit confirm: true",

@@ -29,6 +29,8 @@ export interface OpenCheckpointArgs {
   cypher?: string;
 }
 export interface DiffCheckpointsArgs {
+  limit?: number;
+  after?: string;
   from?: string;
   to?: string;
   scope?: string;
@@ -177,6 +179,7 @@ async function runCreateCheckpoint(
     void vscode.window.showInformationMessage(
       `GraphForge: checkpoint "${name}" created.`,
     );
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("Create Checkpoint failed", err);
@@ -204,6 +207,7 @@ async function runListCheckpoints(
     void vscode.window.showInformationMessage(
       `GraphForge: ${result.rowCount} checkpoint(s).`,
     );
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("List Checkpoints failed", err);
@@ -268,6 +272,7 @@ async function runOpenCheckpoint(
       query = session.resultPage(result);
       await showResultDoc(`Open Checkpoint "${name}" — query`, result);
     }
+    if (query) session.assertResultPageCurrent(query.resultId);
     return {
       checkpointUuid: view.checkpointUuid,
       generationUuid: view.generationUuid,
@@ -330,13 +335,14 @@ async function runDiffCheckpoints(
   }
   try {
     const result = await withEngineProgress("diffing checkpoints…", () =>
-      session.diffCheckpoints(from, to, scope, detail),
+      session.diffCheckpoints(from, to, scope, detail, args?.limit, args?.after),
     );
     const page = session.resultPage(result);
     await showResultDoc(`Diff ${from} → ${to} (${scope}/${detail})`, result);
     void vscode.window.showInformationMessage(
       `GraphForge: diff produced ${result.rowCount} row(s).`,
     );
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("Diff Checkpoints failed", err);
@@ -381,6 +387,7 @@ async function runDeleteCheckpoint(
     void vscode.window.showInformationMessage(
       `GraphForge: checkpoint "${name}" deleted.`,
     );
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("Delete Checkpoint failed", err);
@@ -446,6 +453,7 @@ async function runRevertToCheckpoint(
     void vscode.window.showInformationMessage(
       `GraphForge: reverted to checkpoint "${name}".`,
     );
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("Revert to Checkpoint failed", err);

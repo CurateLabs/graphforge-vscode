@@ -20,6 +20,7 @@ export function decodeTable(buf: Buffer): QueryResult {
     rows,
     rowCount: table.numRows,
     algorithm: algorithm ?? undefined,
+    nextPageToken: table.schema.metadata?.get("graphforge.next_page_token") || undefined,
     ipc: buf,
     numericColumns: table.schema.fields.filter(f => DataType.isInt(f.type) || DataType.isFloat(f.type)).map(f => f.name),
   };

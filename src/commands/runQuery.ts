@@ -169,7 +169,8 @@ async function executeAndShowResult(
     if (!projectRoot) {
       throw new Error("Query completed without an open GraphForge project.");
     }
-    const documents = await persistQueryResultDocuments(projectRoot, result, resultName);
+    const documents = await persistQueryResultDocuments(projectRoot, result, resultName, undefined,
+      () => session.project === project && session.getLastResult() === result);
     if (session.project !== project || session.getLastResult() !== result)
       throw new Error("RESULT_PAGE_STALE: The project changed while saving. Open the saved result in its original project or run the query again.");
     const page = session.resultPage(result);
@@ -182,6 +183,7 @@ async function executeAndShowResult(
       .get<boolean>("openResultGraphOnQuery", false);
     if (openGraph) {
       const commands = await vscode.commands.getCommands(true);
+      session.assertResultPageCurrent(page.resultId);
       if (commands.includes("graphforge.showResultGraph")) {
         await vscode.commands.executeCommand("graphforge.showResultGraph", {
           title: "Cypher result",
@@ -192,6 +194,7 @@ async function executeAndShowResult(
     void vscode.window.showInformationMessage(
       `GraphForge: ${result.rowCount} row(s) · saved to ${path.relative(projectRoot, documents.historyJsonPath ?? documents.jsonPath)}`,
     );
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     // Curated toast (#28); the query echo and full raw engine message go to

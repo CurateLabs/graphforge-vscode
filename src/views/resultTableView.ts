@@ -5,12 +5,13 @@ import type { GraphPayload, QueryResult } from "../session/types";
 import type { ResultDocumentPaths } from "../session/resultDocument";
 import { queryResultPage, resultIdentity, type ResultPage } from "../session/resultRows";
 import type { HostToWebview, WebviewToHost } from "../webview/protocol";
+import type { GraphSelection } from "../webview/resultGraphModel";
 import { EntityInspectPanel } from "../webview/entityInspectPanel";
 import { XygVisualizationPanel } from "../webview/xygPanel";
 import {
   RESULT_INSPECT_NOTICE,
   resultPageContainsRow, resultPageSelection, resultMessageMatches,
-  resolveResultEntitySelection, resultEntityLinksByRow, resultRowsForGraphSelection,
+  resolveResultEntitySelection, resultEntityLinksByRow, resultRowsForGraphSelection, resultRowsForGraphSelectionBatched,
 } from "../webview/resultTableModel";
 
 export const RESULTS_VIEW_CONTAINER_ID = "graphforgeResults";
@@ -41,6 +42,7 @@ export class ResultTableViewProvider implements vscode.WebviewViewProvider, vsco
   private view: vscode.WebviewView | undefined;
   private state: ResultTableState | undefined;
   private revision = 0;
+  private selectionVersion = 0;
   private disposed = false;
   private readonly graphSelectionDisposable: vscode.Disposable;
 
@@ -49,12 +51,7 @@ export class ResultTableViewProvider implements vscode.WebviewViewProvider, vsco
       XygVisualizationPanel.onDidSelect(selection => {
         const state = this.state;
         if (!state || state.source !== selection.source || this.session.project?.rootPath !== selection.projectRoot) return;
-        // Native picks supply authoritative source membership. The legacy Inspect
-        // fallback is intentionally restricted to the already decoded page.
-        const rows = selection.rowIndices !== undefined
-          ? resultRowsForGraphSelection(state.source, selection, selection.rowIndices)
-          : state.page ? resultRowsForGraphSelection(state.page, selection).map(row => row + state.page!.offset) : [];
-        void this.highlightRows(state, rows);
+        void this.selectGraphEntity(state, selection);
       }),
       this.session.onDidChange(() => {
         if (this.state && !this.isCurrent(this.state)) this.clearStaleState();
@@ -62,6 +59,7 @@ export class ResultTableViewProvider implements vscode.WebviewViewProvider, vsco
       XygVisualizationPanel.onDidSelectRows(selection => {
         const state = this.state;
         if (!state || state.source !== selection.source || this.session.project?.rootPath !== selection.projectRoot) return;
+        ++this.selectionVersion;
         void this.highlightRows(state, selection.rowIndices);
       }),
     );
@@ -79,6 +77,7 @@ export class ResultTableViewProvider implements vscode.WebviewViewProvider, vsco
       const state = this.state;
       if (!state || state.loading || !this.isCurrent(state) || !resultMessageMatches(message, this.context(state))) return;
       if (message.type === "graphforge/requestResultPage") {
+        ++this.selectionVersion;
         void this.loadPage(state, message.offset, message.direction);
       } else if (message.type === "graphforge/selectResult") {
         if (state.page && resultPageContainsRow(state.page, message.rowIndex)) this.selectResult(message.rowIndex, message.column);
@@ -166,6 +165,31 @@ export class ResultTableViewProvider implements vscode.WebviewViewProvider, vsco
     }
   }
 
+  private async selectGraphEntity(state: ResultTableState, selection: GraphSelection & { rowIndices?: number[] }): Promise<void> {
+    if (!this.isCurrent(state)) return;
+    const version = ++this.selectionVersion;
+    // Explicit native membership, including an empty list, is authoritative.
+    if (selection.rowIndices !== undefined) {
+      await this.highlightRows(state, resultRowsForGraphSelection(state.source, selection, selection.rowIndices));
+      return;
+    }
+    // A newly picked plain entity supersedes navigation before the yielding scan.
+    if (state.loading) {
+      ++state.pageVersion;
+      state.loading = false;
+      state.error = undefined;
+      this.postState("selection");
+    }
+    const isCurrent = () => this.isCurrent(state) && this.selectionVersion === version;
+    try {
+      const rows = await resultRowsForGraphSelectionBatched(state.source, selection, isCurrent);
+      if (rows !== undefined && isCurrent()) await this.highlightRows(state, rows);
+    } catch {
+      if (isCurrent()) this.post({ type: "graphforge/resultSelection", ...this.context(state), linked: false,
+        message: "Result selection could not be resolved. Run the query again or open its saved document." });
+    }
+  }
+
   private async highlightRows(state: ResultTableState, rows: readonly number[]): Promise<void> {
     if (!this.isCurrent(state)) return;
     const cancelledPage = state.loading;
@@ -200,6 +224,7 @@ export class ResultTableViewProvider implements vscode.WebviewViewProvider, vsco
   private selectResult(rowIndex: number, column?: string): void {
     const state = this.state;
     if (!state || state.loading || !this.isCurrent(state) || !Number.isSafeInteger(rowIndex) || rowIndex < 0 || rowIndex >= state.source.rowCount) return;
+    ++this.selectionVersion;
     state.selectedRows = new Set([rowIndex]);
     const graphPanel = XygVisualizationPanel.active();
     const highlight = graphPanel?.highlightFromResult(state.source, rowIndex, column);
@@ -218,6 +243,7 @@ export class ResultTableViewProvider implements vscode.WebviewViewProvider, vsco
         !state.entityLinks?.[String(rowIndex)]?.some(link => link.kind === kind && link.id === id)) return;
     const selection = resolveResultEntitySelection(state.graphPayload, kind, id);
     if (!selection) return;
+    ++this.selectionVersion;
     state.selectedRows = new Set([rowIndex]);
     EntityInspectPanel.show(this.extensionUri, selection, openInNewTab);
     this.post({ type: "graphforge/resultSelection", ...this.context(state), linked: true,

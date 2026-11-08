@@ -172,6 +172,7 @@ async function runEnableCapability(
     void vscode.window.showInformationMessage(
       `GraphForge: capability "${capabilityId}" v${version} enabled.`,
     );
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("Enable Capability failed", err);
@@ -330,6 +331,7 @@ async function runExportInvocationDescriptor(
       payload.invocation = page;
       await showJson(`Invoke Descriptor (${verb})`, payload.invocation);
     }
+    if (payload.invocation) session.assertResultPageCurrent(payload.invocation.resultId);
     return payload;
   } catch (err) {
     return reportEngineError("Export Invocation Descriptor failed", err);
@@ -354,6 +356,7 @@ async function runListAlgorithmRuns(
     );
     const page = session.resultPage(result);
     await showJson("List Algorithm Runs", page);
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("List Algorithm Runs failed", err);
@@ -439,6 +442,7 @@ async function runPublishCompositeTransaction(
     void vscode.window.showInformationMessage(
       "GraphForge: composite transaction published.",
     );
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("Publish Composite Transaction failed", err);

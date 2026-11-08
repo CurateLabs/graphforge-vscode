@@ -130,6 +130,7 @@ export async function persistQueryResultDocuments(
   result: QueryResult,
   name?: string,
   date = new Date(),
+  canPublish?: () => boolean,
 ): Promise<ResultDocumentPaths> {
   const resultDir = path.join(projectRoot, RESULT_DOCUMENTS_DIR);
   const jsonPath = path.join(resultDir, QUERY_RESULT_JSON);
@@ -163,6 +164,8 @@ export async function persistQueryResultDocuments(
     for (const [index, [source]] of publications.entries()) await fs.copyFile(staged(source), staged(String(index)));
     // No await during publication: a new metadata pointer is published last.
     // External/interrupted readers still fail closed on either content digest.
+    if (canPublish && !canPublish())
+      throw Object.assign(new Error("RESULT_PAGE_STALE: The project or result changed while saving. Inspect the current result before retrying."), { code: "RESULT_PAGE_STALE" });
     publications.forEach(([, target], index) => renameSync(staged(String(index)), target));
   } finally { await fs.rm(staging, { recursive: true, force: true }); }
 

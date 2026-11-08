@@ -1,4 +1,4 @@
-import { queryResultPage, resultRow, type ResultPage } from "../session/resultRows";
+import { RESULT_PAGE_SIZE, queryResultPage, resultRow, type ResultPage } from "../session/resultRows";
 import type {
   GraphEdge,
   GraphNode,
@@ -210,6 +210,21 @@ export function resolveResultGraphHighlight(
   };
 }
 
+/** Canonical relationship identity is independent of the user's Cypher alias. */
+function canonicalEdgeIds(value: unknown): Set<string> {
+  const ids = new Set<string>();
+  const visit = (current: unknown): void => {
+    if (!current || typeof current !== "object") return;
+    if (Array.isArray(current)) { current.forEach(visit); return; }
+    const item = current as Record<string, unknown>;
+    if (typeof item.edge_uuid === "string" && typeof item.src_uuid === "string" && typeof item.dst_uuid === "string") {
+      ids.add(item.edge_uuid);
+    } else Object.values(item).forEach(visit);
+  };
+  visit(value);
+  return ids;
+}
+
 function linkLabel(column: string, kind: ResultEntityLink["kind"]): string {
   const normalized = column
     .replace(/[_-]+/g, " ")
@@ -252,6 +267,9 @@ function resultEntityLinksWithLookup(
   ];
   for (const column of columns) {
     const direct = resolveKeysFromLookup(lookup, identityKeys(row[column]), maxLinks);
+    for (const edgeId of canonicalEdgeIds(row[column])) {
+      lookup.edgeIdsByAlias.get(edgeId)?.forEach(id => add("edge", id, linkLabel(column, "edge")));
+    }
     if (EDGE_IDENTITY_KEY.test(column)) {
       direct.edgeIds.forEach((id) => add("edge", id, linkLabel(column, "edge")));
     } else {
@@ -309,6 +327,16 @@ export function resolveResultEntitySelection(
   return item ? { kind, item } : undefined;
 }
 
+function graphSelectionMatchesRow(selection: GraphSelection): (row: TableRow) => boolean {
+  const keys = selection.kind === "node" ? nodeAliases(selection.item) : edgeAliases(selection.item);
+  return (row: TableRow): boolean => {
+    if (matchesAny(keys, identityKeys(row))) return true;
+    if (selection.kind !== "edge") return false;
+    const endpoints = rowEndpoints(row);
+    return endpoints.source === selection.item.source && endpoints.target === selection.item.target;
+  };
+}
+
 /** Find result rows represented by a graph selection for reverse linking. */
 export function resultRowsForGraphSelection(
   result: QueryResult,
@@ -317,24 +345,34 @@ export function resultRowsForGraphSelection(
 ): number[] {
   if (nativeRows !== undefined)
     return [...new Set(nativeRows.filter(row => Number.isSafeInteger(row) && row >= 0 && row < result.rowCount))];
+  const matches = graphSelectionMatchesRow(selection);
   const rows: number[] = [];
-  const itemKeys =
-    selection.kind === "node"
-      ? nodeAliases(selection.item)
-      : edgeAliases(selection.item);
-
   for (const [index, row] of result.rows.entries()) {
-    const rowKeys = identityKeys(row);
-    let matches = matchesAny(itemKeys, rowKeys);
-    if (!matches && selection.kind === "edge") {
-      const endpoints = rowEndpoints(row);
-      matches =
-        endpoints.source === selection.item.source &&
-        endpoints.target === selection.item.target;
-    }
-    if (matches) rows.push(index);
+    if (matches(row)) rows.push(index);
   }
   return rows;
+}
+
+/** Plain base-graph picks have no native layer membership. Read source rows on
+ * demand in yielding batches; retain only matching indices, never a full row copy.
+ * Undefined means a newer selection or project replaced this scan.
+ */
+export async function resultRowsForGraphSelectionBatched(
+  result: QueryResult,
+  selection: GraphSelection,
+  isCurrent: () => boolean,
+): Promise<number[] | undefined> {
+  const matches = graphSelectionMatchesRow(selection);
+  const rows: number[] = [];
+  for (let start = 0; start < result.rowCount; start += RESULT_PAGE_SIZE) {
+    if (!isCurrent()) return undefined;
+    for (let index = start; index < Math.min(start + RESULT_PAGE_SIZE, result.rowCount); index++) {
+      const row = resultRow(result, index);
+      if (row && matches(row)) rows.push(index);
+    }
+    if (start + RESULT_PAGE_SIZE < result.rowCount) await new Promise<void>(resolve => setImmediate(resolve));
+  }
+  return isCurrent() ? rows : undefined;
 }
 
 /** Compatibility helper: wire callers receive one bounded, JSON-safe page. */

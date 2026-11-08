@@ -1,4 +1,4 @@
-import { queryResultPage, resultIdentity, type ResultPage } from "./resultRows";
+import { queryResultPage, resultIdentity, type ResultPage, type ResultPageMetadata } from "./resultRows";
 import * as vscode from "vscode";
 import {
   decodeTable,
@@ -108,6 +108,7 @@ export class GraphForgeSession implements vscode.Disposable {
   private algorithmContractsCache: AlgorithmDescriptorContract[] | undefined;
   private lastResult: QueryResult | undefined;
   private publicResult: QueryResult | undefined;
+  private publicResultMetadata: ResultPageMetadata = {};
   private readonly resultBackends = new WeakMap<QueryResult, EngineBackend>();
   private lastResultTitle: string | undefined;
   private beliefPolicy: BeliefPolicySettings = { ...DEFAULT_BELIEF_POLICY };
@@ -131,6 +132,7 @@ export class GraphForgeSession implements vscode.Disposable {
     void this.backend?.dispose();
     this.backend = undefined;
     this.publicResult = undefined;
+    this.publicResultMetadata = {};
   }
 
   get project(): DetectedProject | undefined {
@@ -206,6 +208,7 @@ export class GraphForgeSession implements vscode.Disposable {
     this.algorithmContractsCache = undefined;
     this.lastResult = undefined;
     this.publicResult = undefined;
+    this.publicResultMetadata = {};
     this.lastResultTitle = undefined;
     this.activeWriteMode = "single_writer";
     if (previous) {
@@ -256,26 +259,28 @@ export class GraphForgeSession implements vscode.Disposable {
       throw err instanceof Error ? err : new Error(String(err));
     }
 
+    let project: DetectedProject;
+    try {
+      const projects = await discoverProjects();
+      project = projects.find(p => p.rootPath === rootPath) ?? {
+        rootPath, name: rootPath.split(/[\\/]/).pop() ?? rootPath,
+      };
+    } catch (error) {
+      void backend.dispose();
+      throw error;
+    }
+    // Prepare first, then install the pair without yielding. Restored results
+    // always see either the old session/project or the fully prepared new one.
     const previous = this.backend;
     this.backend = backend;
-    if (previous) {
-      void previous.dispose();
-    }
-
+    this.activeProject = project;
     this.algorithmContractsCache = undefined;
     this.lastResult = undefined;
     this.publicResult = undefined;
+    this.publicResultMetadata = {};
     this.lastResultTitle = undefined;
-    // Write-mode coordination is Node-only; a Python-backed session always
-    // reports the (only meaningful) single-writer default.
-    this.activeWriteMode =
-      backend.runtime === "node" ? writeMode : "single_writer";
-
-    const projects = await discoverProjects();
-    this.activeProject = projects.find((p) => p.rootPath === rootPath) ?? {
-      rootPath,
-      name: rootPath.split(/[\\/]/).pop() ?? rootPath,
-    };
+    this.activeWriteMode = backend.runtime === "node" ? writeMode : "single_writer";
+    if (previous) void previous.dispose();
 
     this.refreshStatus();
     this._onDidChange.fire();
@@ -584,7 +589,9 @@ export class GraphForgeSession implements vscode.Disposable {
       generationUuid: view.generationUuid,
       execute: cypher => {
         this.assertResultBackend(backend);
-        return this.decodeResult(backend, view.execute(cypher));
+        const result = this.decodeResult(backend, view.execute(cypher));
+        result.generationUuid = view.generationUuid;
+        return result;
       },
     };
   }
@@ -609,13 +616,15 @@ export class GraphForgeSession implements vscode.Disposable {
     to: string,
     scope: string,
     detail: string,
+    limit?: number,
+    after?: string,
   ): Promise<QueryResult> {
     const backend = this.requireBackend();
     const forge = this.requireNodeForge("diffCheckpoints");
     if (typeof forge.diffCheckpoints !== "function") {
       throw new UnsupportedByBindingError("diffCheckpoints");
     }
-    const buf = await forge.diffCheckpoints({ from, to, scope, detail });
+    const buf = await forge.diffCheckpoints({ from, to, scope, detail, limit, after });
     return this.decodeResult(backend, buf);
   }
 
@@ -1439,7 +1448,7 @@ export class GraphForgeSession implements vscode.Disposable {
     edges.push(...canonicalEdges.values());
 
     // Empty results stay empty.
-    if (nodes.size === 0) {
+    if (nodes.size === 0 && edges.length === 0) {
       return {
         nodes: [],
         edges: [],
@@ -1512,21 +1521,27 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   /** Expose one bounded command page, retaining only the most recently exposed source. */
-  resultPage(result: QueryResult): ResultPage {
+  resultPage(result: QueryResult, metadata: ResultPageMetadata = {}): ResultPage {
     const owner = this.resultBackends.get(result);
     if (!this.backend || owner !== this.backend)
       throw new Error("RESULT_PAGE_STALE: Open the project and run the command again.");
-    const page = queryResultPage(result);
+    const page = queryResultPage(result, 0, undefined, metadata);
     this.publicResult = result;
+    this.publicResultMetadata = { ...metadata };
     return page;
   }
 
-  readResultPage(args: { resultId: string; offset?: number; limit?: number }): ResultPage {
+  /** Validate a completed command without re-exposing it over a newer result. */
+  assertResultPageCurrent(resultId: string): void {
     const result = this.publicResult;
-    if (!this.backend || !result || this.resultBackends.get(result) !== this.backend || !args || typeof args.resultId !== "string" ||
-        resultIdentity(result) !== args.resultId)
-      throw new Error("RESULT_PAGE_STALE: Run the command again and use its current resultId.");
-    return queryResultPage(result, args.offset, args.limit);
+    if (!this.backend || !result || this.resultBackends.get(result) !== this.backend ||
+        typeof resultId !== "string" || resultIdentity(result) !== resultId)
+      throw Object.assign(new Error("RESULT_PAGE_STALE: Run the command again and use its current resultId."), { code: "RESULT_PAGE_STALE" });
+  }
+
+  readResultPage(args: { resultId: string; offset?: number; limit?: number }): ResultPage {
+    this.assertResultPageCurrent(args?.resultId);
+    return queryResultPage(this.publicResult!, args.offset, args.limit, this.publicResultMetadata);
   }
 
   /** Restore a durable project result as the active table/graph/figure source. */
@@ -1542,6 +1557,7 @@ export class GraphForgeSession implements vscode.Disposable {
   clearLastResult(): void {
     this.lastResult = undefined;
     this.publicResult = undefined;
+    this.publicResultMetadata = {};
     this.lastResultTitle = undefined;
     this._onDidChange.fire();
   }
@@ -1569,6 +1585,7 @@ export class GraphForgeSession implements vscode.Disposable {
   private rememberResult(result: QueryResult, title?: string): void {
     this.lastResult = result;
     this.publicResult = undefined;
+    this.publicResultMetadata = {};
     this.lastResultTitle = title;
     this._onDidChange.fire();
   }

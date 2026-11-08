@@ -240,3 +240,14 @@ The artifact renders offline through XYG’s shared Rust tick lane. Maps retain
 PNG/SVG export until their painter payload has a standalone document contract.
 HTML exports contain the painted data and capture the chart snapshot; temporal
 playback and cursor/range/window export semantics remain unqualified.
+
+Result publication checks the source session/result immediately before its
+synchronous metadata-last rename phase. Superseded saves never replace current
+or named result files. Command completion validates its exposed result ID after
+asynchronous UI work without replacing a newer source. Project/backend pairs
+are installed together after preparation; checkpoint reads keep their pinned
+generation. Core `graphforge.next_page_token` metadata remains distinct from
+local offsets and is relayed only after the Arrow response's local pages end.
+Plain graph picks use cancellable 500-row scanning batches when native membership
+is absent; empty native membership remains authoritative. Edge-only Inspect
+pages retain actual edges, and a reloaded later page offers First rows.

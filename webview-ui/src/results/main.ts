@@ -194,11 +194,13 @@ function updateFooter(): void {
   footer.hidden = result.rows.length === 0;
   renderCount.textContent =
     `Rows ${(result.offset + 1).toLocaleString()}–${shown.toLocaleString()} of ${result.rowCount.toLocaleString()}`;
-  loadMore.hidden = result.nextOffset === undefined && previousOffsets.length === 0;
+  const canGoBack = previousOffsets.length > 0 || result.offset > 0;
+  loadMore.hidden = result.nextOffset === undefined && !canGoBack;
   loadMore.disabled = loading || result.nextOffset === undefined;
   if (previousPage) {
     previousPage.hidden = loadMore.hidden;
-    previousPage.disabled = loading || previousOffsets.length === 0;
+    previousPage.disabled = loading || !canGoBack;
+    previousPage.textContent = previousOffsets.length === 0 && result.offset > 0 ? "First rows" : "Previous rows";
   }
 }
 
@@ -285,7 +287,9 @@ loadMore?.addEventListener("click", () => {
   if (result?.nextOffset !== undefined) requestPage(result.nextOffset, "next");
 });
 previousPage?.addEventListener("click", () => {
-  const offset = previousOffsets.at(-1);
+  // Reloaded webviews have no visited boundaries. Returning to zero preserves
+  // byte-shortened page boundaries when the user resumes forward navigation.
+  const offset = previousOffsets.at(-1) ?? (result && result.offset > 0 ? 0 : undefined);
   if (offset !== undefined) requestPage(offset, "previous");
 });
 document.getElementById("open-json")?.addEventListener("click", () => {

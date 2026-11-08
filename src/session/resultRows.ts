@@ -1,17 +1,25 @@
 import { randomUUID } from "node:crypto";
-import type { QueryResult, TableRow } from "./types";
+import type { AnalystVerb, QueryResult, TableRow } from "./types";
 
 export const RESULT_PAGE_SIZE = 500;
 export const RESULT_PAGE_BYTES = 4 * 1024 * 1024;
 
 /** Plain, bounded public result. IPC and row-reader state never cross the UI/API boundary. */
-export interface ResultPage {
+export interface ResultPageMetadata {
+  verb?: AnalystVerb;
+  by?: string;
+  label?: string;
+  query?: string;
+}
+
+export interface ResultPage extends ResultPageMetadata {
   resultId: string;
   columns: string[];
   rows: TableRow[];
   rowCount: number;
   offset: number;
   nextOffset?: number;
+  nextPageToken?: string;
   algorithm?: string;
   sourceQuery?: string;
   generationUuid?: string;
@@ -59,11 +67,13 @@ export function lazyResultRows(count: number, read: (index: number) => TableRow)
   });
 }
 
-export function queryResultPage(result: QueryResult, offset = 0, limit = RESULT_PAGE_SIZE): ResultPage {
+export function queryResultPage(result: QueryResult, offset = 0, limit = RESULT_PAGE_SIZE, metadata: ResultPageMetadata = {}): ResultPage {
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > result.rowCount ||
       !Number.isSafeInteger(limit) || limit < 1 || limit > RESULT_PAGE_SIZE)
     throw new Error(`RESULT_PAGE_INVALID: Request an offset within the result and a limit from 1 to ${RESULT_PAGE_SIZE}.`);
   const page: ResultPage = {
+    ...metadata,
+    ...(result.nextPageToken ? { nextPageToken: result.nextPageToken } : {}),
     resultId: resultIdentity(result), columns: [...result.columns], rows: [], rowCount: result.rowCount, offset,
     ...(result.algorithm ? { algorithm: result.algorithm } : {}),
     ...(result.sourceQuery ? { sourceQuery: result.sourceQuery } : {}),
@@ -71,8 +81,11 @@ export function queryResultPage(result: QueryResult, offset = 0, limit = RESULT_
   };
   // Reserve room for nextOffset and surrounding transport metadata.
   let bytes = Buffer.byteLength(JSON.stringify(page)) + 1024;
-  if (bytes > RESULT_PAGE_BYTES)
-    throw new Error("RESULT_PAGE_COLUMNS_TOO_LARGE: Use a smaller projection, or open a saved JSON or Arrow document.");
+  if (bytes > RESULT_PAGE_BYTES) {
+    if (Buffer.byteLength(JSON.stringify(result.columns)) + 1024 > RESULT_PAGE_BYTES)
+      throw new Error("RESULT_PAGE_COLUMNS_TOO_LARGE: Use a smaller projection, or open a saved JSON or Arrow document.");
+    throw new Error("RESULT_PAGE_METADATA_TOO_LARGE: Use shorter command metadata or a smaller projection.");
+  }
   for (let index = offset; index < Math.min(result.rowCount, offset + limit); index++) {
     const row = resultRow(result, index);
     if (!row) throw new Error("RESULT_ROW_MISSING: Run the query again to restore the complete result.");
@@ -86,6 +99,10 @@ export function queryResultPage(result: QueryResult, offset = 0, limit = RESULT_
     page.rows.push(JSON.parse(json));
     bytes += size;
   }
-  if (offset + page.rows.length < result.rowCount) page.nextOffset = offset + page.rows.length;
+  if (offset + page.rows.length < result.rowCount) {
+    page.nextOffset = offset + page.rows.length;
+    // Exhaust this Arrow response before asking Core for another native page.
+    delete page.nextPageToken;
+  }
   return page;
 }

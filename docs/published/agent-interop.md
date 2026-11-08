@@ -9,16 +9,22 @@ human clicking through menus.
 ## Bounded command results
 
 Query, analyst, checkpoint, power and ledger commands return a `ResultPage`:
-`{ resultId, columns, rows, rowCount, offset, nextOffset?, algorithm?, sourceQuery?, generationUuid? }`.
-`rowCount` describes the whole result; `rows` contains at most 500 rows and
-4 MiB of UTF-8 JSON (including an envelope reserve). IPC stays in the host.
+`{ resultId, columns, rows, rowCount, offset, nextOffset?, nextPageToken?, algorithm?, sourceQuery?, generationUuid? }`.
+`rowCount` describes the current Arrow response; `rows` contains at most 500 rows and
+4 MiB of UTF-8 JSON, including command metadata and an envelope reserve. IPC stays in the host.
 Large rows fail with an action to open the saved JSON or Arrow document.
 
 Continue with `graphforge.readResultPage({ resultId, offset: nextOffset, limit? })`.
 The optional limit is 1–500. Paging never reruns the query. A new exposed result,
 a new query/verb source, closing or reopening the project invalidates the old
 ID; `RESULT_PAGE_STALE` tells the caller to rerun the command. Invalid ranges
-return `RESULT_PAGE_INVALID`. This programmatic command has no palette entry.
+return `RESULT_PAGE_INVALID`. This programmatic command has no palette entry. For Core-paged operations,
+`nextPageToken` is an opaque native cursor, exposed only after local `nextOffset`
+pages are exhausted. `diffCheckpoints({ from, to, scope, detail, limit?, after? })`
+continues with `after: nextPageToken`, preserving the same selectors and limit.
+A changed request returns `GF_PAGE_INVALID`; a changed `current` snapshot returns
+`GF_PAGE_SNAPSHOT_GONE`. Core does not supply a total across native pages.
+
 Readable JSON/Markdown documents still contain every row; Arrow-backed reopen
 uses the small `.resultmeta` publication pointer and verifies the Arrow digest
 without parsing the readable companion. Small older snapshots remain readable;
@@ -95,7 +101,7 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.importData` | `{ path: string \| Uri; label: string; mode?: "create" \| "merge"; idColumn?: string; confirm: true }` | `{ path, format, label, mode, idColumn?, imported, result }` |
 | `graphforge.rank` / `cluster` / `paths` / `analyze` / `similar` (and `…Advanced…`) | Not yet — still QuickPick-driven | Verb result object (`{ verb, by, label, columns, rows, rowCount, algorithm? }`) |
 | `graphforge.find` | Not yet — still prompt-driven | `ResultPage & { verb: "find", query, label? }`; a missing-index failure returns `{ error, code?, nextAction }` naming `graphforge.indexText` |
-| `graphforge.createCheckpoint` / `listCheckpoints` / `diffCheckpoints` | `{ name?, description? }` / `{ limit? }` / `{ from?, to?, scope?, detail? }` | `ResultPage` |
+| `graphforge.createCheckpoint` / `listCheckpoints` / `diffCheckpoints` | `{ name?, description? }` / `{ limit? }` / `{ from?, to?, scope?, detail?, limit?, after? }` | `ResultPage` |
 | `graphforge.openCheckpoint` | `{ name?, cypher? }` | `{ checkpointUuid, generationUuid, query? }` |
 | `graphforge.deleteCheckpoint` / `revertToCheckpoint` | `{ name?, confirm? }` / `{ name?, reason?, confirm? }` | `ResultPage` |
 | `graphforge.embeddingSpaces` | none needed | `{ embeddingSpaces: [...], note? }` (empty list is a valid state) |

@@ -28,12 +28,13 @@ separate under NFR-12.
 
 One opt-in numerical access probe (100,000 rows × 8 Float64 columns) records
 source hashes, IPC/page bytes, decode/page timing and heap/RSS deltas without
-logging cell values. It preserves the original IPC identity and checks first/last
+logging cell values. It compiles the measured sources into a private temporary
+directory, checks source hashes across compilation/measurement, and records
+compiled artifact hashes. It preserves the original IPC identity and checks first/last
 page bounds. This is access evidence, not an end-to-end scale qualification:
 
 ```sh
-npx tsc --ignoreConfig --outDir /tmp/gf-result-access-lib --module commonjs --target es2022 --types node --esModuleInterop --skipLibCheck src/session/arrowCodec.ts src/session/resultRows.ts
-NODE_PATH="$PWD/node_modules" node --expose-gc scripts/probe-result-access.cjs /tmp/gf-result-access-lib /tmp/gf-result-access.json
+node --expose-gc scripts/probe-result-access.cjs /tmp/gf-result-access.json
 ```
 
 The retained [access receipt](evidence/issue-80-result-access.json) is a single
@@ -343,3 +344,11 @@ multi-instance ownership, stable private saved identities, explicit
 coordination groups, stale-generation rejection, superseded-work cancellation,
 and deterministic disposal. Webview typechecking additionally verifies that
 graph, artifact, and figure messages carry the instance/revision context.
+
+The installed checkpoint scenario creates 150 temporary records between named
+checkpoints and retrieves 100+50 through the actual command API. It checks opaque
+cursor forwarding, final omission, changed-limit rejection and stale `current`
+snapshot rejection. Unit tests separate local byte/row paging from Core cursors,
+budget command metadata, and reject superseded saves before publication. A real
+extension-host scheduling regression observes a saved-result restore during
+backend installation and requires a coherent project/backend pair.

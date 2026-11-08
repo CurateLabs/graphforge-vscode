@@ -231,7 +231,7 @@ async function runVerb(
       target: target || undefined,
       k,
     });
-    const page = session.resultPage(result);
+    const page = session.resultPage(result, { verb, by, label });
     const project = session.project;
 
     if (verb !== "find" && by) {
@@ -239,6 +239,7 @@ async function runVerb(
     }
 
     if (session.project !== project) throw new Error("RESULT_PAGE_STALE: The project changed. Run the command again.");
+    session.assertResultPageCurrent(page.resultId);
     await results.show(result, `${verb}${by ? ` · ${by}` : ""}`);
 
     const openGraph = vscode.workspace
@@ -246,6 +247,7 @@ async function runVerb(
       .get<boolean>("openResultGraphOnQuery", false);
     if (openGraph) {
       const commands = await vscode.commands.getCommands(true);
+      session.assertResultPageCurrent(page.resultId);
       if (commands.includes("graphforge.showResultGraph")) {
         await vscode.commands.executeCommand("graphforge.showResultGraph", {
           title: `${verb}${by ? `:${by}` : ""}`,
@@ -256,6 +258,7 @@ async function runVerb(
     void vscode.window.showInformationMessage(
       `GraphForge ${verb}: ${result.rowCount} row(s)`,
     );
+    session.assertResultPageCurrent(page.resultId);
     return { ...page, verb, by, label };
   } catch (err) {
     // #39: Similar/Cluster share Find's missing-index remediation — when a

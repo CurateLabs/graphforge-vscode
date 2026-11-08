@@ -1,7 +1,8 @@
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
-import type { GraphForgeSession } from "../session/graphForgeSession";
+import { GraphForgeSession } from "../session/graphForgeSession";
 import type { GraphPayload, QueryResult } from "../session/types";
+import { lazyResultRows } from "../session/resultRows";
 import type { HostToWebview, WebviewToHost } from "../webview/protocol";
 import { ResultTableViewProvider } from "../views/resultTableView";
 import { EntityInspectPanel } from "../webview/entityInspectPanel";
@@ -51,6 +52,14 @@ function pickRows(result: QueryResult, rowIndices: number[], projectRoot = "/tmp
     .rowSelection.fire({ source: result, projectRoot, rowIndices });
 }
 
+function pickEntity(result: QueryResult, id: string, rowIndices?: number[]) {
+  (XygVisualizationPanel as unknown as { selection: vscode.EventEmitter<{
+    kind: "node"; item: { id: string; labels: string[]; properties: Record<string, unknown> };
+    source: QueryResult; projectRoot: string; rowIndices?: number[];
+  }> }).selection.fire({ kind: "node", item: { id, labels: [], properties: {} }, source: result,
+    projectRoot: "/tmp/results-page-test", ...(rowIndices !== undefined ? { rowIndices } : {}) });
+}
+
 suite("Results bounded host paging", () => {
   test("projects and posts only the requested page while retaining complete source membership", async () => {
     const f = fixture();
@@ -92,6 +101,91 @@ suite("Results bounded host paging", () => {
       await settle();
       assert.equal(f.messages.length, before, "equal-looking sources and other projects must not link");
     } finally { f.provider.dispose(); }
+  });
+
+  test("plain graph picks find off-page source rows without materializing the full result", async () => {
+    const f = fixture();
+    try {
+      let reads = 0;
+      const result: QueryResult = { columns: ["id"], rows: lazyResultRows(1200, index => { reads++; return { id: String(index) }; }), rowCount: 1200 };
+      await f.provider.show(result, "plain graph");
+      reads = 0;
+      pickEntity(result, "811");
+      assert.ok(reads <= 500, "selection scanning yields after a bounded batch");
+      await settle(); await settle(); await settle();
+      assert.equal(f.page().result.offset, 811);
+      assert.deepEqual(f.page().selectedRows, [811]);
+      assert.ok(f.projections.every(page => page.rows.length <= 500 && page.rowCount <= 500));
+      assert.ok(f.messages.filter(message => message.type === "graphforge/results").every(message => message.result.rows.length <= 500));
+    } finally { f.provider.dispose(); }
+  });
+
+  test("native empty membership remains authoritative and missing plain identities clear selection", async () => {
+    const f = fixture();
+    try {
+      let reads = 0;
+      const result: QueryResult = { columns: ["id"], rows: lazyResultRows(1200, index => { reads++; return { id: String(index) }; }), rowCount: 1200 };
+      await f.provider.show(result, "plain graph");
+      pickRows(result, [10]);
+      reads = 0;
+      pickEntity(result, "811", []);
+      assert.equal(reads, 0, "explicit native emptiness must not fall back to matching aliases");
+      pickRows(result, [10]);
+      pickEntity(result, "missing");
+      await settle(); await settle(); await settle();
+      const message = f.messages.at(-1)!;
+      assert.equal(message.type, "graphforge/highlightResultRows");
+      if (message.type === "graphforge/highlightResultRows") assert.deepEqual(message.rowIndices, []);
+    } finally { f.provider.dispose(); }
+  });
+
+  for (const replacement of ["on-page", "clear", "project", "result"] as const) {
+    test(`plain graph scanning stops when superseded by ${replacement}`, async () => {
+      const f = fixture();
+      try {
+        let reads = 0;
+        const result: QueryResult = { columns: ["id"], rows: lazyResultRows(1200, index => { reads++; return { id: String(index) }; }), rowCount: 1200 };
+        await f.provider.show(result, "plain graph");
+        reads = 0;
+        pickEntity(result, "811");
+        if (replacement === "project") { f.session.project = { rootPath: "/tmp/results-page-test" }; f.projectChanged(); }
+        else if (replacement === "result") await f.provider.show(source(20), "replacement");
+        else pickRows(result, replacement === "on-page" ? [10] : []);
+        const before = f.messages.length;
+        await settle(); await settle(); await settle();
+        assert.ok(reads <= 500, "superseded scan must not decode another batch");
+        assert.equal(f.messages.length, before);
+        assert.equal(f.page().result.offset, 0);
+      } finally { f.provider.dispose(); }
+    });
+  }
+
+  test("later pages retain canonical edge Inspect under arbitrary Cypher aliases without earlier nodes", async () => {
+    const f = fixture();
+    const show = EntityInspectPanel.show;
+    try {
+      const edge = { edge_uuid: "route-811", src_uuid: "ATL", dst_uuid: "AUS", rel_type: "ROUTE", distance: 813 };
+      const result: QueryResult = { columns: ["r"], rows: [
+        ...Array.from({ length: 500 }, (_, index) => ({ r: { node_uuid: `node-${index}`, labels: ["Airport"] } })),
+        { r: edge },
+      ], rowCount: 501 };
+      const projectionSession = Object.create(GraphForgeSession.prototype) as GraphForgeSession;
+      f.session.toGraphPayload = async (page: QueryResult) => {
+        f.projections.push(page);
+        return projectionSession.toGraphPayload(page);
+      };
+      let inspected: unknown;
+      EntityInspectPanel.show = (_extension, selection) => { inspected = selection; return {} as EntityInspectPanel; };
+      await f.provider.show(result, "canonical edges");
+      f.receive({ type: "graphforge/requestResultPage", ...context(f.page()), offset: 500, direction: "next" });
+      await settle();
+      const page = f.page();
+      assert.equal(page.result.rows.length, 1);
+      assert.deepEqual(page.entityLinks?.["500"], [{ kind: "edge", id: "route-811", label: "R" }]);
+      f.receive({ type: "graphforge/openResultEntity", ...context(page), rowIndex: 500, kind: "edge", id: "route-811" });
+      assert.deepEqual(inspected, { kind: "edge", item: { id: "route-811", type: "ROUTE", source: "ATL", target: "AUS", properties: { distance: 813 } } });
+      assert.equal(f.projections.at(-1)?.rows.length, 1);
+    } finally { EntityInspectPanel.show = show; f.provider.dispose(); }
   });
 
   test("discards replaced results and superseded asynchronous page projections", async () => {

@@ -190,6 +190,7 @@ async function runListAssertions(
     });
     const page = session.resultPage(result);
     await openJsonDoc(page);
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("List Assertions failed", err);
@@ -436,6 +437,7 @@ async function runAttachEvidence(
     );
     const page = session.resultPage(result);
     void vscode.window.showInformationMessage("Evidence attached.");
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("Attach Evidence failed", err);
@@ -492,6 +494,7 @@ async function runAssessConfidence(
     );
     const page = session.resultPage(result);
     void vscode.window.showInformationMessage("Confidence recorded.");
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("Assess Confidence failed", err);
@@ -542,6 +545,7 @@ async function runRecordAssertionStatus(
     );
     const page = session.resultPage(result);
     void vscode.window.showInformationMessage("Assertion status recorded.");
+    session.assertResultPageCurrent(page.resultId);
     return page;
   } catch (err) {
     return reportEngineError("Record Status failed", err);

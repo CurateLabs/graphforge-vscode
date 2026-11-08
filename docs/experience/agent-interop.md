@@ -3,16 +3,22 @@
 ## Bounded command results
 
 Query, analyst, checkpoint, power and ledger commands return a `ResultPage`:
-`{ resultId, columns, rows, rowCount, offset, nextOffset?, algorithm?, sourceQuery?, generationUuid? }`.
-`rowCount` describes the whole result; `rows` contains at most 500 rows and
-4 MiB of UTF-8 JSON (including an envelope reserve). IPC stays in the host.
+`{ resultId, columns, rows, rowCount, offset, nextOffset?, nextPageToken?, algorithm?, sourceQuery?, generationUuid? }`.
+`rowCount` describes the current Arrow response; `rows` contains at most 500 rows and
+4 MiB of UTF-8 JSON, including command metadata and an envelope reserve. IPC stays in the host.
 Large rows fail with an action to open the saved JSON or Arrow document.
 
 Continue with `graphforge.readResultPage({ resultId, offset: nextOffset, limit? })`.
 The optional limit is 1–500. Paging never reruns the query. A new exposed result,
 a new query/verb source, closing or reopening the project invalidates the old
 ID; `RESULT_PAGE_STALE` tells the caller to rerun the command. Invalid ranges
-return `RESULT_PAGE_INVALID`. This programmatic command has no palette entry.
+return `RESULT_PAGE_INVALID`. This programmatic command has no palette entry. For Core-paged operations,
+`nextPageToken` is an opaque native cursor, exposed only after local `nextOffset`
+pages are exhausted. `diffCheckpoints({ from, to, scope, detail, limit?, after? })`
+continues with `after: nextPageToken`, preserving the same selectors and limit.
+A changed request returns `GF_PAGE_INVALID`; a changed `current` snapshot returns
+`GF_PAGE_SNAPSHOT_GONE`. Core does not supply a total across native pages.
+
 Readable JSON/Markdown documents still contain every row; Arrow-backed reopen
 uses the small `.resultmeta` publication pointer and verifies the Arrow digest
 without parsing the readable companion. Small older snapshots remain readable;
@@ -142,7 +148,7 @@ Source of truth: `package.json#contributes.commands` (88 contributed commands on
 | `graphforge.createCheckpoint` | `{ name?, description? }` | `ResultPage` | Name + description InputBoxes | Yes (Node binding) |
 | `graphforge.listCheckpoints` | `{ limit? }` | `ResultPage` | None | Yes (Node binding) |
 | `graphforge.openCheckpoint` | `{ name?, cypher? }` (include `cypher` — even `undefined` — to skip the query prompt) | `{ checkpointUuid, generationUuid, query? }` | Checkpoint QuickPick + read-only Cypher InputBox | Yes (Node binding) |
-| `graphforge.diffCheckpoints` | `{ from?, to?, scope?, detail? }` | `ResultPage` | From/To InputBox+QuickPick, scope + detail QuickPicks | Yes (Node binding) |
+| `graphforge.diffCheckpoints` | `{ from?, to?, scope?, detail?, limit?, after? }` | `ResultPage` | From/To InputBox+QuickPick, scope + detail QuickPicks | Yes (Node binding) |
 | `graphforge.deleteCheckpoint` | `{ name?, confirm? }` | `ResultPage` | Checkpoint QuickPick + destructive confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
 | `graphforge.revertToCheckpoint` | `{ name?, reason?, confirm? }` | `ResultPage` | Checkpoint QuickPick, reason InputBox, retype-the-name hard confirm (skipped only by `confirm: true`) | Yes (Node binding) |
 | `graphforge.embeddingSpaces` | none | `{ embeddingSpaces: [{ space, freshness? }], note? }` (empty list is a valid state, not an error) | None | Yes (Node binding) |

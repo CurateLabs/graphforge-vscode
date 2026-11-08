@@ -1,8 +1,14 @@
 {
   "sourceSha256": {
-    "arrowCodec.ts": "cecc9fae82abbc8a06c584072a9ea8be66971e045b58dd729f4b935bb22aea47",
-    "resultRows.ts": "7d1bcf6baf76fe3a2877b7f81ca34b06b6000bef371b156a569236c4b69cbe92"
+    "arrowCodec.ts": "25b29ec6c46c0c1005d98fbbc14307aaad637fc42a344528d4255d7ee5345091",
+    "resultRows.ts": "d5905d04561a5f275973c8e0ecfaf30e8743e7b534ac4bdbb0d7cb53f4b89b0e",
+    "types.ts": "b55e061c0980f57dc7efaf25b4878c058de101f9e0c6364e3b3cfe8139cf3f8e"
   },
+  "compiledSha256": {
+    "arrowCodec.js": "5fe5f599002436a2f8d76e051059bdc79a6bfdc717e8320b299c03f4e8e480ad",
+    "resultRows.js": "cc92c5520ac4f647ddba3b638b34190dd19579b841dae0197e2b99e5e607e774"
+  },
+  "typescript": "7.0.2",
   "node": "v22.22.3",
   "platform": "darwin-arm64",
   "scope": "One opt-in synthetic numerical Arrow access probe; no layout/paint/interaction/scale release claim",
@@ -11,9 +17,9 @@
   "ipcBytes": 6400960,
   "returnedRows": 500,
   "returnedJsonBytes": 52366,
-  "decodeMs": 3.4240409999999883,
-  "firstPageMs": 2.6331669999999576,
-  "heapDeltaBytes": 1942744,
-  "rssDeltaBytes": 1114112,
+  "decodeMs": 1.7198750000000018,
+  "firstPageMs": 1.7740840000000162,
+  "heapDeltaBytes": 1811504,
+  "rssDeltaBytes": 1081344,
   "originalIpcIdentity": true
 }
