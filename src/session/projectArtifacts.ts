@@ -1,3 +1,4 @@
+import { LEGACY_RESULT_BYTES, RESULT_METADATA_BYTES, RESULT_METADATA_FORMAT, resultMetadataPath } from "./resultMetadata";
 import { decodeTable } from "./arrowCodec";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -176,28 +177,47 @@ export function readProjectResult(
   resultPath: string,
 ): QueryResult {
   const absolute = resolveProjectArtifactPath(projectRoot, resultPath);
-  const saved = JSON.parse(fs.readFileSync(absolute, "utf8"));
-  const result = parseQueryResult(saved, resultPath);
-  const arrow = absolute.replace(/\.json$/i, ".arrow");
+  const readBounded = (file: string, limit: number): string => {
+    // Bound the actual read as well as the stat: an externally edited file may grow.
+    const handle = fs.openSync(file, "r");
+    try {
+      const bytes = Buffer.alloc(Math.min(fs.fstatSync(handle).size, limit) + 1);
+      let count = 0;
+      while (count < bytes.length) {
+        const size = fs.readSync(handle, bytes, count, bytes.length - count, count);
+        if (!size) break;
+        count += size;
+      }
+      if (count > limit || fs.fstatSync(handle).size > limit)
+        throw new Error("RESULT_DOCUMENT_TOO_LARGE: Run the query again to save Arrow-backed results; the original JSON file remains available in the editor.");
+      return bytes.subarray(0, count).toString("utf8");
+    } finally { fs.closeSync(handle); }
+  };
+  const pointerPath = resultMetadataPath(absolute);
+  const hasPointer = fs.existsSync(pointerPath);
+  const saved = JSON.parse(readBounded(hasPointer ? pointerPath : absolute,
+    hasPointer ? RESULT_METADATA_BYTES : LEGACY_RESULT_BYTES));
+  if (!saved || typeof saved !== "object" || Array.isArray(saved) ||
+      (hasPointer && (saved.format !== RESULT_METADATA_FORMAT ||
+        !Number.isSafeInteger(saved.rowCount) || saved.rowCount < 0 ||
+        (saved.arrowSha256 !== undefined && (typeof saved.arrowSha256 !== "string" || !/^[a-f0-9]{64}$/.test(saved.arrowSha256))) ||
+        (saved.generationUuid !== undefined && typeof saved.generationUuid !== "string") ||
+        (saved.sourceQuery !== undefined && typeof saved.sourceQuery !== "string"))))
+    throw new Error("RESULT_METADATA_INVALID: Run the query again to restore the saved result metadata.");
   if (typeof saved.arrowSha256 === "string") {
-    result.ipc = fs.readFileSync(
-      resolveProjectArtifactPath(projectRoot, arrow),
-    );
-    if (
-      createHash("sha256").update(result.ipc).digest("hex") !==
-      saved.arrowSha256
-    )
-      throw new Error(
-        "XYG_RESULT_MISMATCH: Saved JSON and Arrow differ. Rerun the query.",
-      );
-    // Arrow is authoritative for data and types; readable JSON is a companion.
-    return {
-      ...decodeTable(Buffer.from(result.ipc)),
-      generationUuid: result.generationUuid,
-      sourceQuery: result.sourceQuery,
-    };
+    const ipc = fs.readFileSync(resolveProjectArtifactPath(projectRoot, absolute.replace(/\.json$/i, ".arrow")));
+    if (createHash("sha256").update(ipc).digest("hex") !== saved.arrowSha256)
+      throw new Error("XYG_RESULT_MISMATCH: Saved metadata and Arrow differ. Rerun the query.");
+    const result = decodeTable(ipc);
+    if (hasPointer && result.rowCount !== saved.rowCount)
+      throw new Error("XYG_RESULT_MISMATCH: Saved metadata and Arrow row counts differ. Rerun the query.");
+    return { ...result, generationUuid: saved.generationUuid, sourceQuery: saved.sourceQuery };
   }
-  return result;
+  const text = hasPointer ? readBounded(absolute, LEGACY_RESULT_BYTES) : undefined;
+  if (hasPointer && (typeof saved.jsonSha256 !== "string" ||
+      createHash("sha256").update(text!).digest("hex") !== saved.jsonSha256))
+    throw new Error("XYG_RESULT_MISMATCH: Saved metadata and JSON differ. Rerun the query.");
+  return parseQueryResult(hasPointer ? JSON.parse(text!) : saved, resultPath);
 }
 
 export function readProjectQuery(

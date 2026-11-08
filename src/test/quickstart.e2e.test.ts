@@ -96,6 +96,22 @@ suite("XYG air-routes integration", () => {
       );
       assert.ok(!query?.error, JSON.stringify(query));
       assert.equal(query.sourceQuery, "queries/templates/routes-overview.cypher");
+      assert.equal(query.rows.length, 500);
+      assert.ok(query.rowCount > query.rows.length);
+      assert.equal(query.offset, 0);
+      assert.equal(query.nextOffset, 500);
+      assert.equal("ipc" in query, false);
+      const nextPage = await vscode.commands.executeCommand<any>("graphforge.readResultPage", {
+        resultId: query.resultId, offset: query.nextOffset,
+      });
+      assert.equal(nextPage.resultId, query.resultId);
+      assert.equal(nextPage.offset, 500);
+      assert.ok(nextPage.rows.length > 0 && nextPage.rows.length <= 500);
+      const savedPageSource = JSON.parse(fs.readFileSync(path.join(root, "results/query-result.json"), "utf8"));
+      assert.equal(savedPageSource.rows.length, query.rowCount);
+      assert.deepEqual(nextPage.rows[0], savedPageSource.rows[500]);
+      const invalidPage = await vscode.commands.executeCommand<any>("graphforge.readResultPage", { resultId: query.resultId, offset: -1 });
+      assert.equal(invalidPage.code, "RESULT_PAGE_INVALID");
       const invalidFilter = await vscode.commands.executeCommand<any>("graphforge.createProjectVisualization", {
         name: "rejected-filter", kind: "result-graph", result: "results/query-result.json",
         filter: { column: "region", operator: "equals", value: "US-TX" },
@@ -158,6 +174,8 @@ suite("XYG air-routes integration", () => {
           params: { id: { $uuid: node_uuid } },
         },
       );
+      const stalePage = await vscode.commands.executeCommand<any>("graphforge.readResultPage", { resultId: query.resultId, offset: 0 });
+      assert.equal(stalePage.code, "RESULT_PAGE_STALE");
       assert.equal(
         verified.rows?.[0]?.verified,
         true,

@@ -1,23 +1,19 @@
 import { DataType, Precision, tableFromIPC, type Table, type Vector } from "apache-arrow";
 import type { QueryResult, TableRow } from "./types";
+import { lazyResultRows } from "./resultRows";
 
 /**
  * Decode an Arrow IPC buffer (as returned by every `@curatelabs/graphforge` read call)
- * into plain rows. Pure / no vscode dependency so it is unit-testable with a
+ * into Arrow-backed lazy rows. Pure / no vscode dependency so it is unit-testable with a
  * synthetic table standing in for engine output (e.g. an assertions page).
  */
 export function decodeTable(buf: Buffer): QueryResult {
   const table = tableFromIPC(buf) as Table;
   const columns = table.schema.fields.map((f) => f.name);
   const readers = columns.map((_, index) => cellReader(table.getChildAt(index)));
-  const rows: TableRow[] = [];
-  for (let i = 0; i < table.numRows; i++) {
-    const row: TableRow = {};
-    for (let column = 0; column < columns.length; column++) {
-      row[columns[column]] = readers[column](i);
-    }
-    rows.push(row);
-  }
+  const rows = lazyResultRows(table.numRows, index => Object.fromEntries(
+    columns.map((name, column) => [name, readers[column](index)]),
+  ));
   const algorithm = table.schema.metadata?.get("graphforge.algorithm");
   return {
     columns,
@@ -38,7 +34,7 @@ function cellReader(vector: Vector | null): (index: number) => unknown {
   ) {
     // Arrow exposes primitive non-null columns as typed arrays. Half floats
     // need Arrow's accessor to decode their 16-bit representation.
-    if (vector.nullCount === 0 &&
+    if (vector.data.length === 1 && vector.nullCount === 0 &&
         (!DataType.isFloat(vector.type) || vector.type.precision !== Precision.HALF)) {
       const values = vector.toArray();
       return (index) => values[index];

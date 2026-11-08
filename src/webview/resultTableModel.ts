@@ -1,3 +1,4 @@
+import { queryResultPage, resultRow, type ResultPage } from "../session/resultRows";
 import type {
   GraphEdge,
   GraphNode,
@@ -9,12 +10,17 @@ import type { GraphSelection } from "./resultGraphModel";
 import type {
   EntityInspectSelection,
   ResultEntityLink,
+  ResultMessageContext,
 } from "./protocol";
 
 export interface GraphElementHighlight {
   nodeIds: string[];
   edgeIds: string[];
 }
+
+export const RESULT_INSPECT_BYTES = 256 * 1024;
+export const RESULT_INSPECT_NOTICE = "Inspect links are unavailable for this page. Open the saved JSON or Markdown document to inspect its entities.";
+function inspectLimit(): Error { return new Error(`RESULT_INSPECT_LIMIT: ${RESULT_INSPECT_NOTICE}`); }
 
 const IDENTITY_KEY =
   /(^|_)(id|uuid|code)$|^(node|edge|source|target|start|end)(Id|Uuid)?$/i;
@@ -91,18 +97,15 @@ function matchesAny(aliases: Set<string>, keys: Set<string>): boolean {
 }
 
 interface GraphLookup {
-  nodeIdsByAlias: Map<string, string[]>;
-  edgeIdsByAlias: Map<string, string[]>;
-  edgeIdsByEndpoints: Map<string, string[]>;
+  nodeIdsByAlias: Map<string, Set<string>>;
+  edgeIdsByAlias: Map<string, Set<string>>;
+  edgeIdsByEndpoints: Map<string, Set<string>>;
 }
 
-function append(map: Map<string, string[]>, key: string, id: string): void {
-  const values = map.get(key);
-  if (values) {
-    if (!values.includes(id)) values.push(id);
-  } else {
-    map.set(key, [id]);
-  }
+function append(map: Map<string, Set<string>>, key: string, id: string): void {
+  let values = map.get(key);
+  if (!values) map.set(key, values = new Set());
+  values.add(id);
 }
 
 function endpointKey(source: string, target: string): string {
@@ -132,12 +135,17 @@ function buildGraphLookup(payload: GraphPayload): GraphLookup {
 function resolveKeysFromLookup(
   lookup: GraphLookup,
   keys: Set<string>,
+  maxMatches = Infinity,
 ): GraphElementHighlight {
   const nodeIds = new Set<string>();
   const edgeIds = new Set<string>();
   for (const key of keys) {
-    lookup.nodeIdsByAlias.get(key)?.forEach((id) => nodeIds.add(id));
-    lookup.edgeIdsByAlias.get(key)?.forEach((id) => edgeIds.add(id));
+    const add = (set: Set<string>, id: string) => {
+      if (!set.has(id) && nodeIds.size + edgeIds.size >= maxMatches) throw inspectLimit();
+      set.add(id);
+    };
+    lookup.nodeIdsByAlias.get(key)?.forEach((id) => add(nodeIds, id));
+    lookup.edgeIdsByAlias.get(key)?.forEach((id) => add(edgeIds, id));
   }
   return { nodeIds: [...nodeIds], edgeIds: [...edgeIds] };
 }
@@ -176,7 +184,7 @@ export function resolveResultGraphHighlight(
   rowIndex: number,
   column?: string,
 ): GraphElementHighlight {
-  const row = result.rows[rowIndex];
+  const row = resultRow(result, rowIndex);
   if (!payload || !row) {
     return { nodeIds: [], edgeIds: [] };
   }
@@ -223,8 +231,9 @@ function resultEntityLinksWithLookup(
   payload: GraphPayload | undefined,
   rowIndex: number,
   lookup: GraphLookup | undefined,
+  maxLinks = Infinity,
 ): ResultEntityLink[] {
-  const row = result.rows[rowIndex];
+  const row = resultRow(result, rowIndex);
   if (!payload || !row || !lookup) return [];
 
   const links: ResultEntityLink[] = [];
@@ -232,6 +241,7 @@ function resultEntityLinksWithLookup(
   const add = (kind: ResultEntityLink["kind"], id: string, label: string) => {
     const key = `${kind}:${id}`;
     if (seen.has(key)) return;
+    if (links.length >= maxLinks) throw inspectLimit();
     seen.add(key);
     links.push({ kind, id, label });
   };
@@ -241,7 +251,7 @@ function resultEntityLinksWithLookup(
     ...Object.keys(row).filter((column) => !result.columns.includes(column)),
   ];
   for (const column of columns) {
-    const direct = resolveKeysFromLookup(lookup, identityKeys(row[column]));
+    const direct = resolveKeysFromLookup(lookup, identityKeys(row[column]), maxLinks);
     if (EDGE_IDENTITY_KEY.test(column)) {
       direct.edgeIds.forEach((id) => add("edge", id, linkLabel(column, "edge")));
     } else {
@@ -261,12 +271,26 @@ function resultEntityLinksWithLookup(
 export function resultEntityLinksByRow(
   result: QueryResult,
   payload: GraphPayload | undefined,
+  rowOffset = 0,
+  bounded = false,
 ): Record<string, ResultEntityLink[]> {
+  if (bounded && payload && (payload.nodes.length + payload.edges.length > 4096 ||
+      Buffer.byteLength(JSON.stringify(payload)) > RESULT_INSPECT_BYTES)) throw inspectLimit();
   const links: Record<string, ResultEntityLink[]> = {};
+  let count = 0;
+  let bytes = 2;
   const lookup = payload && buildGraphLookup(payload);
   for (let index = 0; index < result.rows.length; index += 1) {
-    const rowLinks = resultEntityLinksWithLookup(result, payload, index, lookup);
-    if (rowLinks.length > 0) links[String(index)] = rowLinks;
+    const rowLinks = resultEntityLinksWithLookup(result, payload, index, lookup, bounded ? 32 : Infinity);
+    if (rowLinks.length > 0) {
+      count += rowLinks.length;
+      const key = String(rowOffset + index);
+      if (bounded) {
+        bytes += Buffer.byteLength(JSON.stringify(key)) + Buffer.byteLength(JSON.stringify(rowLinks)) + 2;
+        if (count > 4000 || bytes > RESULT_INSPECT_BYTES) throw inspectLimit();
+      }
+      links[key] = rowLinks;
+    }
   }
   return links;
 }
@@ -313,11 +337,28 @@ export function resultRowsForGraphSelection(
   return rows;
 }
 
-/** Webview messages cannot carry bigint values; keep the table JSON-safe. */
-export function jsonSafeQueryResult(result: QueryResult): QueryResult {
-  return JSON.parse(
-    JSON.stringify({ columns: result.columns, rows: result.rows, rowCount: result.rowCount, algorithm: result.algorithm }, (_key, value) =>
-      typeof value === "bigint" ? value.toString() : value,
-    ),
-  ) as QueryResult;
+/** Compatibility helper: wire callers receive one bounded, JSON-safe page. */
+export function jsonSafeQueryResult(result: QueryResult): ResultPage {
+  return queryResultPage(result);
+}
+
+export function resultPageContainsRow(page: ResultPage, index: number): boolean {
+  return Number.isSafeInteger(index) && index >= page.offset && index < page.offset + page.rows.length;
+}
+
+/** Preserve global source indices without sending off-page membership. */
+export function resultPageSelection(page: ResultPage, selected: ReadonlySet<number>): number[] {
+  const visible: number[] = [];
+  for (let index = page.offset; index < page.offset + page.rows.length; index++) {
+    if (selected.has(index)) visible.push(index);
+  }
+  return visible;
+}
+
+export function resultMessageMatches(message: unknown, current: ResultMessageContext): boolean {
+  if (!message || typeof message !== "object") return false;
+  const incoming = message as Partial<ResultMessageContext>;
+  return typeof incoming.resultId === "string" && incoming.resultId === current.resultId &&
+    Number.isSafeInteger(incoming.revision) && incoming.revision === current.revision &&
+    Number.isSafeInteger(incoming.pageVersion) && incoming.pageVersion === current.pageVersion;
 }

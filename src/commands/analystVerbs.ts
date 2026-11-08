@@ -1,6 +1,7 @@
+import type { ResultPage } from "../session/resultRows";
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
-import { AnalystVerb, QueryResult } from "../session/types";
+import { AnalystVerb } from "../session/types";
 import type { ResultTableViewProvider } from "../views/resultTableView";
 import {
   ensureProjectOrRecover,
@@ -82,7 +83,7 @@ type VerbOutcome =
   | SetupRecovery
   | { cancelled: true }
   | { error: string }
-  | (QueryResult & { verb: AnalystVerb; by?: string; label?: string });
+  | (ResultPage & { verb: AnalystVerb; by?: string; label?: string });
 
 async function runVerb(
   context: vscode.ExtensionContext,
@@ -230,11 +231,14 @@ async function runVerb(
       target: target || undefined,
       k,
     });
+    const page = session.resultPage(result);
+    const project = session.project;
 
     if (verb !== "find" && by) {
       await context.workspaceState.update(lastKey, { label, by });
     }
 
+    if (session.project !== project) throw new Error("RESULT_PAGE_STALE: The project changed. Run the command again.");
     await results.show(result, `${verb}${by ? ` · ${by}` : ""}`);
 
     const openGraph = vscode.workspace
@@ -252,7 +256,7 @@ async function runVerb(
     void vscode.window.showInformationMessage(
       `GraphForge ${verb}: ${result.rowCount} row(s)`,
     );
-    return { ...result, verb, by, label };
+    return { ...page, verb, by, label };
   } catch (err) {
     // #39: Similar/Cluster share Find's missing-index remediation — when a
     // vector-shaped invocation fails with an index-looking error, the toast

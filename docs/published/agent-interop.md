@@ -6,6 +6,24 @@ This makes GraphForge drivable end-to-end by an in-editor coding agent (a Cursor
 Copilot Agent Mode, or any other extension calling the VS Code command API), not just by a
 human clicking through menus.
 
+## Bounded command results
+
+Query, analyst, checkpoint, power and ledger commands return a `ResultPage`:
+`{ resultId, columns, rows, rowCount, offset, nextOffset?, algorithm?, sourceQuery?, generationUuid? }`.
+`rowCount` describes the whole result; `rows` contains at most 500 rows and
+4 MiB of UTF-8 JSON (including an envelope reserve). IPC stays in the host.
+Large rows fail with an action to open the saved JSON or Arrow document.
+
+Continue with `graphforge.readResultPage({ resultId, offset: nextOffset, limit? })`.
+The optional limit is 1–500. Paging never reruns the query. A new exposed result,
+a new query/verb source, closing or reopening the project invalidates the old
+ID; `RESULT_PAGE_STALE` tells the caller to rerun the command. Invalid ranges
+return `RESULT_PAGE_INVALID`. This programmatic command has no palette entry.
+Readable JSON/Markdown documents still contain every row; Arrow-backed reopen
+uses the small `.resultmeta` publication pointer and verifies the Arrow digest
+without parsing the readable companion. Small older snapshots remain readable;
+large JSON-only/legacy files require rerunning the query or direct editor access.
+
 ## The core loop
 
 Start with `executeCommand("graphforge.agent.getContext")`. Its
@@ -66,8 +84,9 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.openSampleProject` | `{ path?, force? }` | `{ path, project, seeded }` |
 | `graphforge.openSampleNotebook` | none | `{ path, projectPath, relativePath }` or structured error; paths are absolute |
 | `graphforge.openSampleStreamlit` | none | `{ path, projectPath, relativePath, command }` or structured error; `command` starts the browser app |
-| `graphforge.runQuery` / `runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown> }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) |
-| `graphforge.runProjectQuery` | `string \| Uri \| { path, resultName? }` | `QueryResult` |
+| `graphforge.runQuery` / `runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown> }` | `ResultPage` (`{ columns, rows, rowCount, algorithm? }`) |
+| `graphforge.runProjectQuery` | `string \| Uri \| { path, resultName? }` | `ResultPage` |
+| `graphforge.readResultPage` | `{ resultId, offset?, limit? }` | Bounded `ResultPage` or structured stale/invalid error |
 | `graphforge.openProjectResult` | `string \| Uri \| { path }` | `{ path, absolutePath, columns, rowCount }` |
 | `graphforge.openProjectVisualization` | `string \| Uri \| { path, waitForReady? }` | `{ path, absolutePath, kind, spec, panel?, lifecycle? }` |
 | `graphforge.createProjectVisualization` | `{ name?, result, kind, explicit bindings, filter?, open? }` | `{ path, spec, panel? }` |
@@ -75,10 +94,10 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.applyProjectMutation` | `{ path: string \| Uri; confirm: true }` | `{ path, absolutePath, columns, rowCount }` |
 | `graphforge.importData` | `{ path: string \| Uri; label: string; mode?: "create" \| "merge"; idColumn?: string; confirm: true }` | `{ path, format, label, mode, idColumn?, imported, result }` |
 | `graphforge.rank` / `cluster` / `paths` / `analyze` / `similar` (and `…Advanced…`) | Not yet — still QuickPick-driven | Verb result object (`{ verb, by, label, columns, rows, rowCount, algorithm? }`) |
-| `graphforge.find` | Not yet — still prompt-driven | `QueryResult & { verb: "find", query, label? }`; a missing-index failure returns `{ error, code?, nextAction }` naming `graphforge.indexText` |
-| `graphforge.createCheckpoint` / `listCheckpoints` / `diffCheckpoints` | `{ name?, description? }` / `{ limit? }` / `{ from?, to?, scope?, detail? }` | `QueryResult` |
+| `graphforge.find` | Not yet — still prompt-driven | `ResultPage & { verb: "find", query, label? }`; a missing-index failure returns `{ error, code?, nextAction }` naming `graphforge.indexText` |
+| `graphforge.createCheckpoint` / `listCheckpoints` / `diffCheckpoints` | `{ name?, description? }` / `{ limit? }` / `{ from?, to?, scope?, detail? }` | `ResultPage` |
 | `graphforge.openCheckpoint` | `{ name?, cypher? }` | `{ checkpointUuid, generationUuid, query? }` |
-| `graphforge.deleteCheckpoint` / `revertToCheckpoint` | `{ name?, confirm? }` / `{ name?, reason?, confirm? }` | `QueryResult` |
+| `graphforge.deleteCheckpoint` / `revertToCheckpoint` | `{ name?, confirm? }` / `{ name?, reason?, confirm? }` | `ResultPage` |
 | `graphforge.embeddingSpaces` | none needed | `{ embeddingSpaces: [...], note? }` (empty list is a valid state) |
 | `graphforge.publishCallerEmbeddings` | `{ name?, input? }` | `{ name, compatibilityId }` |
 | `graphforge.bindEmbeddingSpaceAlias` | `{ alias?, compatibilityId?, replace? }` | `{ alias, compatibilityId, result }` |
@@ -89,17 +108,17 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.indexVector` | `{ label?, node?, vector?, space? }` | `{ command, result }` |
 | `graphforge.inspectTextIndex` | `{ label? }` | `{ command, result }` |
 | `graphforge.indexAdjacency` / `inspectAdjacency` / `rebuildAdjacency` | none needed | `{ command, result }` |
-| `graphforge.enableCapability` | `{ capabilityId?, version?, confirm? }` | `QueryResult` |
+| `graphforge.enableCapability` | `{ capabilityId?, version?, confirm? }` | `ResultPage` |
 | `graphforge.openWithWriteMode` | `{ mode?, confirm? }` | `{ ok: true, writeMode }` |
 | `graphforge.exportInvocationDescriptor` | `{ verb?, label?, by?, invoke? }` | `{ verb, algorithm, fingerprint, projectionFingerprint, canonicalBytesBase64, invocation? }` |
-| `graphforge.listAlgorithmRuns` | `{ algorithm?, limit? }` | `QueryResult` |
-| `graphforge.publishCompositeTransaction` | `{ request?, confirm? }` (both together) | `QueryResult` |
-| `graphforge.listAssertions` | `{ graphUuid?, limit? }` | `QueryResult` |
+| `graphforge.listAlgorithmRuns` | `{ algorithm?, limit? }` | `ResultPage` |
+| `graphforge.publishCompositeTransaction` | `{ request?, confirm? }` (both together) | `ResultPage` |
+| `graphforge.listAssertions` | `{ graphUuid?, limit? }` | `ResultPage` |
 | `graphforge.createAssertion` | `{ claim?, subjectUuid?, subjectKind? }` | `{ assertionUuid }` |
 | `graphforge.showAssertion` / `showAssertionOnGraph` | `{ assertionUuid? }` or a plain UUID string | Assertion record + `nextActions` / `{ assertionUuid, graph }` |
-| `graphforge.attachEvidence` | `{ assertionUuid?, sourceUuid?, sourceKind?, role? }` | `QueryResult` |
-| `graphforge.assessConfidence` | `{ assertionUuid?, policy?, value? }` | `QueryResult` |
-| `graphforge.recordAssertionStatus` | `{ assertionUuid?, status?, provenanceUuid? }` | `QueryResult` |
+| `graphforge.attachEvidence` | `{ assertionUuid?, sourceUuid?, sourceKind?, role? }` | `ResultPage` |
+| `graphforge.assessConfidence` | `{ assertionUuid?, policy?, value? }` | `ResultPage` |
+| `graphforge.recordAssertionStatus` | `{ assertionUuid?, status?, provenanceUuid? }` | `ResultPage` |
 | `graphforge.setupNativeBinding` / `setupPythonBinding` / `initializeProjectHere` / `loadOntology` / `showResultGraphAdvanced` | No — these are inherently human choices (which folder, which binding source) | — |
 | `graphforge.showOntology` / `showResultGraph` / `showCapabilities` / `openOntologyFile` / `explainOntologyMode` / `refreshExplorer` / `getStarted` / `openSettings` / `manageModules` / `statusBarClick` | No prompts to skip | — (view-openers; their effect is the UI they open) |
 

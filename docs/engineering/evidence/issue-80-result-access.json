@@ -1,0 +1,19 @@
+{
+  "sourceSha256": {
+    "arrowCodec.ts": "cecc9fae82abbc8a06c584072a9ea8be66971e045b58dd729f4b935bb22aea47",
+    "resultRows.ts": "7d1bcf6baf76fe3a2877b7f81ca34b06b6000bef371b156a569236c4b69cbe92"
+  },
+  "node": "v22.22.3",
+  "platform": "darwin-arm64",
+  "scope": "One opt-in synthetic numerical Arrow access probe; no layout/paint/interaction/scale release claim",
+  "rows": 100000,
+  "columns": 8,
+  "ipcBytes": 6400960,
+  "returnedRows": 500,
+  "returnedJsonBytes": 52366,
+  "decodeMs": 3.4240409999999883,
+  "firstPageMs": 2.6331669999999576,
+  "heapDeltaBytes": 1942744,
+  "rssDeltaBytes": 1114112,
+  "originalIpcIdentity": true
+}

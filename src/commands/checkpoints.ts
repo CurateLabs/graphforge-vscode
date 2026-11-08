@@ -1,3 +1,4 @@
+import { queryResultPage, type ResultPage } from "../session/resultRows";
 import * as vscode from "vscode";
 import { decodeTable } from "../session/arrowCodec";
 import type { GraphForgeSession } from "../session/graphForgeSession";
@@ -129,7 +130,7 @@ async function pickCheckpointName(
 async function showResultDoc(title: string, result: QueryResult): Promise<void> {
   const doc = await vscode.workspace.openTextDocument({
     content: JSON.stringify(
-      { command: title, columns: result.columns, rowCount: result.rowCount, rows: result.rows },
+      { command: title, ...queryResultPage(result) },
       null,
       2,
     ),
@@ -144,7 +145,7 @@ async function showResultDoc(title: string, result: QueryResult): Promise<void> 
 async function runCreateCheckpoint(
   session: GraphForgeSession,
   args?: CreateCheckpointArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -172,11 +173,12 @@ async function runCreateCheckpoint(
     const result = await withEngineProgress("creating checkpoint…", () =>
       session.createCheckpoint(name, description || undefined),
     );
+    const page = session.resultPage(result);
     await showResultDoc("Create Checkpoint", result);
     void vscode.window.showInformationMessage(
       `GraphForge: checkpoint "${name}" created.`,
     );
-    return result;
+    return page;
   } catch (err) {
     return reportEngineError("Create Checkpoint failed", err);
   }
@@ -185,7 +187,7 @@ async function runCreateCheckpoint(
 async function runListCheckpoints(
   session: GraphForgeSession,
   args?: ListCheckpointsArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -198,11 +200,12 @@ async function runListCheckpoints(
     const result = await withEngineProgress("listing checkpoints…", () =>
       session.listCheckpoints(args?.limit ?? 200),
     );
+    const page = session.resultPage(result);
     await showResultDoc("List Checkpoints", result);
     void vscode.window.showInformationMessage(
       `GraphForge: ${result.rowCount} checkpoint(s).`,
     );
-    return result;
+    return page;
   } catch (err) {
     return reportEngineError("List Checkpoints failed", err);
   }
@@ -211,7 +214,7 @@ async function runListCheckpoints(
 interface OpenCheckpointPayload {
   checkpointUuid: string;
   generationUuid: string;
-  query?: QueryResult;
+  query?: ResultPage;
 }
 
 async function runOpenCheckpoint(
@@ -258,12 +261,13 @@ async function runOpenCheckpoint(
       viewColumn: vscode.ViewColumn.Beside,
       preview: true,
     });
-    let query: QueryResult | undefined;
+    let query: ResultPage | undefined;
     if (cypher?.trim()) {
-      query = await withEngineProgress("querying checkpoint…", async () =>
+      const result = await withEngineProgress("querying checkpoint…", async () =>
         decodeTable(view.execute(cypher)),
       );
-      await showResultDoc(`Open Checkpoint "${name}" — query`, query);
+      query = session.resultPage(result);
+      await showResultDoc(`Open Checkpoint "${name}" — query`, result);
     }
     return {
       checkpointUuid: view.checkpointUuid,
@@ -278,7 +282,7 @@ async function runOpenCheckpoint(
 async function runDiffCheckpoints(
   session: GraphForgeSession,
   args?: DiffCheckpointsArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -329,11 +333,12 @@ async function runDiffCheckpoints(
     const result = await withEngineProgress("diffing checkpoints…", () =>
       session.diffCheckpoints(from, to, scope, detail),
     );
+    const page = session.resultPage(result);
     await showResultDoc(`Diff ${from} → ${to} (${scope}/${detail})`, result);
     void vscode.window.showInformationMessage(
       `GraphForge: diff produced ${result.rowCount} row(s).`,
     );
-    return result;
+    return page;
   } catch (err) {
     return reportEngineError("Diff Checkpoints failed", err);
   }
@@ -342,7 +347,7 @@ async function runDiffCheckpoints(
 async function runDeleteCheckpoint(
   session: GraphForgeSession,
   args?: DeleteCheckpointArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -372,11 +377,12 @@ async function runDeleteCheckpoint(
     const result = await withEngineProgress("deleting checkpoint…", () =>
       session.deleteCheckpoint(name),
     );
+    const page = session.resultPage(result);
     await showResultDoc("Delete Checkpoint", result);
     void vscode.window.showInformationMessage(
       `GraphForge: checkpoint "${name}" deleted.`,
     );
-    return result;
+    return page;
   } catch (err) {
     return reportEngineError("Delete Checkpoint failed", err);
   }
@@ -391,7 +397,7 @@ async function runDeleteCheckpoint(
 async function runRevertToCheckpoint(
   session: GraphForgeSession,
   args?: RevertToCheckpointArgs,
-): Promise<CommandOutcome<QueryResult>> {
+): Promise<CommandOutcome<ResultPage>> {
   const recovery = await ensureProjectOrRecover(session);
   if (recovery) {
     return recovery;
@@ -436,11 +442,12 @@ async function runRevertToCheckpoint(
     const result = await withEngineProgress("reverting to checkpoint…", () =>
       session.revertToCheckpoint(name, reason),
     );
+    const page = session.resultPage(result);
     await showResultDoc("Revert to Checkpoint", result);
     void vscode.window.showInformationMessage(
       `GraphForge: reverted to checkpoint "${name}".`,
     );
-    return result;
+    return page;
   } catch (err) {
     return reportEngineError("Revert to Checkpoint failed", err);
   }

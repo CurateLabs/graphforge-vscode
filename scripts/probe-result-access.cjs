@@ -1,0 +1,31 @@
+// Opt-in, one-off Arrow access probe (NFR-12); never part of CI. See TESTING.md.
+const assert = require('node:assert/strict');
+const { performance } = require('node:perf_hooks');
+const fs = require('node:fs');
+const path = require('node:path');
+const { createHash } = require('node:crypto');
+assert.ok(process.argv[2] && process.argv[3] && global.gc, 'Usage: node --expose-gc scripts/probe-result-access.cjs <compiled library> <report.json>');
+const library = path.resolve(process.argv[2]);
+const reportPath = path.resolve(process.argv[3]);
+const { tableFromArrays, tableToIPC } = require('apache-arrow');
+const { decodeTable } = require(path.join(library, 'arrowCodec.js'));
+const { queryResultPage } = require(path.join(library, 'resultRows.js'));
+function fixture() { return Buffer.from(tableToIPC(tableFromArrays(Object.fromEntries(Array.from({length:8},(_,i)=>['value'+i,Float64Array.from({length:100000},(_,r)=>r+i)]))))); }
+const ipc = fixture();
+global.gc();
+const before = process.memoryUsage();
+const start = performance.now();
+const result = decodeTable(ipc);
+const decoded = performance.now();
+const page = queryResultPage(result);
+const finished = performance.now();
+const after = process.memoryUsage();
+assert.equal(result.ipc, ipc);
+assert.equal(result.rowCount, 100000);
+assert.equal(page.rows.length, 500);
+assert.equal(page.nextOffset, 500);
+assert.equal(queryResultPage(result, 99500).nextOffset, undefined);
+const sourceSha256 = Object.fromEntries(['arrowCodec.ts', 'resultRows.ts'].map(file => [file, createHash('sha256').update(fs.readFileSync(path.join(__dirname, '../src/session', file))).digest('hex')]));
+const report = { sourceSha256, node: process.version, platform: process.platform+'-'+process.arch, scope:'One opt-in synthetic numerical Arrow access probe; no layout/paint/interaction/scale release claim', rows:result.rowCount, columns:result.columns.length, ipcBytes:ipc.byteLength, returnedRows:page.rows.length, returnedJsonBytes:Buffer.byteLength(JSON.stringify(page)), decodeMs:decoded-start, firstPageMs:finished-decoded, heapDeltaBytes:after.heapUsed-before.heapUsed, rssDeltaBytes:after.rss-before.rss, originalIpcIdentity:true };
+fs.writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify(report));

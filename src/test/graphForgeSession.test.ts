@@ -94,6 +94,37 @@ suite("GraphForgeSession result generation", () => {
   }
 });
 
+suite("GraphForgeSession bounded command pages", () => {
+  test("pages an exposed result without rerunning and rejects replaced or closed results", async () => {
+    const session = new GraphForgeSession();
+    let executions = 0;
+    injectForge(session, makeStubForge({ execute: () => {
+      executions++;
+      return Buffer.from(tableToIPC(tableFromArrays({ value: Int32Array.from({ length: 1203 }, (_, index) => index) })));
+    } }));
+    try {
+      const result = await session.execute("fixture");
+      const first = session.resultPage(result);
+      assert.equal(first.rows.length, 500);
+      assert.equal(first.nextOffset, 500);
+      assert.ok(!("ipc" in first));
+      const second = session.readResultPage({ resultId: first.resultId, offset: first.nextOffset });
+      assert.equal(second.rows[0].value, 500);
+      assert.equal(executions, 1);
+      await session.execute("replacement");
+      assert.throws(() => session.readResultPage({ resultId: first.resultId }), /RESULT_PAGE_STALE/);
+      const original = session.getLastResult()!;
+      const replacedBackendPage = session.resultPage(original);
+      injectForge(session, makeStubForge());
+      assert.throws(() => session.readResultPage({ resultId: replacedBackendPage.resultId }), /RESULT_PAGE_STALE/);
+      assert.throws(() => session.resultPage(original), /RESULT_PAGE_STALE/);
+      const replacement = session.resultPage({ columns: [], rows: [], rowCount: 0 });
+      await session.closeProject();
+      assert.throws(() => session.readResultPage({ resultId: replacement.resultId }), /RESULT_PAGE_STALE/);
+    } finally { session.dispose(); }
+  });
+});
+
 suite("GraphForgeSession.algorithmCatalog", () => {
   test("falls back to static list when binding has no forge open", () => {
     const session = new GraphForgeSession();

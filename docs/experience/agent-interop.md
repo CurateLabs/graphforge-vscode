@@ -1,5 +1,23 @@
 # Agent interop: driving GraphForge from an in-editor coding agent
 
+## Bounded command results
+
+Query, analyst, checkpoint, power and ledger commands return a `ResultPage`:
+`{ resultId, columns, rows, rowCount, offset, nextOffset?, algorithm?, sourceQuery?, generationUuid? }`.
+`rowCount` describes the whole result; `rows` contains at most 500 rows and
+4 MiB of UTF-8 JSON (including an envelope reserve). IPC stays in the host.
+Large rows fail with an action to open the saved JSON or Arrow document.
+
+Continue with `graphforge.readResultPage({ resultId, offset: nextOffset, limit? })`.
+The optional limit is 1–500. Paging never reruns the query. A new exposed result,
+a new query/verb source, closing or reopening the project invalidates the old
+ID; `RESULT_PAGE_STALE` tells the caller to rerun the command. Invalid ranges
+return `RESULT_PAGE_INVALID`. This programmatic command has no palette entry.
+Readable JSON/Markdown documents still contain every row; Arrow-backed reopen
+uses the small `.resultmeta` publication pointer and verifies the Arrow digest
+without parsing the readable companion. Small older snapshots remain readable;
+large JSON-only/legacy files require rerunning the query or direct editor access.
+
 ## Observed need and evidence
 
 Issue [#1](https://github.com/CurateLabs/graphforge-vscode/issues/1) states the UX doctrine explicitly: *"Agent-friendly — stable command IDs, structured result docs, actionable errors with a next step."* Issue [#3](https://github.com/CurateLabs/graphforge-vscode/issues/3) makes this concrete for Cypher: *"results that are skimmable and agent-copyable."* Neither issue had an automated test proving the contract, or a single reference doc a coding agent (or a person driving one) could read to learn the command surface. This document plus `src/test/extension.test.ts` closes that gap: they prove, in CI, that an in-editor coding agent — a Cursor agent, a VS Code Copilot-style agent, or any other extension calling `vscode.commands.executeCommand` — can drive GraphForge end-to-end without clicking through the Command Palette.
@@ -102,9 +120,10 @@ Source of truth: `package.json#contributes.commands` (88 contributed commands on
 | `graphforge.closeProject` | none | `{ closed: true }` | None | No |
 | `graphforge.agent.getContext` | `{ projectPath?: string \| Uri }` | `graphforge.agent-context/v1` context (environment, settings, project marker, artifacts with absolute paths, last-result paths, schemas, compact command descriptors) | None | No — an optional path can be inspected without opening it |
 | `graphforge.agent.listArtifacts` | `{ projectPath?: string \| Uri }` | `graphforge.artifact-index/v1`, or structured `PROJECT_REQUIRED` | None | No runtime required; needs an active or explicit project path |
-| `graphforge.runQuery` | `{ cypher?: string; params?: Record<string, unknown>; resultName?: string }` | `QueryResult` (`{ columns, rows, rowCount, algorithm? }`) | Editor selection → whole doc → `showInputBox` only when `args.cypher` omitted/blank | Yes |
+| `graphforge.runQuery` | `{ cypher?: string; params?: Record<string, unknown>; resultName?: string }` | `ResultPage` (`{ columns, rows, rowCount, algorithm? }`) | Editor selection → whole doc → `showInputBox` only when `args.cypher` omitted/blank | Yes |
 | `graphforge.runQueryWithParams` | `{ cypher?: string; params?: Record<string, unknown>; resultName?: string }` | Same as `runQuery` | Same cypher resolution as `runQuery`; params `showInputBox` (JSON) only when `args.params` omitted | Yes |
 | `graphforge.runProjectQuery` | `string \| Uri \| { path: string \| Uri; resultName?: string }` | Same as `runQuery` | None | Yes; path must stay in project |
+| `graphforge.readResultPage` | `{ resultId, offset?, limit? }` | Bounded `ResultPage` or structured stale/invalid error | None | Yes |
 | `graphforge.saveProjectQuery` | `{ name?, cypher, run?, resultName? }` | `{ path }` or query result | None | Yes |
 | `graphforge.saveProjectQueryTemplate` | `{ name?, cypher, run?, resultName? }` | `{ path }` or query result | None | Yes; writes under `queries/templates/` |
 | `graphforge.openProjectResult` | `string \| Uri \| { path }` | `{ path, absolutePath, rowCount, columns }` | None | Yes; restores Results/session state |
@@ -119,13 +138,13 @@ Source of truth: `package.json#contributes.commands` (88 contributed commands on
 | `graphforge.paths` / `pathsAdvanced` | none yet | same shape as `rank` | Algorithm QuickPick + source/target `showInputBox` (+ via/directed if `Advanced`) | Yes |
 | `graphforge.analyze` / `analyzeAdvanced` | none yet | same shape as `rank` | Label + algorithm QuickPick (+ via/directed if `Advanced`) | Yes |
 | `graphforge.similar` / `similarAdvanced` | none yet | same shape as `rank` | Label + algorithm QuickPick (+ via/vectorProperty if `Advanced`) | Yes |
-| `graphforge.find` | none yet | `QueryResult & { verb: "find", query, label? }`; a missing-index failure returns `{ error, code?, nextAction }` naming `graphforge.indexText` | Query `showInputBox` + label QuickPick | Yes |
-| `graphforge.createCheckpoint` | `{ name?, description? }` | `QueryResult` | Name + description InputBoxes | Yes (Node binding) |
-| `graphforge.listCheckpoints` | `{ limit? }` | `QueryResult` | None | Yes (Node binding) |
+| `graphforge.find` | none yet | `ResultPage & { verb: "find", query, label? }`; a missing-index failure returns `{ error, code?, nextAction }` naming `graphforge.indexText` | Query `showInputBox` + label QuickPick | Yes |
+| `graphforge.createCheckpoint` | `{ name?, description? }` | `ResultPage` | Name + description InputBoxes | Yes (Node binding) |
+| `graphforge.listCheckpoints` | `{ limit? }` | `ResultPage` | None | Yes (Node binding) |
 | `graphforge.openCheckpoint` | `{ name?, cypher? }` (include `cypher` — even `undefined` — to skip the query prompt) | `{ checkpointUuid, generationUuid, query? }` | Checkpoint QuickPick + read-only Cypher InputBox | Yes (Node binding) |
-| `graphforge.diffCheckpoints` | `{ from?, to?, scope?, detail? }` | `QueryResult` | From/To InputBox+QuickPick, scope + detail QuickPicks | Yes (Node binding) |
-| `graphforge.deleteCheckpoint` | `{ name?, confirm? }` | `QueryResult` | Checkpoint QuickPick + destructive confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
-| `graphforge.revertToCheckpoint` | `{ name?, reason?, confirm? }` | `QueryResult` | Checkpoint QuickPick, reason InputBox, retype-the-name hard confirm (skipped only by `confirm: true`) | Yes (Node binding) |
+| `graphforge.diffCheckpoints` | `{ from?, to?, scope?, detail? }` | `ResultPage` | From/To InputBox+QuickPick, scope + detail QuickPicks | Yes (Node binding) |
+| `graphforge.deleteCheckpoint` | `{ name?, confirm? }` | `ResultPage` | Checkpoint QuickPick + destructive confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
+| `graphforge.revertToCheckpoint` | `{ name?, reason?, confirm? }` | `ResultPage` | Checkpoint QuickPick, reason InputBox, retype-the-name hard confirm (skipped only by `confirm: true`) | Yes (Node binding) |
 | `graphforge.embeddingSpaces` | none | `{ embeddingSpaces: [{ space, freshness? }], note? }` (empty list is a valid state, not an error) | None | Yes (Node binding) |
 | `graphforge.publishCallerEmbeddings` | `{ name?, input?: { rows, dimensions, sourceProjection, replace? } }` | `{ name, compatibilityId }` | Name InputBox + edit-JSON-in-editor flow + Publish toast | Yes (Node binding) |
 | `graphforge.bindEmbeddingSpaceAlias` | `{ alias?, compatibilityId?, replace? }` | `{ alias, compatibilityId, result }` | Alias + compatibility-ID InputBoxes + replace QuickPick | Yes (Node binding) |
@@ -138,19 +157,19 @@ Source of truth: `package.json#contributes.commands` (88 contributed commands on
 | `graphforge.indexAdjacency` | none | `{ command, result }` | None | Yes (Node binding) |
 | `graphforge.inspectAdjacency` | none | `{ command, result }` | None | Yes (Node binding) |
 | `graphforge.rebuildAdjacency` | none | `{ command, result }` | None | Yes (Node binding) |
-| `graphforge.enableCapability` | `{ capabilityId?, version?, confirm? }` | `QueryResult` | ID + version InputBoxes + manifest-mutation confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
+| `graphforge.enableCapability` | `{ capabilityId?, version?, confirm? }` | `ResultPage` | ID + version InputBoxes + manifest-mutation confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
 | `graphforge.openWithWriteMode` | `{ mode?, confirm? }` (`mode`: `single_writer` \| `queued_writer` \| `optimistic_multi_writer`) | `{ ok: true, writeMode }` | Mode QuickPick + reopen confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
 | `graphforge.exportInvocationDescriptor` | `{ verb?, label?, by?, invoke? }` | `{ verb, algorithm, fingerprint, projectionFingerprint, canonicalBytesBase64, invocation? }` | Verb/label/algorithm QuickPicks + invoke-now toast | Yes (Node binding) |
-| `graphforge.listAlgorithmRuns` | `{ algorithm?, limit? }` | `QueryResult` | None | Yes (Node binding) |
-| `graphforge.publishCompositeTransaction` | `{ request?, confirm? }` (both required together for the programmatic path) | `QueryResult` | Expert warning, edit-JSON-in-editor flow, publish confirm modal | Yes (Node binding) |
+| `graphforge.listAlgorithmRuns` | `{ algorithm?, limit? }` | `ResultPage` | None | Yes (Node binding) |
+| `graphforge.publishCompositeTransaction` | `{ request?, confirm? }` (both required together for the programmatic path) | `ResultPage` | Expert warning, edit-JSON-in-editor flow, publish confirm modal | Yes (Node binding) |
 | `graphforge.runCli` | `{ args?: string[] }` (full CLI argv, e.g. `["status"]`, `["checkpoint","list"]`) | `{ args, exitCode, stdout, stderr }`; no binding ⇒ `{ error, code: "CLI_UNAVAILABLE", nextAction }` | Command QuickPick + custom-args InputBox when `args` omitted | Yes (Node binding — runs the engine CLI in-process via `runCli`) |
-| `graphforge.listAssertions` | `{ graphUuid?, limit? }` | `QueryResult` | None | Yes |
+| `graphforge.listAssertions` | `{ graphUuid?, limit? }` | `ResultPage` | None | Yes |
 | `graphforge.createAssertion` | `{ claim?, subjectUuid?, subjectKind? }` (`subjectKind`: `node` \| `edge`) | `{ assertionUuid }` | Claim/subject-UUID InputBoxes + kind QuickPick | Yes |
 | `graphforge.showAssertion` | `{ assertionUuid? }` or a plain UUID string (tree clicks pass one) | Assertion record + `nextActions` array | Assertion QuickPick/InputBox | Yes |
 | `graphforge.showAssertionOnGraph` | `{ assertionUuid? }` or a plain UUID string | `{ assertionUuid, graph }` (also opens the Result Graph webview) | Assertion QuickPick/InputBox | Yes |
-| `graphforge.attachEvidence` | `{ assertionUuid?, sourceUuid?, sourceKind?, role? }` | `QueryResult` | Assertion + source-UUID prompts, kind + role QuickPicks | Yes |
-| `graphforge.assessConfidence` | `{ assertionUuid?, policy?, value? }` | `QueryResult` | Assertion prompt, policy QuickPick, value InputBox | Yes |
-| `graphforge.recordAssertionStatus` | `{ assertionUuid?, status?, provenanceUuid? }` | `QueryResult` | Assertion prompt, status QuickPick, provenance InputBox | Yes |
+| `graphforge.attachEvidence` | `{ assertionUuid?, sourceUuid?, sourceKind?, role? }` | `ResultPage` | Assertion + source-UUID prompts, kind + role QuickPicks | Yes |
+| `graphforge.assessConfidence` | `{ assertionUuid?, policy?, value? }` | `ResultPage` | Assertion prompt, policy QuickPick, value InputBox | Yes |
+| `graphforge.recordAssertionStatus` | `{ assertionUuid?, status?, provenanceUuid? }` | `ResultPage` | Assertion prompt, status QuickPick, provenance InputBox | Yes |
 | `graphforge.showOntology` | none | `void` (opens/reveals webview) | None | No — shows an empty/best-effort viewer without a project |
 | `graphforge.showResultsTable` | none | `void` (reveals the bottom Results panel) | None | No — shows the panel's empty state before a result |
 | `graphforge.showResultGraph` | `{ title?, waitForReady? }` | `{ panel, instanceId, renderer, lifecycle? }` | None | Yes — requires canonical Core Arrow |
@@ -204,7 +223,7 @@ flowchart TD
     B --> A
     C --> A
     D -->|result.error present| B
-    D -->|success| E["Read QueryResult from the return value or project-local results/query-result.json"]
+    D -->|success| E["Read ResultPage from the return value or project-local results/query-result.json"]
     E --> F["createProjectVisualization({ result, kind, explicit bindings })"]
 ```
 

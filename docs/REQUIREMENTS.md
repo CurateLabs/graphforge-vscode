@@ -63,3 +63,13 @@ See [ADR-0006](engineering/adrs/0006-xyg-only-visualization.md) and the [XYG con
 - Whether Marketplace publisher namespace is already claimed under CurateLabsAI — release owners.
 - Which engine-owned modules will be published through `moduleCatalog()` and how
   their version compatibility will be governed — GraphForge engine maintainers.
+
+## Typed result boundary (#80)
+
+Original Core Arrow and schema metadata remain authoritative. Row access is lazy;
+Results and command replies page at 500 rows and 4 MiB of UTF-8 JSON. Complete
+readable documents stream to disk, and metadata-last publication supports
+Arrow-first digest-checked reopen. Stale page identities/actions fail closed.
+XYG owns native analytical selection planes and source provenance; the extension
+relays those identities without reconstructing joins or point order. Unsupported
+schemas carry a stable diagnostic and a concrete recovery action.

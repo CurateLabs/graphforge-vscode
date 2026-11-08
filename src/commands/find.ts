@@ -1,3 +1,4 @@
+import type { ResultPage } from "../session/resultRows";
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { QueryResult } from "../session/types";
@@ -12,7 +13,7 @@ import {
 
 /** Structured result of `graphforge.find`, returned to `executeCommand` callers (#36). */
 type FindOutcome = CommandOutcome<
-  QueryResult & { verb: "find"; query: string; label?: string }
+  ResultPage & { verb: "find"; query: string; label?: string }
 >;
 
 /**
@@ -69,6 +70,7 @@ async function runFind(
     return handleFindError(err, label);
   }
 
+  const page = session.resultPage(result);
   await results.show(result, `Find · ${query || "(all)"}`);
 
   const hasUuids = result.columns.some((c) => /uuid/i.test(c));
@@ -87,7 +89,7 @@ async function runFind(
   void vscode.window.showInformationMessage(
     `GraphForge Find: ${result.rowCount} hit(s)`,
   );
-  return { ...result, verb: "find", query, label };
+  return { ...page, verb: "find", query, label };
 }
 
 /**

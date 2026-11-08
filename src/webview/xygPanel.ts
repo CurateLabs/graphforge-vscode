@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import * as vscode from "vscode";
 import type { QueryResult } from "../session/types";
+import { resultRow } from "../session/resultRows";
 import type { ProjectVisualizationSpec } from "../session/visualizationRegistry";
 import type { EntityInspectSelection } from "./protocol";
 import {
@@ -43,6 +44,7 @@ export class XygVisualizationPanel implements VisualizationController {
   private resultId: string | undefined;
   private xy: any;
   private selected: string[] = [];
+  private selectedRows: number[] = [];
   private frame = 0;
   private acceptedFrame = 0;
   private readonly acknowledgements = new Map<
@@ -136,7 +138,7 @@ export class XygVisualizationPanel implements VisualizationController {
       // A readiness wait after a theme change must not cancel the same work.
       // Retain completed paint as well; explicit Re-layout still starts a job.
       const reuse = spec.kind === "result-graph" && existing.spec.kind === spec.kind &&
-        existing.projectRoot === projectRoot && existing.selected.length === 0 &&
+        existing.projectRoot === projectRoot && existing.selected.length === 0 && existing.selectedRows.length === 0 &&
         !existing.needsRender && (existing.isReady || !existing.readySettled) &&
         JSON.stringify(existing.spec) === JSON.stringify(spec) &&
         sameArrowResult(existing.result, result) && sameArrowResult(existing.base, base);
@@ -145,6 +147,7 @@ export class XygVisualizationPanel implements VisualizationController {
       existing.projectRoot = projectRoot;
       existing.base = base;
       existing.selected = [];
+      existing.selectedRows = [];
       existing.reveal();
       if (existing.initialized && !reuse) void existing.render();
       return { panel: existing, status: "updated" as const };
@@ -412,6 +415,7 @@ export class XygVisualizationPanel implements VisualizationController {
           this.result,
           this.base,
           this.selected,
+          this.selectedRows,
         );
         this.resultId = "layers" in input ? input.layers[0].resultId : undefined;
         if (this.spec.intent) this.composition = this.xy.composeGraphForge(input);
@@ -555,16 +559,17 @@ export class XygVisualizationPanel implements VisualizationController {
   highlightFromResult(result: QueryResult, rowIndex: number, column?: string) {
     if (
       result !== this.result ||
-      !result.rows[rowIndex] ||
+      !resultRow(result, rowIndex) ||
       this.spec.kind !== "result-graph"
     )
       return { nodeIds: [], edgeIds: [] };
-    const selection = this.spec.intent && this.xy
+    const selection: { nodeIds: string[]; edgeIds: string[]; rowIndices?: number[] } = this.spec.intent && this.xy
       ? resultEntitiesFromXygRow(this.composition ??= this.xy.composeGraphForge(graphInput(this.spec, this.result, this.base)), this.resultId ??= graphResultId(this.spec, this.result), rowIndex)
-      : resultEntitySelection(result.rows[rowIndex], column);
-    const hadSelection = this.selected.length > 0;
+      : resultEntitySelection(resultRow(result, rowIndex)!, column);
+    const hadSelection = this.selected.length > 0 || this.selectedRows.length > 0;
     this.selected = [...selection.nodeIds, ...selection.edgeIds];
-    if (this.selected.length || hadSelection) void this.render();
+    this.selectedRows = selection.rowIndices ?? [];
+    if (this.selected.length || this.selectedRows.length || hadSelection) void this.render();
     return selection;
   }
 
@@ -621,11 +626,12 @@ export class XygVisualizationPanel implements VisualizationController {
   }
   async exportPair() {
     if (!this.isReady || this.disposed) throw new Error("XYG_EXPORT_NOT_READY");
+    let figure = this.figure;
     if (this.spec.kind === "result-graph") {
       const composition = this.xy.composeGraphForge(
-        graphInput(this.spec, this.result, this.base, this.selected),
+        graphInput(this.spec, this.result, this.base, this.selected, this.selectedRows),
       );
-      this.figure = this.xy.graphforgeStaticPayload(composition, {
+      figure = this.xy.graphforgeStaticPayload(composition, {
         width: this.width,
         height: this.height,
         title: this.spec.name,
@@ -633,12 +639,11 @@ export class XygVisualizationPanel implements VisualizationController {
         layout: "preset",
       }).figure;
     }
-    if (!this.figure) throw new Error("XYG_EXPORT_NOT_READY");
+    if (!figure) throw new Error("XYG_EXPORT_NOT_READY");
     const directory = path.join(this.projectRoot, "visualizations", "exports");
     await fs.mkdir(directory, { recursive: true });
     const stem =
       this.spec.name.replace(/[^a-zA-Z0-9_-]+/g, "-") || "visualization";
-    const figure = this.figure;
     const svg = await figure.toImage("svg");
     let png: any;
     const bytes = (value: any) =>

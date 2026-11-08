@@ -6,6 +6,36 @@ See [the acceptance matrix](XYG_QUALIFICATION.md) for the required live Core led
 guard, real result corpus, native/WASM comparisons, per-platform installed VSIX
 lanes, reproduction commands and the separately outstanding release gates.
 
+### Bounded results and analytical selection
+
+`resultRows.test.ts` verifies lazy access, complete identity, byte-shortened
+continuation and oversized/invalid requests. `resultDocument.test.ts` verifies
+complete streamed output, Arrow-first reopen despite an edited/oversized JSON
+companion, legacy bounds, corrupt bytes, plain-after-Arrow publication, and
+concurrent current/history consistency. `resultTableModel.test.ts` and
+`resultTablePaging.test.ts` verify page-local Inspect, later-page native selection,
+clearing, stale contexts and superseded asynchronous projections. Session tests
+verify the command page API does not reexecute and rejects replaced/closed IDs.
+The installed quickstart exercises actual command paging and authoritative saved
+reopen. Owner GraphForge tests cover native/WASM analytical selected planes,
+reordered/filtered source membership, overlay picks, and actionable unknown schemas.
+These are bounded regression fixtures; optional scale investigations remain
+separate under NFR-12.
+
+One opt-in numerical access probe (100,000 rows × 8 Float64 columns) records
+source hashes, IPC/page bytes, decode/page timing and heap/RSS deltas without
+logging cell values. It preserves the original IPC identity and checks first/last
+page bounds. This is access evidence, not an end-to-end scale qualification:
+
+```sh
+npx tsc --ignoreConfig --outDir /tmp/gf-result-access-lib --module commonjs --target es2022 --types node --esModuleInterop --skipLibCheck src/session/arrowCodec.ts src/session/resultRows.ts
+NODE_PATH="$PWD/node_modules" node --expose-gc scripts/probe-result-access.cjs /tmp/gf-result-access-lib /tmp/gf-result-access.json
+```
+
+The retained [access receipt](evidence/issue-80-result-access.json) is a single
+macOS-arm64/Node 22 observation. Do not generalize its timings to Core computation,
+layout, paint, export, interaction, other platforms or the full release matrix.
+
 ## Packaged Hub clone storage qualification (#94)
 
 The existing CI workflow has an opt-in `qualify_hub_clone` dispatch input. It builds

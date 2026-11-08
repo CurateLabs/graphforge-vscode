@@ -3,8 +3,8 @@ import type {
   GraphNode,
   OntologyDoc,
   OntologyMode,
-  QueryResult,
 } from "../session/types";
+import type { ResultPage } from "../session/resultRows";
 import type { GetStartedState } from "../views/getStartedView";
 import type { VisualizationMessageContext } from "./visualizationInstanceRegistry";
 
@@ -17,21 +17,48 @@ export interface ResultEntityLink {
   label: string;
 }
 
+export interface ResultMessageContext {
+  resultId: string;
+  revision: number;
+  pageVersion: number;
+}
+
+export type ResultPageDirection = "next" | "previous" | "selection" | "reset";
+
 export type HostToWebview =
   | { type: "graphforge/entityInspect"; selection: EntityInspectSelection }
-  | {
+  | (ResultMessageContext & {
       type: "graphforge/results";
       title: string;
-      result: QueryResult;
+      result: ResultPage;
       persisted?: { jsonPath: string; markdownPath: string };
       entityLinks?: Record<string, ResultEntityLink[]>;
-    }
-  | {
+      inspectNotice?: string;
+      direction?: ResultPageDirection;
+      selectedRows?: number[];
+      selectedCount?: number;
+      focusRow?: number;
+    })
+  | (ResultMessageContext & {
+      type: "graphforge/resultsLoading";
+      title: string;
+      rowCount: number;
+      persisted: boolean;
+      reset: boolean;
+    })
+  | (ResultMessageContext & { type: "graphforge/resultsError"; message: string })
+  | (ResultMessageContext & { type: "graphforge/resultsCleared"; message: string })
+  | (ResultMessageContext & {
       type: "graphforge/resultSelection";
       message: string;
       linked: boolean;
-    }
-  | { type: "graphforge/highlightResultRows"; rowIndices: number[] }
+    })
+  | (ResultMessageContext & {
+      type: "graphforge/highlightResultRows";
+      rowIndices: number[];
+      selectedCount: number;
+      focusRow?: number;
+    })
   | {
       type: "graphforge/entityEditState";
       state: "saving" | "saved" | "error";
@@ -55,21 +82,22 @@ export type HostToWebview =
 
 export type WebviewToHost = (
   | { type: "graphforge/ready" }
-  | { type: "graphforge/selectResult"; rowIndex: number; column?: string }
-  | {
+  | (ResultMessageContext & { type: "graphforge/selectResult"; rowIndex: number; column?: string })
+  | (ResultMessageContext & { type: "graphforge/requestResultPage"; offset: number; direction: "next" | "previous" })
+  | (ResultMessageContext & {
       type: "graphforge/openResultEntity";
       rowIndex: number;
       kind: EntityInspectSelection["kind"];
       id: string;
       shiftKey?: boolean;
-    }
+    })
   | {
       type: "graphforge/saveEntityEdit";
       kind: EntityInspectSelection["kind"];
       id: string;
       properties: Record<string, unknown>;
     }
-  | { type: "graphforge/openResultDocument"; kind: "json" | "markdown" }
+  | (ResultMessageContext & { type: "graphforge/openResultDocument"; kind: "json" | "markdown" })
   | { type: "graphforge/requestReload" }
   | { type: "graphforge/explainMode" }
   | { type: "graphforge/openOntologyFile" }

@@ -33,6 +33,7 @@ export interface TableRow {
 
 export interface QueryResult {
   columns: string[];
+  /** Logical complete row collection. Core Arrow rows decode on demand and are immutable. */
   rows: TableRow[];
   rowCount: number;
   algorithm?: string;

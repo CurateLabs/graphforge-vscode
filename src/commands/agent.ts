@@ -68,7 +68,12 @@ export const AGENT_OPERATION_COMMANDS: readonly AgentCommandDescriptor[] = [
   {
     id: "graphforge.runProjectQuery",
     args: "string | Uri | { path: string | Uri; resultName?: string }",
-    returns: "QueryResult",
+    returns: "ResultPage { resultId, columns, rows, rowCount, offset, nextOffset? }",
+  },
+  {
+    id: "graphforge.readResultPage",
+    args: "{ resultId: string; offset?: number; limit?: number (1..500) }",
+    returns: "ResultPage or structured stale/invalid-page error; never reruns a query",
   },
   {
     id: "graphforge.applyProjectMutation",
@@ -172,7 +177,7 @@ async function buildContext(
     commands: AGENT_OPERATION_COMMANDS,
     contracts: {
       query: ".cypher/.cql text, or JSON { cypher: string, params?: object }",
-      result: "JSON { columns: string[], rows: object[], rowCount: number }",
+      result: "Saved JSON companion + authoritative Arrow/.resultmeta; command replies are bounded ResultPage objects",
       visualization:
         "xyg.intent/v1 .gfviz.json (explicit bindings; canonical Core Arrow source)",
       mutation: ".cypher/.cql text, applied only with explicit confirm: true",
