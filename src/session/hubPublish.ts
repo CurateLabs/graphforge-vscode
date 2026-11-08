@@ -280,6 +280,47 @@ function idTakenActions(message: string): HubPublishRecoveryAction[] {
   return actions.sort((a, b) => Number(a.kind === "regenerateId") - Number(b.kind === "regenerateId"));
 }
 
+function exactVersionRegenerationUnsupported(): HubPublishFailure {
+  return {
+    error: "Core's regenerate-id command cannot target an exact Version.",
+    code: "HUB_ID_REGENERATION_SELECTION_UNSUPPORTED",
+    nextAction: "Select the intended Branch in Core, then publish that Branch ref before regenerating its ID.",
+  };
+}
+
+/** Check Core's current Branch immediately before its current-Branch-only write. */
+export function runHubPublishRegeneration(
+  request: HubPublishRequest,
+  args: string[],
+  runCli: (args: string[]) => CliRunResult,
+): CliRunResult | HubPublishFailure {
+  if (request.versionUuid !== undefined) return exactVersionRegenerationUnsupported();
+  const status = runCli(["status", "--project", request.projectPath, "--json"]);
+  const receipt = lastJsonLine(status.stdout) as {
+    label?: unknown; branch_uuid?: unknown; head_version_uuid?: unknown;
+  } | undefined;
+  const label = asString(receipt?.label);
+  const branch = asString(receipt?.branch_uuid);
+  const head = asString(receipt?.head_version_uuid);
+  if (status.exitCode !== 0 || !label || !branch || !UUID.test(branch) || !head || !UUID.test(head)) {
+    return {
+      error: "Core could not identify the current Branch before ID regeneration.",
+      code: "HUB_ID_REGENERATION_SELECTION_UNVERIFIED",
+      nextAction: "Run gf status for this project, select the intended Branch, then publish its ref again.",
+    };
+  }
+  if (request.ref !== label) {
+    return {
+      error: `Publish selected Branch ${request.ref ?? "(none)"}, but Core's current Branch is ${label}. No ID was regenerated.`,
+      code: "HUB_ID_REGENERATION_SELECTION_MISMATCH",
+      nextAction: "Select the intended Branch in Core and publish its ref again before regenerating.",
+    };
+  }
+  // Both calls are synchronous, with no user interaction or asynchronous
+  // session work between this check and Core's guarded native mutation.
+  return runCli(args);
+}
+
 /** Prepare a retry; only Core may rewrite project content, after confirmation. */
 export async function prepareHubPublishRetry(
   action: HubPublishRecoveryAction,
@@ -287,7 +328,7 @@ export async function prepareHubPublishRetry(
   recovery: {
     chooseOwnerRepository: (suggested: string | undefined) => Promise<string | undefined>;
     confirmRegenerate: (id: string) => Promise<boolean>;
-    runCli: (args: string[]) => Promise<CliRunResult>;
+    runCli: (args: string[]) => Promise<CliRunResult | HubPublishFailure>;
   },
 ): Promise<HubPublishRequest | HubPublishFailure | { cancelled: true }> {
   if (action.kind === "publishAsOwner") {
@@ -296,11 +337,13 @@ export async function prepareHubPublishRetry(
     const repository = await recovery.chooseOwnerRepository(suggested);
     return repository === undefined ? { cancelled: true } : { ...request, repository };
   }
+  if (request.versionUuid !== undefined) return exactVersionRegenerationUnsupported();
   if (!(await recovery.confirmRegenerate(action.id))) return { cancelled: true };
   const result = await recovery.runCli([
     "ontology", "regenerate-id", action.id, "--project", request.projectPath,
     "--operation-uuid", randomOperationId(), "--yes", "--json",
   ]);
+  if ("error" in result) return result;
   if (result.exitCode !== 0) {
     const structured = lastJsonLine(result.stderr) as CoreCliError | undefined;
     return {
@@ -318,10 +361,9 @@ export async function prepareHubPublishRetry(
       nextAction: "Inspect this project's current Branch head before publishing again.",
     };
   }
-  // Exact-Version callers must not republish the colliding ancestor. Core's
-  // receipt identifies the new Version for both Branch and Version requests.
-  const { ref: _ref, versionUuid: _oldVersion, ...rest } = request;
-  return { ...rest, versionUuid };
+  // Keep the human's Branch selection. Never substitute a Version from a
+  // different Branch, even if another client switches Branches during recovery.
+  return request;
 }
 
 function nextActionForCoreCode(code: string, message: string, repository?: string): string {

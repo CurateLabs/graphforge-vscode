@@ -57,6 +57,53 @@ function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, 
 }
 Object.assign(exports, { devContainerAuthority, remoteUri, containerFilter, containerPlatform, buildDevcontainerConfig });
 
+/** Validate ZIP metadata before extraction, including links that could escape it. */
+async function validateVsixArchive(vsix) {
+  const yauzl = require("yauzl");
+  await new Promise((resolve, reject) => {
+    yauzl.open(vsix, { lazyEntries: true, strictFileNames: true }, (error, zip) => {
+      if (error) return reject(error);
+      zip.on("error", reject);
+      zip.on("end", resolve);
+      zip.on("entry", entry => {
+        try {
+          const name = entry.fileName;
+          assert.ok(!name.includes("\\") && !path.posix.isAbsolute(name) && !name.split("/").includes(".."), "VSIX contains an escaping archive path");
+          const type = (entry.externalFileAttributes >>> 16) & 0xf000;
+          assert.ok([0, 0x4000, 0x8000].includes(type), "VSIX contains a symbolic link or special file");
+          zip.readEntry();
+        } catch (failure) {
+          zip.close();
+          reject(failure);
+        }
+      });
+      zip.readEntry();
+    });
+  });
+}
+
+/** Stage only a matching Linux package whose provenance comes from its own files. */
+async function stageVsix(vsix, root, extensions, expectedPlatform, coreVersion) {
+  await validateVsixArchive(vsix);
+  const staging = path.join(root, "unpacked");
+  execFileSync("unzip", ["-q", vsix, "extension/*", "-d", staging]);
+  const staged = path.join(staging, "extension");
+  const pkg = readJson(path.join(staged, "package.json"));
+  assert.equal(pkg.publisher, "CurateLabsAI");
+  assert.equal(pkg.name, "graphforge");
+  assert.ok(require("semver").valid(pkg.version), "VSIX extension version must be valid");
+  const provenance = readJson(path.join(staged, "dist/xyg/provenance.json"));
+  assert.match(provenance.platform, /^linux-(?:x64|arm64)$/);
+  const coreProvenance = readJson(path.join(staged, "dist/core/provenance.json"));
+  assert.equal(coreProvenance.platform, provenance.platform, "Core and XYG platforms must agree");
+  assert.equal(coreProvenance.version, coreVersion, "VSIX must bundle the repository's pinned Core");
+  assert.equal(provenance.platform, expectedPlatform, "VSIX platform must match the requested container architecture");
+  const installed = path.join(extensions, `curatelabsai.graphforge-${pkg.version}-${provenance.platform}`);
+  fs.renameSync(staged, installed);
+  return installed;
+}
+Object.assign(exports, { validateVsixArchive, stageVsix });
+
 // Bounded so an unresponsive daemon cannot stall the watchdog or cleanup.
 const docker = (...args) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 });
 const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
@@ -146,22 +193,7 @@ async function main() {
     });
     // A Linux VSIX cannot be installed in the macOS UI host. Stage it only
     // for the remote development host; validate every archive path first.
-    const entries = execFileSync("unzip", ["-Z1", vsix], { encoding: "utf8" }).trim().split(/\r?\n/);
-    assert.ok(entries.every(entry => !entry.includes("\\") && !path.posix.isAbsolute(entry) && !entry.split("/").includes("..")), "VSIX contains an escaping archive path");
-    const staging = path.join(root, "unpacked");
-    execFileSync("unzip", ["-q", vsix, "extension/*", "-d", staging]);
-    const staged = path.join(staging, "extension");
-    const pkg = readJson(path.join(staged, "package.json"));
-    assert.equal(pkg.publisher, "CurateLabsAI");
-    assert.equal(pkg.name, "graphforge");
-    const provenance = readJson(path.join(staged, "dist/xyg/provenance.json"));
-    assert.match(provenance.platform, /^linux-(?:x64|arm64)$/);
-    const coreProvenance = readJson(path.join(staged, "dist/core/provenance.json"));
-    assert.equal(coreProvenance.platform, provenance.platform, "Core and XYG platforms must agree");
-    assert.equal(coreProvenance.version, coreVersion, "VSIX must bundle the repository's pinned Core");
-    assert.equal(provenance.platform, expectedPlatform, "VSIX platform must match the requested container architecture");
-    const installed = path.join(extensions, `curatelabsai.graphforge-${pkg.version}-${provenance.platform}`);
-    fs.renameSync(staged, installed);
+    const installed = await stageVsix(vsix, root, extensions, expectedPlatform, coreVersion);
     const containers = installedBy("ms-vscode-remote", "remote-containers");
     assert.ok(installed, "VSIX installation did not produce the expected extension");
     assert.ok(containers, "Dev Containers extension was not installed");

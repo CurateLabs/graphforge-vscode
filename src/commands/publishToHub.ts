@@ -12,6 +12,7 @@ import {
   publishToHub,
   publishUnsupported,
   requirePublishConfirmation,
+  runHubPublishRegeneration,
   type HubPublishFailure,
   type HubPublishRequest,
   type HubPublishSuccess,
@@ -184,12 +185,13 @@ async function recoverPublishFailure(
         // A CLI write needs its own native handle. Release our writer and stale
         // results first, then reopen the committed project even after refusal.
         const wasOpen = session.project?.rootPath === request.projectPath;
+        const writeMode = session.writeMode;
         if (wasOpen) await session.closeProject();
         try {
           if (wasOpen && session.project) throw new Error("The active project changed. Publish again before regenerating.");
-          return runGraphForgeCli(argv);
+          return runHubPublishRegeneration(request, argv, runGraphForgeCli);
         } finally {
-          if (wasOpen && !session.project) await session.openProject(request.projectPath);
+          if (wasOpen && !session.project) await session.openProject(request.projectPath, writeMode);
         }
       },
     });

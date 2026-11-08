@@ -10,6 +10,7 @@ import {
   interpretHubPublishResult,
   parsePublishSelection,
   prepareHubPublishRetry,
+  runHubPublishRegeneration,
   publishToHub,
   requirePublishConfirmation,
 } from "../session/hubPublish";
@@ -383,8 +384,8 @@ suite("Taken-ID publish recovery (#103)", () => {
     assert.deepEqual(retry, { cancelled: true });
   });
 
-  test("confirmation runs only Core's regenerate command, then retries its new exact Version", async () => {
-    for (const selection of [{ ref: "main" }, { versionUuid: "00000000-0000-7000-8000-000000000001" }]) {
+  test("confirmation runs only Core's regenerate command and keeps the requested Branch", async () => {
+    for (const selection of [{ ref: "main" }]) {
       let confirmed = false;
       let calls = 0;
       const retry = await prepareHubPublishRetry({ kind: "regenerateId", id }, {
@@ -402,7 +403,7 @@ suite("Taken-ID publish recovery (#103)", () => {
         },
       });
       assert.equal(calls, 1);
-      assert.deepEqual(retry, { repository: "alice/demo", projectPath: PROJECT, versionUuid: VERSION_UUID });
+      assert.deepEqual(retry, { repository: "alice/demo", projectPath: PROJECT, ref: "main" });
     }
   });
 
@@ -421,4 +422,39 @@ suite("Taken-ID publish recovery (#103)", () => {
       assert.doesNotMatch(retry.error, /private/);
     }
   });
+  test("exact-Version recovery refuses before any prompt or Core call", async () => {
+    const retry = await prepareHubPublishRetry({ kind: "regenerateId", id }, {
+      repository: "alice/demo", projectPath: PROJECT, versionUuid: VERSION_UUID,
+    }, {
+      chooseOwnerRepository: async () => assert.fail("unexpected repository prompt"),
+      confirmRegenerate: async () => assert.fail("unsupported targeting must not offer confirmation"),
+      runCli: async () => assert.fail("unsupported targeting must not invoke Core"),
+    });
+    assert.ok(isHubCloneFailure(retry));
+    assert.equal(retry.code, "HUB_ID_REGENERATION_SELECTION_UNSUPPORTED");
+  });
+
+  test("current Branch check refuses other Branches and unverified status before mutation", () => {
+    for (const status of [cli(2), cli(0, "{}"), cli(0, JSON.stringify({
+      label: "different", branch_uuid: VERSION_UUID, head_version_uuid: VERSION_UUID,
+    }))]) {
+      let calls = 0;
+      const result = runHubPublishRegeneration(request, ["ontology", "regenerate-id", id], argv => {
+        calls++;
+        assert.deepEqual(argv, ["status", "--project", PROJECT, "--json"]);
+        return status;
+      });
+      assert.ok(isHubCloneFailure(result));
+      assert.equal(calls, 1);
+    }
+    const seen: string[][] = [];
+    const result = runHubPublishRegeneration(request, ["ontology", "regenerate-id", id], argv => {
+      seen.push(argv);
+      return cli(0, JSON.stringify({ label: "main", branch_uuid: VERSION_UUID, head_version_uuid: VERSION_UUID }));
+    });
+    assert.ok(!isHubCloneFailure(result));
+    assert.equal(seen.length, 2);
+    assert.equal(seen[1][0], "ontology");
+  });
+
 });

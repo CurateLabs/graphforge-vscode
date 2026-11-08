@@ -197,13 +197,13 @@ export class GraphForgeSession implements vscode.Disposable {
     return discoverProjects();
   }
 
-  async openProject(rootPath: string): Promise<void> {
+  async openProject(rootPath: string, writeMode: WriteMode = "single_writer"): Promise<void> {
     if (!isGraphForgeProject(rootPath)) {
       throw new Error(
         `Not a GraphForge project (missing or invalid FORMAT): ${rootPath}`,
       );
     }
-    await this.attachBackend(rootPath);
+    await this.attachBackend(rootPath, writeMode);
   }
 
   /** Detach the engine backend and clear session result/viz state (#63 e2e teardown). */
@@ -218,11 +218,11 @@ export class GraphForgeSession implements vscode.Disposable {
     this.publicResultMetadata = {};
     this.lastResultTitle = undefined;
     this.activeWriteMode = "single_writer";
-    if (previous) {
-      void previous.dispose();
-    }
     this.refreshStatus();
     this._onDidChange.fire();
+    // Callers that need a new writer must wait for asynchronous Python close
+    // as well as synchronous native close. Detach notifications remain immediate.
+    if (previous) await previous.dispose();
   }
 
   /**

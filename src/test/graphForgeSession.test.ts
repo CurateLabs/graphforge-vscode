@@ -62,6 +62,25 @@ suite("GraphForgeSession result generation", () => {
     } finally { session.dispose(); }
   });
 
+  test("closing awaits a deferred backend disposal before a new writer can run", async () => {
+    const session = new GraphForgeSession();
+    let release!: () => void;
+    let started = false;
+    let complete = false;
+    (session as unknown as { backend: Partial<EngineBackend> }).backend = {
+      dispose: () => { started = true; return new Promise<void>(resolve => { release = resolve; }); },
+    };
+    const pending = session.closeProject().then(() => { complete = true; });
+    try {
+      await Promise.resolve();
+      assert.equal(started, true);
+      assert.equal(complete, false);
+      release();
+      await pending;
+      assert.equal(complete, true);
+    } finally { session.dispose(); }
+  });
+
   for (const method of ["execute", "rank"] as const) {
     test(`${method} retains the read generation across a concurrent mutation`, async () => {
       const session = new GraphForgeSession();

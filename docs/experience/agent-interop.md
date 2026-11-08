@@ -237,8 +237,10 @@ Programmatic publish calls never prompt or automatically mutate IDs. Interactive
 calls offer these actions. Regeneration requires a modal explaining the local
 reference rewrite and delegates to `gf ontology regenerate-id` with a fresh
 operation UUID and `--yes`. Only Core rewrites project files and validates the
-recorded refusal. A successful receipt selects the replacement Version for the
-next publish; publication still requires its own confirmation. Unknown or stale
+recorded refusal. Core rc.7 regenerates only the current Branch. Exact-Version recovery refuses
+without rewriting; Branch recovery checks Core status immediately before the
+write and refuses a different current Branch. A successful receipt keeps the
+original Branch ref for the next publish, which requires its own confirmation. Unknown or stale
 Core guidance remains visible without inventing an executable action.
 
 ## Recommended agent loop
