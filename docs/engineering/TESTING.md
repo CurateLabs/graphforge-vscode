@@ -362,3 +362,10 @@ Canonical Inspect tests include conflicting legacy aliases. A costly-row scan
 regression proves cancellation runs before the row-count ceiling; slices yield
 after eight milliseconds of elapsed work between rows, with a 500-row ceiling.
 One row remains an indivisible decode/traversal unit.
+
+Viewport/export acceptance follows acknowledged paint rather than fixed sleeps.
+After split-layout changes, the scenario requires a changed-width receipt from
+a newer generation within a bounded wait. Export retries only the explicit
+`XYG_EXPORT_NOT_READY` response after rejoining paint readiness; native export
+errors and the temporal image limitation are still asserted directly. Scenario
+receipts retain readiness retry/check counts and the two viewport dimensions.
