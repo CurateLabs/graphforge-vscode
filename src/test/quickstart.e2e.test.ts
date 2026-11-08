@@ -79,12 +79,12 @@ suite("XYG air-routes integration", () => {
       assert.equal(last.nextPageToken, undefined);
       assert.equal(new Set([...first.rows, ...last.rows].map(row => row.record_uuid)).size, 150);
       const invalid = await vscode.commands.executeCommand<any>("graphforge.diffCheckpoints", { ...args, limit: 50, after: first.nextPageToken });
-      assert.match(invalid.error, /GF_PAGE_INVALID/);
+      assert.equal(invalid.code, "GF_PAGE_INVALID");
       const currentArgs = { ...args, to: "current" };
       const current = await vscode.commands.executeCommand<any>("graphforge.diffCheckpoints", currentArgs);
       await vscode.commands.executeCommand("graphforge.runQuery", { cypher: "CREATE (:CheckpointPageProbe {id: 150})" });
       const stale = await vscode.commands.executeCommand<any>("graphforge.diffCheckpoints", { ...currentArgs, after: current.nextPageToken });
-      assert.match(stale.error, /GF_PAGE_SNAPSHOT_GONE/);
+      assert.equal(stale.code, "GF_PAGE_SNAPSHOT_GONE");
     } finally {
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
       await vscode.commands.executeCommand("graphforge.closeProject");
