@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const { resolveWindowsCli } = require("./qualify-hub-clone.cjs");
-const { devContainerAuthority, remoteUri, containerFilter, buildDevcontainerConfig } = require("./qualify-hub-clone-remote.cjs");
+const { devContainerAuthority, remoteUri, containerFilter, containerPlatform, buildDevcontainerConfig } = require("./qualify-hub-clone-remote.cjs");
 
 test("Windows CLI follows the actual 1.142.0 archive launcher", () => {
   // Actual bin/code.cmd from the public win32-x64-archive, rather than its
@@ -39,22 +39,33 @@ test("remote URIs need an absolute container path", () => {
   assert.throws(() => remoteUri("dev-container+61", "workspaces/gfq"), /absolute/);
 });
 
+test("container platform matches native Docker or an explicit supported override", () => {
+  assert.equal(containerPlatform("arm64"), "linux-arm64");
+  assert.equal(containerPlatform("amd64"), "linux-x64");
+  assert.equal(containerPlatform("arm64", "linux/amd64"), "linux-x64");
+  assert.equal(containerPlatform("amd64", "linux/arm64"), "linux-arm64");
+  assert.throws(() => containerPlatform("s390x"), /Unsupported/);
+  assert.throws(() => containerPlatform("arm64", "windows/arm64"), /Unsupported/);
+});
+
 test("devcontainer config mounts the admitted volume and hands the lane to the remote runner", () => {
-  const config = buildDevcontainerConfig({ workspaceName: "gfq-abc123", volumeName: "gfq-abc123-work", extensionDirName: "curatelabsai.graphforge-1.2.3", coreVersion: "0.6.0-rc.5" });
+  const coreVersion = require("../package.json").dependencies["@curatelabs/graphforge"];
+  const config = buildDevcontainerConfig({ workspaceName: "gfq-abc123", volumeName: "gfq-abc123-work", extensionDirName: "curatelabsai.graphforge-1.2.3", coreVersion });
   assert.deepEqual(config.mounts, ["source=gfq-abc123-work,target=/gfwork,type=volume"]);
   assert.equal(config.remoteUser, "node");
   assert.equal(config.runArgs, undefined);
   assert.deepEqual(buildDevcontainerConfig({ workspaceName: "gfq-abc123", volumeName: "v", extensionDirName: "e", coreVersion: "0.6.0-rc.5", dockerPlatform: "linux/amd64" }).runArgs, ["--platform=linux/amd64"]);
   assert.equal(config.waitFor, "postCreateCommand");
   assert.match(config.postCreateCommand, /chown node:node \/gfwork/);
-  assert.match(config.postCreateCommand, /@curatelabs\/graphforge@0\.6\.0-rc\.5$/);
+  assert.doesNotMatch(config.postCreateCommand, /npm install|@curatelabs\/graphforge/);
   assert.deepEqual(config.remoteEnv, {
     GRAPHFORGE_QUALIFICATION_LANE: "dev-container",
     GRAPHFORGE_QUALIFICATION_WORK: "/gfwork",
     GRAPHFORGE_QUALIFICATION_REPORT: "/workspaces/gfq-abc123/report.json",
-    GRAPHFORGE_QUALIFICATION_CORE: "0.6.0-rc.5",
+    GRAPHFORGE_QUALIFICATION_CORE: coreVersion,
     GRAPHFORGE_QUALIFICATION_EXTENSION: "/workspaces/gfq-abc123/extensions/curatelabsai.graphforge-1.2.3",
     GRAPHFORGE_QUALIFICATION_REJECT_BIND: "/workspaces/gfq-abc123/rejected-bind",
+    GRAPHFORGE_NATIVE_MODULE: "/workspaces/gfq-abc123/extensions/curatelabsai.graphforge-1.2.3/dist/core/node_modules/@curatelabs/graphforge",
   });
 });
 

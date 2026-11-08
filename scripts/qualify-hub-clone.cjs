@@ -31,7 +31,7 @@ exports.run = async function run() {
   const expectedRemote = lane === "local" ? undefined : lane;
   try {
     const config = vscode.workspace.getConfiguration("graphforge");
-    const binding = path.join(root, "binding", "node_modules", "@curatelabs", "graphforge");
+    const binding = process.env.GRAPHFORGE_NATIVE_MODULE ?? path.join(root, "binding", "node_modules", "@curatelabs", "graphforge");
     await config.update("nativeModulePath", binding, vscode.ConfigurationTarget.Global);
     await config.update("runtime", "node", vscode.ConfigurationTarget.Global);
     const extension = vscode.extensions.getExtension("CurateLabsAI.graphforge");
@@ -42,6 +42,17 @@ exports.run = async function run() {
     report.qualifiedCore = extension.packageJSON.graphforge.qualifiedCore.range;
     report.coreVersion = require(binding).version();
     assert.equal(report.coreVersion, process.env.GRAPHFORGE_QUALIFICATION_CORE);
+    if (process.env.GRAPHFORGE_NATIVE_MODULE) {
+      assert.equal(fs.realpathSync(binding), fs.realpathSync(path.join(extension.extensionPath, "dist/core/node_modules/@curatelabs/graphforge")), "Qualification must use bundled Core");
+      const provenance = JSON.parse(fs.readFileSync(path.join(extension.extensionPath, "dist/core/provenance.json"), "utf8"));
+      assert.equal(provenance.version, report.coreVersion);
+      assert.equal(provenance.platform, `${process.platform}-${process.arch}`);
+      const suffix = process.platform === "linux" ? "-gnu" : process.platform === "win32" ? "-msvc" : "";
+      const nativeName = `graphforge.${process.platform}-${process.arch}${suffix}.node`;
+      const native = path.join(binding, "..", `graphforge-${process.platform}-${process.arch}${suffix}`, nativeName);
+      assert.equal(createHash("sha256").update(fs.readFileSync(native)).digest("hex"), provenance.nativeSha256, "Bundled native binary differs from its registry provenance");
+      report.coreProvenance = provenance;
+    }
     report.vscodeVersion = vscode.version;
     report.extensionHostNodeVersion = process.version;
     report.host = { platform: process.platform, arch: process.arch, release: os.release(), uid: typeof process.getuid === "function" ? process.getuid() : null, remoteName: vscode.env.remoteName ?? null };

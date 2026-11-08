@@ -1,4 +1,5 @@
 import type { CliRunResult } from "./graphforgeCli";
+import { randomOperationId } from "./uuid";
 import {
   asString,
   invalidRepository,
@@ -36,7 +37,13 @@ export const NO_PREVIEWS_REASON =
   "No previews yet: visualization previews need XYG's PNG/SVG static export (CurateLabs/xyg#935) " +
   "and a Core `gf publish` that accepts preview files.";
 
-export type HubPublishFailure = HubCloneFailure;
+export type HubPublishRecoveryAction =
+  | { kind: "publishAsOwner"; id: string; owner?: string }
+  | { kind: "regenerateId"; id: string };
+
+export type HubPublishFailure = HubCloneFailure & {
+  actions?: HubPublishRecoveryAction[];
+};
 
 export interface HubPublishRequest {
   /** `owner/repo` or `https://graphforge.sh/owner/repo`. */
@@ -247,6 +254,76 @@ function coreCredentialAction(message: string): string | undefined {
   return /\b(?:no publish credential|no saved session):\s*(.+)$/is.exec(message)?.[1]?.trim();
 }
 
+/**
+ * rc.7's CLI deliberately exposes no Hub error body or owner metadata in JSON
+ * details. Its validated, privacy-filtered next steps are native client prose
+ * (Core hub_publish/refusals.rs). Recognize only those complete lines; never
+ * execute a command extracted from arbitrary error text. Core's exact refusal
+ * receipt remains the authority for whether regeneration is allowed.
+ */
+function idTakenActions(message: string): HubPublishRecoveryAction[] {
+  const actions: HubPublishRecoveryAction[] = [];
+  const guidance = message.replace(/^(?:validation error: )?hub\.publish\.id_taken: /, "");
+  for (const line of guidance.split("\n")) {
+    const ownerHint = /^(ont_[0-9a-hjkmnp-tv-z]{16}|brg_[0-9a-hjkmnp-tv-z]{16}) is taken; publish as ([a-z0-9][a-z0-9._-]{0,99}|the owning organization) instead of regenerating$/.exec(line);
+    if (ownerHint) {
+      actions.push({ kind: "publishAsOwner", id: ownerHint[1],
+        ...(ownerHint[2] === "the owning organization" ? {} : { owner: ownerHint[2] }) });
+      continue;
+    }
+    const regenerate = /^(ont_[0-9a-hjkmnp-tv-z]{16}|brg_[0-9a-hjkmnp-tv-z]{16}) is taken; (?:publish as [a-z0-9][a-z0-9._-]{0,99}, or )?run gf ontology regenerate-id (ont_[0-9a-hjkmnp-tv-z]{16}|brg_[0-9a-hjkmnp-tv-z]{16})$/.exec(line);
+    if (regenerate && regenerate[1] === regenerate[2]) {
+      actions.push({ kind: "regenerateId", id: regenerate[1] });
+    }
+  }
+  // Offer authorized organization recovery before local rewriting.
+  return actions.sort((a, b) => Number(a.kind === "regenerateId") - Number(b.kind === "regenerateId"));
+}
+
+/** Prepare a retry; only Core may rewrite project content, after confirmation. */
+export async function prepareHubPublishRetry(
+  action: HubPublishRecoveryAction,
+  request: HubPublishRequest,
+  recovery: {
+    chooseOwnerRepository: (suggested: string | undefined) => Promise<string | undefined>;
+    confirmRegenerate: (id: string) => Promise<boolean>;
+    runCli: (args: string[]) => Promise<CliRunResult>;
+  },
+): Promise<HubPublishRequest | HubPublishFailure | { cancelled: true }> {
+  if (action.kind === "publishAsOwner") {
+    const identity = parseHubRepository(request.repository);
+    const suggested = action.owner && identity ? `${action.owner}/${identity.repository}` : undefined;
+    const repository = await recovery.chooseOwnerRepository(suggested);
+    return repository === undefined ? { cancelled: true } : { ...request, repository };
+  }
+  if (!(await recovery.confirmRegenerate(action.id))) return { cancelled: true };
+  const result = await recovery.runCli([
+    "ontology", "regenerate-id", action.id, "--project", request.projectPath,
+    "--operation-uuid", randomOperationId(), "--yes", "--json",
+  ]);
+  if (result.exitCode !== 0) {
+    const structured = lastJsonLine(result.stderr) as CoreCliError | undefined;
+    return {
+      error: asString(structured?.error?.message) ?? `GraphForge ID regeneration failed (exit ${result.exitCode}).`,
+      code: asString(structured?.error?.details?.semantic_code) ?? asString(structured?.error?.code) ?? "HUB_ID_REGENERATION_FAILED",
+      nextAction: "Resolve Core's refusal, then publish again.",
+    };
+  }
+  const receipt = lastJsonLine(result.stdout) as { id?: unknown; version_uuid?: unknown } | undefined;
+  const versionUuid = asString(receipt?.version_uuid);
+  if (!asString(receipt?.id) || !versionUuid || !UUID.test(versionUuid)) {
+    return {
+      error: "Core completed ID regeneration without a recognized replacement Version receipt.",
+      code: "HUB_ID_REGENERATION_RECEIPT_INVALID",
+      nextAction: "Inspect this project's current Branch head before publishing again.",
+    };
+  }
+  // Exact-Version callers must not republish the colliding ancestor. Core's
+  // receipt identifies the new Version for both Branch and Version requests.
+  const { ref: _ref, versionUuid: _oldVersion, ...rest } = request;
+  return { ...rest, versionUuid };
+}
+
 function nextActionForCoreCode(code: string, message: string, repository?: string): string {
   const credentialAction = coreCredentialAction(message);
   if (credentialAction) {
@@ -256,6 +333,8 @@ function nextActionForCoreCode(code: string, message: string, repository?: strin
   switch (code) {
     case "hub.publish.auth_denied":
       return "The Hub refused the publish credential. Refresh GRAPHFORGE_HUB_PUBLISH_TOKEN, or run gf publish in a terminal to sign in again.";
+    case "hub.publish.id_taken":
+      return "Follow Core's ID ownership guidance above. Retry publishing after resolving the refusal.";
     case "hub.publish.entitlement_denied":
       return `Check that your graphforge.sh account may publish to ${where}.`;
     case "hub.publish.ref_conflict":
@@ -300,7 +379,11 @@ export function interpretHubPublishResult(
     (message ? /\b(hub\.[a-z_.]+?):/.exec(message)?.[1] : undefined) ??
     asString(structured?.error?.code);
   if (code && message) {
-    return { error: message, code, nextAction: nextActionForCoreCode(code, message, repository) };
+    const actions = code === "hub.publish.id_taken" ? idTakenActions(message) : undefined;
+    return {
+      error: message, code, nextAction: nextActionForCoreCode(code, message, repository),
+      ...(actions?.length ? { actions } : {}),
+    };
   }
   // Never echo Core's raw output: it can name project content.
   return {

@@ -225,6 +225,22 @@ fields are flattened into that same object:
 The command materializes every remaining choice into the saved XYG intent; it
 does not accept or infer a nested `bindings` object.
 
+### Taken permanent IDs during publish
+
+`graphforge.publishToHub` returns `hub.publish.id_taken` with Core's message and
+optional `actions`: `{ kind: "publishAsOwner", id, owner? }` or
+`{ kind: "regenerateId", id }`. An owner is included only when Core names it.
+Organization recovery is offered only for Core's authorization hint, before any
+other item's regeneration action. Core forbids regeneration for that hint.
+
+Programmatic publish calls never prompt or automatically mutate IDs. Interactive
+calls offer these actions. Regeneration requires a modal explaining the local
+reference rewrite and delegates to `gf ontology regenerate-id` with a fresh
+operation UUID and `--yes`. Only Core rewrites project files and validates the
+recorded refusal. A successful receipt selects the replacement Version for the
+next publish; publication still requires its own confirmation. Unknown or stale
+Core guidance remains visible without inventing an executable action.
+
 ## Recommended agent loop
 
 ```mermaid

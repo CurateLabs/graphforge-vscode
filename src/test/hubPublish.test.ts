@@ -9,6 +9,7 @@ import {
   describePublishSelection,
   interpretHubPublishResult,
   parsePublishSelection,
+  prepareHubPublishRetry,
   publishToHub,
   requirePublishConfirmation,
 } from "../session/hubPublish";
@@ -302,5 +303,122 @@ suite("Hub publish (#91)", () => {
     assert.deepEqual(seen, ["publish", "opendata/demo", "--project", PROJECT, "--json", "--ref", "main"]);
     assert.ok(!isHubCloneFailure(outcome));
     assert.equal(outcome.repository, "opendata/demo");
+  });
+});
+
+/** Native rc.7 hub_publish/refusals.rs guidance; CLI JSON has no item array. */
+suite("Taken-ID publish recovery (#103)", () => {
+  const id = "ont_aaaaaaaaaaaaaaaa";
+  const bridge = "brg_bbbbbbbbbbbbbbbb";
+  const request = { repository: "alice/demo", projectPath: PROJECT, ref: "main" };
+  function refusal(guidance: string) {
+    const result = interpretHubPublishResult(cli(2, "", coreError(
+      "GF_VALIDATION", `validation error: hub.publish.id_taken: ${guidance}`, "hub.publish.id_taken",
+    )));
+    assert.ok(isHubCloneFailure(result));
+    return result;
+  }
+
+  test("hidden owner stays hidden, with Core's exact regenerate action", () => {
+    const failure = refusal(`${id} is taken; run gf ontology regenerate-id ${id}`);
+    assert.match(failure.error, new RegExp(id));
+    assert.doesNotMatch(failure.error, /owner|organization/);
+    assert.deepEqual(failure.actions, [{ kind: "regenerateId", id }]);
+    assert.doesNotMatch(failure.nextAction, /network/);
+  });
+
+  test("visible owner is preserved without inferring organization permission", () => {
+    const failure = refusal(`${bridge} is taken; publish as research, or run gf ontology regenerate-id ${bridge}`);
+    assert.match(failure.error, /publish as research/);
+    assert.deepEqual(failure.actions, [{ kind: "regenerateId", id: bridge }]);
+  });
+
+  test("authorized organization hint precedes other items and excludes forbidden regeneration", () => {
+    const failure = refusal(`${id} is taken; run gf ontology regenerate-id ${id}\n${bridge} is taken; publish as research instead of regenerating`);
+    assert.deepEqual(failure.actions, [
+      { kind: "publishAsOwner", id: bridge, owner: "research" },
+      { kind: "regenerateId", id },
+    ]);
+    const hiddenHint = refusal(`${id} is taken; publish as the owning organization instead of regenerating`);
+    assert.deepEqual(hiddenHint.actions, [{ kind: "publishAsOwner", id }]);
+  });
+
+  test("unknown, stale, storage, mismatched and injected guidance never invents a mutation", () => {
+    for (const guidance of [
+      "the Hub refused permanent IDs; the local refusal receipt could not be saved; repair local storage and publish again before regenerating",
+      `${id} was replaced by ont_cccccccccccccccc in Version ${VERSION_UUID}; publish from that regenerated Version`,
+      `${id} is taken; run gf ontology regenerate-id ${bridge}`,
+      `${id} is taken; run gf ontology regenerate-id ${id} --evil`,
+      "ont_invalid is taken; run gf ontology regenerate-id ont_invalid",
+    ]) assert.equal(refusal(guidance).actions, undefined, guidance);
+    const other = interpretHubPublishResult(cli(2, "", coreError("GF_VALIDATION", `${id} is taken; run gf ontology regenerate-id ${id}`, "hub.network")));
+    assert.ok(isHubCloneFailure(other));
+    assert.equal(other.actions, undefined);
+  });
+
+  test("organization recovery selects an explicit repository and preserves selection without running Core", async () => {
+    const retry = await prepareHubPublishRetry({ kind: "publishAsOwner", id, owner: "research" }, request, {
+      chooseOwnerRepository: async suggested => { assert.equal(suggested, "research/demo"); return "research/different"; },
+      confirmRegenerate: async () => assert.fail("must not ask to regenerate an organization-owned ID"),
+      runCli: async () => assert.fail("must not rewrite or publish"),
+    });
+    assert.deepEqual(retry, { ...request, repository: "research/different" });
+  });
+
+  test("hidden organization asks without guessing its identity; cancellation changes nothing", async () => {
+    const retry = await prepareHubPublishRetry({ kind: "publishAsOwner", id }, request, {
+      chooseOwnerRepository: async suggested => { assert.equal(suggested, undefined); return undefined; },
+      confirmRegenerate: async () => assert.fail("unexpected modal"),
+      runCli: async () => assert.fail("unexpected Core call"),
+    });
+    assert.deepEqual(retry, { cancelled: true });
+  });
+
+  test("regeneration cancellation never calls Core", async () => {
+    const retry = await prepareHubPublishRetry({ kind: "regenerateId", id }, request, {
+      chooseOwnerRepository: async () => assert.fail("unexpected repository prompt"),
+      confirmRegenerate: async refused => { assert.equal(refused, id); return false; },
+      runCli: async () => assert.fail("cancelled regeneration must not mutate"),
+    });
+    assert.deepEqual(retry, { cancelled: true });
+  });
+
+  test("confirmation runs only Core's regenerate command, then retries its new exact Version", async () => {
+    for (const selection of [{ ref: "main" }, { versionUuid: "00000000-0000-7000-8000-000000000001" }]) {
+      let confirmed = false;
+      let calls = 0;
+      const retry = await prepareHubPublishRetry({ kind: "regenerateId", id }, {
+        repository: "alice/demo", projectPath: PROJECT, ...selection,
+      }, {
+        chooseOwnerRepository: async () => assert.fail("unexpected repository prompt"),
+        confirmRegenerate: async () => { confirmed = true; return true; },
+        runCli: async argv => {
+          assert.equal(confirmed, true);
+          calls++;
+          assert.deepEqual(argv.slice(0, 6), ["ontology", "regenerate-id", id, "--project", PROJECT, "--operation-uuid"]);
+          assert.match(argv[6], /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+          assert.deepEqual(argv.slice(7), ["--yes", "--json"]);
+          return cli(0, JSON.stringify({ id: "ont_cccccccccccccccc", version_uuid: VERSION_UUID }));
+        },
+      });
+      assert.equal(calls, 1);
+      assert.deepEqual(retry, { repository: "alice/demo", projectPath: PROJECT, versionUuid: VERSION_UUID });
+    }
+  });
+
+  test("Core refusal and an invalid success receipt prevent a publish retry", async () => {
+    for (const result of [
+      cli(2, "", coreError("GF_VALIDATION", "Core refuses this regeneration")),
+      cli(101, "private row", "unstructured private data"),
+      cli(0, "{}"),
+    ]) {
+      const retry = await prepareHubPublishRetry({ kind: "regenerateId", id }, request, {
+        chooseOwnerRepository: async () => assert.fail("unexpected repository prompt"),
+        confirmRegenerate: async () => true,
+        runCli: async () => result,
+      });
+      assert.ok(isHubCloneFailure(retry));
+      assert.doesNotMatch(retry.error, /private/);
+    }
   });
 });
