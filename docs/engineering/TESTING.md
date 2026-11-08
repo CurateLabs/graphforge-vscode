@@ -14,7 +14,9 @@ complete streamed output, Arrow-first reopen despite an edited/oversized JSON
 companion, legacy bounds, corrupt bytes, plain-after-Arrow publication, and
 concurrent current/history consistency. `resultTableModel.test.ts` and
 `resultTablePaging.test.ts` verify page-local Inspect, later-page native selection,
-clearing, stale contexts and superseded asynchronous projections. Session tests
+clearing, stale contexts and superseded asynchronous projections. Later on-page
+picks and clears must cancel off-page work; table/Inspect clicks must retain
+the host selection across Next/Previous navigation. Session tests
 verify the command page API does not reexecute and rejects replaced/closed IDs.
 Delayed ledger/checkpoint/power responses must reject backend replacement before
 exposure; checkpoint handles also reject delayed reads after a session change.

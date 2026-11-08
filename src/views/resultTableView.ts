@@ -168,15 +168,27 @@ export class ResultTableViewProvider implements vscode.WebviewViewProvider, vsco
 
   private async highlightRows(state: ResultTableState, rows: readonly number[]): Promise<void> {
     if (!this.isCurrent(state)) return;
-    state.selectedRows = new Set(rows.filter(row => Number.isSafeInteger(row) && row >= 0 && row < state.source.rowCount));
+    const cancelledPage = state.loading;
+    if (cancelledPage) {
+      ++state.pageVersion;
+      state.loading = false;
+    }
+    state.error = undefined;
+    const selection = new Set(rows.filter(row => Number.isSafeInteger(row) && row >= 0 && row < state.source.rowCount));
+    state.selectedRows = selection;
     let first: number | undefined;
     for (const row of state.selectedRows) if (first === undefined || row < first) first = row;
     if (first !== undefined && (!state.page || !resultPageContainsRow(state.page, first))) {
       await this.loadPage(state, first, "selection", first);
     } else if (this.isCurrent(state) && state.page) {
-      this.postSelection(state, first);
+      // A cancelled load advanced the context. Republish the retained page so
+      // the browser leaves loading and accepts the newer pick or clear.
+      if (cancelledPage) this.postState("selection", first);
+      else this.postSelection(state, first);
+    } else if (this.isCurrent(state)) {
+      await this.loadPage(state, 0, "selection", first);
     }
-    if (first !== undefined && this.isCurrent(state)) void this.reveal();
+    if (first !== undefined && this.isCurrent(state) && state.selectedRows === selection) void this.reveal();
   }
 
   private postSelection(state: ResultTableState, focusRow?: number): void {
@@ -188,6 +200,7 @@ export class ResultTableViewProvider implements vscode.WebviewViewProvider, vsco
   private selectResult(rowIndex: number, column?: string): void {
     const state = this.state;
     if (!state || state.loading || !this.isCurrent(state) || !Number.isSafeInteger(rowIndex) || rowIndex < 0 || rowIndex >= state.source.rowCount) return;
+    state.selectedRows = new Set([rowIndex]);
     const graphPanel = XygVisualizationPanel.active();
     const highlight = graphPanel?.highlightFromResult(state.source, rowIndex, column);
     const graphCount = (highlight?.nodeIds.length ?? 0) + (highlight?.edgeIds.length ?? 0);
@@ -205,6 +218,7 @@ export class ResultTableViewProvider implements vscode.WebviewViewProvider, vsco
         !state.entityLinks?.[String(rowIndex)]?.some(link => link.kind === kind && link.id === id)) return;
     const selection = resolveResultEntitySelection(state.graphPayload, kind, id);
     if (!selection) return;
+    state.selectedRows = new Set([rowIndex]);
     EntityInspectPanel.show(this.extensionUri, selection, openInNewTab);
     this.post({ type: "graphforge/resultSelection", ...this.context(state), linked: true,
       message: `Opened ${kind} ${id} in Entity Inspect${openInNewTab ? " (new tab)" : ""}.` });

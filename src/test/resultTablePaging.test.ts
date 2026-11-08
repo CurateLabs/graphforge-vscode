@@ -4,6 +4,7 @@ import type { GraphForgeSession } from "../session/graphForgeSession";
 import type { GraphPayload, QueryResult } from "../session/types";
 import type { HostToWebview, WebviewToHost } from "../webview/protocol";
 import { ResultTableViewProvider } from "../views/resultTableView";
+import { EntityInspectPanel } from "../webview/entityInspectPanel";
 import { XygVisualizationPanel } from "../webview/xygPanel";
 
 const emptyGraph: GraphPayload = { nodes: [], edges: [], legend: { statuses: [], types: [] }, styleMode: "class-only" };
@@ -143,6 +144,55 @@ suite("Results bounded host paging", () => {
       assert.deepEqual(f.page().selectedRows, [811]);
     } finally { f.provider.dispose(); }
   });
+
+  for (const latest of [[10], []]) {
+    test(`a newer ${latest.length ? "on-page pick" : "clear"} cancels pending off-page work`, async () => {
+      const f = fixture();
+      try {
+        const result = source(1200);
+        await f.provider.show(result, "paged");
+        const first = f.page();
+        const pending: Array<() => void> = [];
+        f.session.toGraphPayload = () => new Promise(resolve => pending.push(() => resolve(emptyGraph)));
+        pickRows(result, [811]);
+        assert.equal(pending.length, 1);
+        pickRows(result, latest);
+        pending[0]();
+        await settle();
+        assert.equal(f.page().result.offset, 0, "an older pick must not navigate away from the latest selection");
+        assert.deepEqual(f.page().selectedRows, latest);
+        assert.equal(f.page().selectedCount, latest.length);
+        assert.ok(f.page().pageVersion > first.pageVersion, "browser must leave the cancelled loading context");
+      } finally { f.provider.dispose(); }
+    });
+  }
+
+  for (const action of ["row", "inspect"] as const) {
+    test(`retains a clicked ${action} selection across Next and Previous`, async () => {
+      const f = fixture();
+      const show = EntityInspectPanel.show;
+      let inspections = 0;
+      EntityInspectPanel.show = () => { inspections++; return {} as EntityInspectPanel; };
+      try {
+        f.session.toGraphPayload = async result => ({ ...emptyGraph, nodes: result.rows.map(row => ({ id: String(row.id), labels: [], properties: {} })) });
+        const result = source(1200);
+        await f.provider.show(result, "paged");
+        pickRows(result, [3]);
+        await settle();
+        const first = f.page();
+        if (action === "row") f.receive({ type: "graphforge/selectResult", ...context(first), rowIndex: 10 });
+        else f.receive({ type: "graphforge/openResultEntity", ...context(first), rowIndex: 10, kind: "node", id: "10" });
+        assert.equal(inspections, action === "inspect" ? 1 : 0);
+        f.receive({ type: "graphforge/requestResultPage", ...context(first), offset: 500, direction: "next" });
+        await settle();
+        assert.equal(f.page().result.offset, 500);
+        assert.equal(f.page().selectedCount, 1);
+        f.receive({ type: "graphforge/requestResultPage", ...context(f.page()), offset: 0, direction: "previous" });
+        await settle();
+        assert.deepEqual(f.page().selectedRows, [10], "the clicked row replaces any earlier graph selection");
+      } finally { EntityInspectPanel.show = show; f.provider.dispose(); }
+    });
+  }
 
   test("omits excessive optional Inspect links without truncating the result page", async () => {
     const f = fixture();
