@@ -266,9 +266,12 @@ function resultEntityLinksWithLookup(
     ...Object.keys(row).filter((column) => !result.columns.includes(column)),
   ];
   for (const column of columns) {
-    const direct = resolveKeysFromLookup(lookup, identityKeys(row[column]), maxLinks);
-    for (const edgeId of canonicalEdgeIds(row[column])) {
-      lookup.edgeIdsByAlias.get(edgeId)?.forEach(id => add("edge", id, linkLabel(column, "edge")));
+    const value = row[column];
+    const direct = resolveKeysFromLookup(lookup, identityKeys(value), maxLinks);
+    if (value && typeof value === "object") {
+      for (const edgeId of canonicalEdgeIds(value)) {
+        lookup.edgeIdsByAlias.get(edgeId)?.forEach(id => add("edge", id, linkLabel(column, "edge")));
+      }
     }
     if (EDGE_IDENTITY_KEY.test(column)) {
       direct.edgeIds.forEach((id) => add("edge", id, linkLabel(column, "edge")));
