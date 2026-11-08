@@ -103,6 +103,8 @@ export { NodeOnlyFeatureError, UnsupportedByBindingError } from "./errors";
 
 export class GraphForgeSession implements vscode.Disposable {
   private backend: EngineBackend | undefined;
+  private attachmentVersion = 0;
+  private disposed = false;
   private activeProject: DetectedProject | undefined;
   private activeWriteMode: WriteMode = "single_writer";
   private algorithmContractsCache: AlgorithmDescriptorContract[] | undefined;
@@ -127,10 +129,14 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.disposed = true;
+    ++this.attachmentVersion;
     this._onDidChange.dispose();
     this.statusBar.dispose();
     void this.backend?.dispose();
     this.backend = undefined;
+    this.activeProject = undefined;
+    this.lastResult = undefined;
     this.publicResult = undefined;
     this.publicResultMetadata = {};
   }
@@ -202,6 +208,7 @@ export class GraphForgeSession implements vscode.Disposable {
 
   /** Detach the engine backend and clear session result/viz state (#63 e2e teardown). */
   async closeProject(): Promise<void> {
+    ++this.attachmentVersion;
     const previous = this.backend;
     this.backend = undefined;
     this.activeProject = undefined;
@@ -251,6 +258,8 @@ export class GraphForgeSession implements vscode.Disposable {
     rootPath: string,
     writeMode: WriteMode = "single_writer",
   ): Promise<void> {
+    if (this.disposed) throw Object.assign(new Error("The session was disposed. Open a new session."), { code: "SESSION_CHANGED" });
+    const attachment = ++this.attachmentVersion;
     let backend: EngineBackend;
     try {
       backend = await openEngineBackend(rootPath, writeMode);
@@ -262,11 +271,13 @@ export class GraphForgeSession implements vscode.Disposable {
     let project: DetectedProject;
     try {
       const projects = await discoverProjects();
+      if (attachment !== this.attachmentVersion)
+        throw Object.assign(new Error("The project open was cancelled or superseded. Open the project again."), { code: "SESSION_CHANGED" });
       project = projects.find(p => p.rootPath === rootPath) ?? {
         rootPath, name: rootPath.split(/[\\/]/).pop() ?? rootPath,
       };
     } catch (error) {
-      void backend.dispose();
+      await backend.dispose();
       throw error;
     }
     // Prepare first, then install the pair without yielding. Restored results
@@ -950,13 +961,14 @@ export class GraphForgeSession implements vscode.Disposable {
   async listAlgorithmRuns(
     algorithm?: string,
     limit?: number,
+    after?: string,
   ): Promise<QueryResult> {
     const backend = this.requireBackend();
     const forge = this.requireNodeForge("listAlgorithmRuns");
     if (typeof forge.listAlgorithmRuns !== "function") {
       throw new UnsupportedByBindingError("listAlgorithmRuns");
     }
-    const buf = await forge.listAlgorithmRuns({ algorithm, limit });
+    const buf = await forge.listAlgorithmRuns({ algorithm, limit, after });
     return this.decodeResult(backend, buf);
   }
 

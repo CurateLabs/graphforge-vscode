@@ -352,3 +352,13 @@ snapshot rejection. Unit tests separate local byte/row paging from Core cursors,
 budget command metadata, and reject superseded saves before publication. A real
 extension-host scheduling regression observes a saved-result restore during
 backend installation and requires a coherent project/backend pair.
+
+The bounded-command suite captures the registered callbacks with isolated UI stubs: Find row/metadata failures remain structured, complete
+descriptor envelopes obey 4 MiB, and all three Node list commands forward opaque
+cursors and filters. Session regressions reject project attachments superseded
+by close/dispose and await backend disposal. Runtime-dependent installation
+checks skip only when no runtime is available; required-native acceptance fails.
+Canonical Inspect tests include conflicting legacy aliases. A costly-row scan
+regression proves cancellation runs before the row-count ceiling; slices yield
+after eight milliseconds of elapsed work between rows, with a 500-row ceiling.
+One row remains an indivisible decode/traversal unit.

@@ -222,8 +222,37 @@ suite("GraphForgeSession result completion boundaries", () => {
     } finally { session.dispose(); }
   });
 
-  test("a scheduled saved-result restore observes an atomic backend/project switch", async () => {
+  test("native list continuations retain their filters and forward opaque cursors", async () => {
     const session = new GraphForgeSession();
+    const seen: unknown[] = [];
+    const list = async (args: unknown) => {
+      seen.push(args);
+      const table = tableFromArrays({ value: [1] });
+      table.schema.metadata.set("graphforge.next_page_token", "next opaque cursor");
+      return Buffer.from(tableToIPC(table));
+    };
+    injectForge(session, makeStubForge({ listAssertions: list, listCheckpoints: list, listAlgorithmRuns: list }));
+    try {
+      for (const result of [
+        await session.listAssertions({ graphUuid: "graph", limit: 2, after: "opaque cursor" }),
+        await session.listCheckpoints(2, "opaque cursor"),
+        await session.listAlgorithmRuns("pagerank", 2, "opaque cursor"),
+      ]) assert.equal(session.resultPage(result).nextPageToken, "next opaque cursor");
+      assert.deepEqual(seen, [
+        { graphUuid: "graph", limit: 2, after: "opaque cursor" },
+        { limit: 2, after: "opaque cursor" },
+        { algorithm: "pagerank", limit: 2, after: "opaque cursor" },
+      ]);
+    } finally { session.dispose(); }
+  });
+
+  test("a scheduled saved-result restore observes an atomic backend/project switch", async function () {
+    const session = new GraphForgeSession();
+    if (!await session.hasUsableRuntime()) {
+      session.dispose();
+      if (process.env.GRAPHFORGE_REQUIRE_NATIVE) assert.fail("A runtime is required for installation acceptance");
+      this.skip();
+    }
     injectForge(session, makeStubForge());
     injectCapabilities(session, []);
     const oldProject = session.project;
@@ -244,6 +273,26 @@ suite("GraphForgeSession result completion boundaries", () => {
       assert.equal(session.getLastResult(), undefined, "a previous-project result cannot survive the new session installation");
     } finally { await session.closeProject(); session.dispose(); fs.rmSync(root, { recursive: true, force: true }); }
   });
+
+  for (const action of ["close", "dispose"] as const) {
+    test(`${action} cancels an outstanding project attachment`, async function () {
+      const session = new GraphForgeSession();
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-cancel-open-"));
+      try {
+        if (!await session.hasUsableRuntime()) {
+          if (process.env.GRAPHFORGE_REQUIRE_NATIVE) assert.fail("A runtime is required for installation acceptance");
+          this.skip();
+        }
+        const pending = session.initializeProject(root);
+        const rejected = assert.rejects(pending, (error: unknown) => (error as { code?: string }).code === "SESSION_CHANGED");
+        if (action === "close") await session.closeProject();
+        else session.dispose();
+        await rejected;
+        assert.equal(session.project, undefined);
+        assert.equal(session.activeRuntime, undefined);
+      } finally { await session.closeProject(); session.dispose(); fs.rmSync(root, { recursive: true, force: true }); }
+    });
+  }
 });
 
 suite("GraphForgeSession.algorithmCatalog", () => {

@@ -33,6 +33,7 @@ import type {
 export interface ListAssertionsArgs {
   graphUuid?: string;
   limit?: number;
+  after?: string;
 }
 export interface CreateAssertionArgs {
   claim?: string;
@@ -187,6 +188,7 @@ async function runListAssertions(
     const result = await session.listAssertions({
       graphUuid: args?.graphUuid,
       limit: args?.limit ?? 100,
+      after: args?.after,
     });
     const page = session.resultPage(result);
     await openJsonDoc(page);

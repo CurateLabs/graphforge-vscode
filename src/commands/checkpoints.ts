@@ -23,6 +23,7 @@ export interface CreateCheckpointArgs {
 }
 export interface ListCheckpointsArgs {
   limit?: number;
+  after?: string;
 }
 export interface OpenCheckpointArgs {
   name?: string;
@@ -200,7 +201,7 @@ async function runListCheckpoints(
   }
   try {
     const result = await withEngineProgress("listing checkpoints…", () =>
-      session.listCheckpoints(args?.limit ?? 200),
+      session.listCheckpoints(args?.limit ?? 200, args?.after),
     );
     const page = session.resultPage(result);
     await showResultDoc("List Checkpoints", result);

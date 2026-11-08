@@ -1,4 +1,4 @@
-import type { ResultPage } from "../session/resultRows";
+import { assertResultReplySize, type ResultPage } from "../session/resultRows";
 import * as vscode from "vscode";
 import type { GraphForgeSession } from "../session/graphForgeSession";
 import { AnalystVerb, WriteMode, WRITE_MODES } from "../session/types";
@@ -51,6 +51,7 @@ export interface ExportInvocationDescriptorArgs {
 export interface ListAlgorithmRunsArgs {
   algorithm?: string;
   limit?: number;
+  after?: string;
 }
 export interface PublishCompositeTransactionArgs {
   /** Full composite transaction request; bypasses the JSON editor flow. */
@@ -307,6 +308,7 @@ async function runExportInvocationDescriptor(
       projectionFingerprint: descriptor.projectionFingerprint,
       canonicalBytesBase64: descriptor.canonicalBytes.toString("base64"),
     };
+    assertResultReplySize(payload);
     const doc = await vscode.workspace.openTextDocument({
       content: JSON.stringify(payload, null, 2),
       language: "json",
@@ -329,6 +331,7 @@ async function runExportInvocationDescriptor(
       const result = session.invokeDescriptor(descriptor);
       const page = session.resultPage(result);
       payload.invocation = page;
+      assertResultReplySize(payload);
       await showJson(`Invoke Descriptor (${verb})`, payload.invocation);
     }
     if (payload.invocation) session.assertResultPageCurrent(payload.invocation.resultId);
@@ -352,7 +355,7 @@ async function runListAlgorithmRuns(
   }
   try {
     const result = await withEngineProgress("listing algorithm runs…", () =>
-      session.listAlgorithmRuns(args?.algorithm, args?.limit ?? 100),
+      session.listAlgorithmRuns(args?.algorithm, args?.limit ?? 100, args?.after),
     );
     const page = session.resultPage(result);
     await showJson("List Algorithm Runs", page);

@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { nodeLabel } from "../webview/resultGraphModel";
 import { entityInspectTitle } from "../webview/entityInspectModel";
 import type { GraphPayload, QueryResult } from "../session/types";
+import { lazyResultRows } from "../session/resultRows";
 import {
   RESULT_INSPECT_BYTES,
   jsonSafeQueryResult,
@@ -205,6 +206,42 @@ suite("bounded result pages", () => {
     });
   });
 
+  test("canonical edge UUIDs never expand through another edge's legacy alias", () => {
+    const edges = { ...payload, nodes: [], edges: [
+      { ...payload.edges[0], id: "route-1" },
+      { ...payload.edges[0], id: "other-route", properties: { legacy_id: "route-1" } },
+    ] };
+    for (const [column, value] of [
+      ["r", { edge_uuid: "route-1", src_uuid: "ATL", dst_uuid: "AUS" }],
+      ["edge_uuid", "route-1"],
+    ] as const) {
+      const row = { columns: [column], rows: [{ [column]: value }], rowCount: 1 };
+      assert.deepEqual(resultEntityLinks(row, edges, 0).map(link => link.id), ["route-1"]);
+      const collisions = { ...edges, edges: [edges.edges[0], ...Array.from({ length: 100 }, (_, index) =>
+        ({ ...edges.edges[1], id: `other-${index}` }))] };
+      assert.deepEqual(resultEntityLinksByRow(row, collisions, 0, true)["0"].map(link => link.id), ["route-1"]);
+    }
+    const legacy = { columns: ["rel_id"], rows: [{ rel_id: "route-1" }], rowCount: 1 };
+    assert.deepEqual(resultEntityLinks(legacy, edges, 0).map(link => link.id), ["route-1", "other-route"]);
+  });
+
+  test("reverse scans yield for costly rows before the row-count ceiling", async () => {
+    let reads = 0;
+    let current = true;
+    const rows = lazyResultRows(50, index => {
+      reads++;
+      const end = performance.now() + 1;
+      while (performance.now() < end) { /* Simulate one costly lazy row. */ }
+      return { id: String(index) };
+    });
+    const cancel = new Promise<void>(resolve => setImmediate(() => { current = false; resolve(); }));
+    const selection = await resultRowsForGraphSelectionBatched({ columns: ["id"], rows, rowCount: 50 },
+      { kind: "node", item: { id: "missing", labels: [], properties: {} } }, () => current);
+    await cancel;
+    assert.equal(selection, undefined);
+    assert.ok(reads > 0 && reads < 50, "cancellation must run before all costly rows are decoded");
+  });
+
   test("plain selection scan can stop between bounded batches without retaining source rows", async () => {
     let reads = 0;
     let current = true;
@@ -216,10 +253,11 @@ suite("bounded result pages", () => {
     });
     const pending = resultRowsForGraphSelectionBatched({ columns: ["id"], rows, rowCount: 1200 },
       { kind: "node", item: { id: "811", labels: [], properties: {} } }, () => current);
-    assert.equal(reads, 500);
+    assert.ok(reads > 0 && reads <= 500);
+    const beforeCancellation = reads;
     current = false;
     assert.equal(await pending, undefined);
-    assert.equal(reads, 500);
+    assert.equal(reads, beforeCancellation);
   });
 
   test("native membership selects later rows without scanning the source", () => {

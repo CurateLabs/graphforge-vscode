@@ -17,7 +17,13 @@ return `RESULT_PAGE_INVALID`. This programmatic command has no palette entry. Fo
 pages are exhausted. `diffCheckpoints({ from, to, scope, detail, limit?, after? })`
 continues with `after: nextPageToken`, preserving the same selectors and limit.
 A changed request returns `GF_PAGE_INVALID`; a changed `current` snapshot returns
-`GF_PAGE_SNAPSHOT_GONE`. Core does not supply a total across native pages.
+`GF_PAGE_SNAPSHOT_GONE`. Core does not supply a total across native pages. On the Node runtime,
+`listAssertions`, `listCheckpoints`, and `listAlgorithmRuns` also accept
+`after: nextPageToken`; keep the original filters and limit when continuing.
+
+The 4 MiB command limit also covers the complete invocation-descriptor reply,
+including canonical base64 bytes and any invocation page. An oversized envelope
+returns `RESULT_REPLY_TOO_LARGE`; shorten its inputs or export without invoking.
 
 Readable JSON/Markdown documents still contain every row; Arrow-backed reopen
 uses the small `.resultmeta` publication pointer and verifies the Arrow digest
@@ -146,7 +152,7 @@ Source of truth: `package.json#contributes.commands` (88 contributed commands on
 | `graphforge.similar` / `similarAdvanced` | none yet | same shape as `rank` | Label + algorithm QuickPick (+ via/vectorProperty if `Advanced`) | Yes |
 | `graphforge.find` | none yet | `ResultPage & { verb: "find", query, label? }`; a missing-index failure returns `{ error, code?, nextAction }` naming `graphforge.indexText` | Query `showInputBox` + label QuickPick | Yes |
 | `graphforge.createCheckpoint` | `{ name?, description? }` | `ResultPage` | Name + description InputBoxes | Yes (Node binding) |
-| `graphforge.listCheckpoints` | `{ limit? }` | `ResultPage` | None | Yes (Node binding) |
+| `graphforge.listCheckpoints` | `{ limit?, after? }` | `ResultPage` | None | Yes (Node binding) |
 | `graphforge.openCheckpoint` | `{ name?, cypher? }` (include `cypher` — even `undefined` — to skip the query prompt) | `{ checkpointUuid, generationUuid, query? }` | Checkpoint QuickPick + read-only Cypher InputBox | Yes (Node binding) |
 | `graphforge.diffCheckpoints` | `{ from?, to?, scope?, detail?, limit?, after? }` | `ResultPage` | From/To InputBox+QuickPick, scope + detail QuickPicks | Yes (Node binding) |
 | `graphforge.deleteCheckpoint` | `{ name?, confirm? }` | `ResultPage` | Checkpoint QuickPick + destructive confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
@@ -166,10 +172,10 @@ Source of truth: `package.json#contributes.commands` (88 contributed commands on
 | `graphforge.enableCapability` | `{ capabilityId?, version?, confirm? }` | `ResultPage` | ID + version InputBoxes + manifest-mutation confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
 | `graphforge.openWithWriteMode` | `{ mode?, confirm? }` (`mode`: `single_writer` \| `queued_writer` \| `optimistic_multi_writer`) | `{ ok: true, writeMode }` | Mode QuickPick + reopen confirm modal (skipped only by `confirm: true`) | Yes (Node binding) |
 | `graphforge.exportInvocationDescriptor` | `{ verb?, label?, by?, invoke? }` | `{ verb, algorithm, fingerprint, projectionFingerprint, canonicalBytesBase64, invocation? }` | Verb/label/algorithm QuickPicks + invoke-now toast | Yes (Node binding) |
-| `graphforge.listAlgorithmRuns` | `{ algorithm?, limit? }` | `ResultPage` | None | Yes (Node binding) |
+| `graphforge.listAlgorithmRuns` | `{ algorithm?, limit?, after? }` | `ResultPage` | None | Yes (Node binding) |
 | `graphforge.publishCompositeTransaction` | `{ request?, confirm? }` (both required together for the programmatic path) | `ResultPage` | Expert warning, edit-JSON-in-editor flow, publish confirm modal | Yes (Node binding) |
 | `graphforge.runCli` | `{ args?: string[] }` (full CLI argv, e.g. `["status"]`, `["checkpoint","list"]`) | `{ args, exitCode, stdout, stderr }`; no binding ⇒ `{ error, code: "CLI_UNAVAILABLE", nextAction }` | Command QuickPick + custom-args InputBox when `args` omitted | Yes (Node binding — runs the engine CLI in-process via `runCli`) |
-| `graphforge.listAssertions` | `{ graphUuid?, limit? }` | `ResultPage` | None | Yes |
+| `graphforge.listAssertions` | `{ graphUuid?, limit?, after? }` | `ResultPage` | None | Yes |
 | `graphforge.createAssertion` | `{ claim?, subjectUuid?, subjectKind? }` (`subjectKind`: `node` \| `edge`) | `{ assertionUuid }` | Claim/subject-UUID InputBoxes + kind QuickPick | Yes |
 | `graphforge.showAssertion` | `{ assertionUuid? }` or a plain UUID string (tree clicks pass one) | Assertion record + `nextActions` array | Assertion QuickPick/InputBox | Yes |
 | `graphforge.showAssertionOnGraph` | `{ assertionUuid? }` or a plain UUID string | `{ assertionUuid, graph }` (also opens the Result Graph webview) | Assertion QuickPick/InputBox | Yes |

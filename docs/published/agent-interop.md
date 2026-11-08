@@ -23,7 +23,13 @@ return `RESULT_PAGE_INVALID`. This programmatic command has no palette entry. Fo
 pages are exhausted. `diffCheckpoints({ from, to, scope, detail, limit?, after? })`
 continues with `after: nextPageToken`, preserving the same selectors and limit.
 A changed request returns `GF_PAGE_INVALID`; a changed `current` snapshot returns
-`GF_PAGE_SNAPSHOT_GONE`. Core does not supply a total across native pages.
+`GF_PAGE_SNAPSHOT_GONE`. Core does not supply a total across native pages. On the Node runtime,
+`listAssertions`, `listCheckpoints`, and `listAlgorithmRuns` also accept
+`after: nextPageToken`; keep the original filters and limit when continuing.
+
+The 4 MiB command limit also covers the complete invocation-descriptor reply,
+including canonical base64 bytes and any invocation page. An oversized envelope
+returns `RESULT_REPLY_TOO_LARGE`; shorten its inputs or export without invoking.
 
 Readable JSON/Markdown documents still contain every row; Arrow-backed reopen
 uses the small `.resultmeta` publication pointer and verifies the Arrow digest
@@ -101,7 +107,7 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.importData` | `{ path: string \| Uri; label: string; mode?: "create" \| "merge"; idColumn?: string; confirm: true }` | `{ path, format, label, mode, idColumn?, imported, result }` |
 | `graphforge.rank` / `cluster` / `paths` / `analyze` / `similar` (and `…Advanced…`) | Not yet — still QuickPick-driven | Verb result object (`{ verb, by, label, columns, rows, rowCount, algorithm? }`) |
 | `graphforge.find` | Not yet — still prompt-driven | `ResultPage & { verb: "find", query, label? }`; a missing-index failure returns `{ error, code?, nextAction }` naming `graphforge.indexText` |
-| `graphforge.createCheckpoint` / `listCheckpoints` / `diffCheckpoints` | `{ name?, description? }` / `{ limit? }` / `{ from?, to?, scope?, detail?, limit?, after? }` | `ResultPage` |
+| `graphforge.createCheckpoint` / `listCheckpoints` / `diffCheckpoints` | `{ name?, description? }` / `{ limit?, after? }` / `{ from?, to?, scope?, detail?, limit?, after? }` | `ResultPage` |
 | `graphforge.openCheckpoint` | `{ name?, cypher? }` | `{ checkpointUuid, generationUuid, query? }` |
 | `graphforge.deleteCheckpoint` / `revertToCheckpoint` | `{ name?, confirm? }` / `{ name?, reason?, confirm? }` | `ResultPage` |
 | `graphforge.embeddingSpaces` | none needed | `{ embeddingSpaces: [...], note? }` (empty list is a valid state) |
@@ -117,9 +123,9 @@ engine call fails. Destructive commands (`deleteCheckpoint`, `revertToCheckpoint
 | `graphforge.enableCapability` | `{ capabilityId?, version?, confirm? }` | `ResultPage` |
 | `graphforge.openWithWriteMode` | `{ mode?, confirm? }` | `{ ok: true, writeMode }` |
 | `graphforge.exportInvocationDescriptor` | `{ verb?, label?, by?, invoke? }` | `{ verb, algorithm, fingerprint, projectionFingerprint, canonicalBytesBase64, invocation? }` |
-| `graphforge.listAlgorithmRuns` | `{ algorithm?, limit? }` | `ResultPage` |
+| `graphforge.listAlgorithmRuns` | `{ algorithm?, limit?, after? }` | `ResultPage` |
 | `graphforge.publishCompositeTransaction` | `{ request?, confirm? }` (both together) | `ResultPage` |
-| `graphforge.listAssertions` | `{ graphUuid?, limit? }` | `ResultPage` |
+| `graphforge.listAssertions` | `{ graphUuid?, limit?, after? }` | `ResultPage` |
 | `graphforge.createAssertion` | `{ claim?, subjectUuid?, subjectKind? }` | `{ assertionUuid }` |
 | `graphforge.showAssertion` / `showAssertionOnGraph` | `{ assertionUuid? }` or a plain UUID string | Assertion record + `nextActions` / `{ assertionUuid, graph }` |
 | `graphforge.attachEvidence` | `{ assertionUuid?, sourceUuid?, sourceKind?, role? }` | `ResultPage` |

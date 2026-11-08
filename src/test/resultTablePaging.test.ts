@@ -130,6 +130,12 @@ suite("Results bounded host paging", () => {
       reads = 0;
       pickEntity(result, "811", []);
       assert.equal(reads, 0, "explicit native emptiness must not fall back to matching aliases");
+      const empty = f.messages.at(-1)!;
+      assert.equal(empty.type, "graphforge/highlightResultRows");
+      if (empty.type === "graphforge/highlightResultRows") {
+        assert.deepEqual(empty.rowIndices, []);
+        assert.equal(empty.selectedCount, 0);
+      }
       pickRows(result, [10]);
       pickEntity(result, "missing");
       await settle(); await settle(); await settle();

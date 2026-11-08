@@ -1,12 +1,12 @@
 {
   "sourceSha256": {
     "arrowCodec.ts": "25b29ec6c46c0c1005d98fbbc14307aaad637fc42a344528d4255d7ee5345091",
-    "resultRows.ts": "d5905d04561a5f275973c8e0ecfaf30e8743e7b534ac4bdbb0d7cb53f4b89b0e",
+    "resultRows.ts": "52658e15938c966a0297ffbc70ed3381ac7c6cf9d8b7d7a67d86d230fa6b6726",
     "types.ts": "b55e061c0980f57dc7efaf25b4878c058de101f9e0c6364e3b3cfe8139cf3f8e"
   },
   "compiledSha256": {
     "arrowCodec.js": "5fe5f599002436a2f8d76e051059bdc79a6bfdc717e8320b299c03f4e8e480ad",
-    "resultRows.js": "cc92c5520ac4f647ddba3b638b34190dd19579b841dae0197e2b99e5e607e774"
+    "resultRows.js": "d8d071427c292796267cc075e516e87744de9d3fda287673e01520ca636f67fb"
   },
   "typescript": "7.0.2",
   "node": "v22.22.3",
@@ -17,9 +17,9 @@
   "ipcBytes": 6400960,
   "returnedRows": 500,
   "returnedJsonBytes": 52366,
-  "decodeMs": 1.7198750000000018,
-  "firstPageMs": 1.7740840000000162,
+  "decodeMs": 1.6254170000000272,
+  "firstPageMs": 1.5802080000000274,
   "heapDeltaBytes": 1811504,
-  "rssDeltaBytes": 1081344,
+  "rssDeltaBytes": 1130496,
   "originalIpcIdentity": true
 }

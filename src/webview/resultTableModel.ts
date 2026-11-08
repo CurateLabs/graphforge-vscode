@@ -267,13 +267,21 @@ function resultEntityLinksWithLookup(
   ];
   for (const column of columns) {
     const value = row[column];
-    const direct = resolveKeysFromLookup(lookup, identityKeys(value), maxLinks);
+    if (column === "edge_uuid" && typeof value === "string") {
+      if (lookup.edgeIdsByAlias.get(value)?.has(value)) add("edge", value, linkLabel(column, "edge"));
+      continue;
+    }
+    const keys = identityKeys(value);
+    let hasCanonicalEdges = false;
     if (value && typeof value === "object") {
       for (const edgeId of canonicalEdgeIds(value)) {
-        lookup.edgeIdsByAlias.get(edgeId)?.forEach(id => add("edge", id, linkLabel(column, "edge")));
+        hasCanonicalEdges = true;
+        keys.delete(edgeId);
+        if (lookup.edgeIdsByAlias.get(edgeId)?.has(edgeId)) add("edge", edgeId, linkLabel(column, "edge"));
       }
     }
-    if (EDGE_IDENTITY_KEY.test(column)) {
+    const direct = resolveKeysFromLookup(lookup, keys, maxLinks);
+    if (EDGE_IDENTITY_KEY.test(column) && !hasCanonicalEdges) {
       direct.edgeIds.forEach((id) => add("edge", id, linkLabel(column, "edge")));
     } else {
       direct.nodeIds.forEach((id) => add("node", id, linkLabel(column, "node")));
@@ -367,13 +375,17 @@ export async function resultRowsForGraphSelectionBatched(
 ): Promise<number[] | undefined> {
   const matches = graphSelectionMatchesRow(selection);
   const rows: number[] = [];
-  for (let start = 0; start < result.rowCount; start += RESULT_PAGE_SIZE) {
+  let deadline = performance.now() + 8;
+  for (let index = 0; index < result.rowCount; index++) {
     if (!isCurrent()) return undefined;
-    for (let index = start; index < Math.min(start + RESULT_PAGE_SIZE, result.rowCount); index++) {
-      const row = resultRow(result, index);
-      if (row && matches(row)) rows.push(index);
+    const row = resultRow(result, index);
+    if (row && matches(row)) rows.push(index);
+    // A single row is indivisible; release the host between costly rows as
+    // well as at the row ceiling so pending picks and closes can cancel work.
+    if (index + 1 < result.rowCount && ((index + 1) % RESULT_PAGE_SIZE === 0 || performance.now() >= deadline)) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      deadline = performance.now() + 8;
     }
-    if (start + RESULT_PAGE_SIZE < result.rowCount) await new Promise<void>(resolve => setImmediate(resolve));
   }
   return isCurrent() ? rows : undefined;
 }

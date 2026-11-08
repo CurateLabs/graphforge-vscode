@@ -4,6 +4,12 @@ import type { AnalystVerb, QueryResult, TableRow } from "./types";
 export const RESULT_PAGE_SIZE = 500;
 export const RESULT_PAGE_BYTES = 4 * 1024 * 1024;
 
+/** Bound a complete command envelope, including fields outside its result page. */
+export function assertResultReplySize(reply: unknown): void {
+  if (Buffer.byteLength(JSON.stringify(reply)) > RESULT_PAGE_BYTES)
+    throw new Error("RESULT_REPLY_TOO_LARGE: Use shorter command inputs or export without invoking. Complete results remain available in saved documents.");
+}
+
 /** Plain, bounded public result. IPC and row-reader state never cross the UI/API boundary. */
 export interface ResultPageMetadata {
   verb?: AnalystVerb;
