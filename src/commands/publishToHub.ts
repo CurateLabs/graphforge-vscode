@@ -186,12 +186,19 @@ async function recoverPublishFailure(
         // results first, then reopen the committed project even after refusal.
         const wasOpen = session.project?.rootPath === request.projectPath;
         const writeMode = session.writeMode;
-        if (wasOpen) await session.closeProject();
+        let canRestore = true;
         try {
+          if (wasOpen) {
+            try { await session.closeProject(); }
+            catch (error) {
+              canRestore = (error as { code?: unknown } | undefined)?.code !== "PYTHON_SHUTDOWN_UNCONFIRMED";
+              throw error;
+            }
+          }
           if (wasOpen && session.project) throw new Error("The active project changed. Publish again before regenerating.");
           return runHubPublishRegeneration(request, argv, runGraphForgeCli);
         } finally {
-          if (wasOpen && !session.project) await session.openProject(request.projectPath, writeMode);
+          if (wasOpen && canRestore && !session.project) await session.openProject(request.projectPath, writeMode);
         }
       },
     });

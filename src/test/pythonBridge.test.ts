@@ -30,6 +30,19 @@ suite("PythonBridge", () => {
     }
   });
 
+  test("dispose waits for OS exit after close fails and termination is delayed", async () => {
+    const bridge = new PythonBridge(process.execPath, path.resolve(__dirname, "fixtures", "delayedCloseHost.js"));
+    await bridge.request("open");
+    const child = (bridge as unknown as { child: import("node:child_process").ChildProcess }).child;
+    try {
+      await bridge.dispose();
+      assert.ok(child.exitCode !== null || child.signalCode !== null, "A kill signal alone must not count as writer release");
+      assert.throws(() => bridge.request("open"), /disposed/, "A disposed backend cannot start another writer");
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }
+  });
+
   test("propagates engine errors with code and kind", async () => {
     const bridge = newBridge();
     try {

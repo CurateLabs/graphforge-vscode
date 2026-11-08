@@ -17,6 +17,7 @@ suite("Publish recovery command wiring (#103)", () => {
   let prompts: number;
   let currentLabel: string;
   let regenerationFails: boolean;
+  let closeFailureCode: string | undefined;
 
   setup(() => {
     restore = [];
@@ -25,6 +26,7 @@ suite("Publish recovery command wiring (#103)", () => {
     prompts = 0;
     currentLabel = "main";
     regenerationFails = false;
+    closeFailureCode = undefined;
     owner = false;
     cancelled = false;
     guidance = `${id} is taken; run gf ontology regenerate-id ${id}`;
@@ -84,7 +86,7 @@ suite("Publish recovery command wiring (#103)", () => {
     const session = {
       writeMode: "queued_writer",
       project: { rootPath: "/work/project" } as { rootPath: string } | undefined,
-      closeProject: async () => { events.push("close"); session.project = undefined; },
+      closeProject: async () => { events.push("close"); session.project = undefined; if (closeFailureCode) throw Object.assign(new Error("close failed"), { code: closeFailureCode }); },
       openProject: async (rootPath: string, writeMode: string) => { assert.equal(writeMode, "queued_writer"); events.push("reopen"); session.project = { rootPath }; },
     };
     registerPublishToHub({ subscriptions: [] } as unknown as vscode.ExtensionContext, session as unknown as GraphForgeSession);
@@ -173,6 +175,22 @@ suite("Publish recovery command wiring (#103)", () => {
       assert.equal(result.repository, "alice/demo");
       assert.ok(events.includes("regenerate"));
     } finally { real.dispose(); }
+  });
+
+  test("close failure attempts to restore the original project without running Core", async () => {
+    closeFailureCode = "CLOSE_FAILED";
+    const result = await command();
+    assert.equal(result.code, "HUB_PUBLISH_RECOVERY_FAILED");
+    assert.deepEqual(events, ["confirm publish", "confirm regeneration", "close", "reopen"]);
+    assert.equal(calls.length, 1);
+  });
+
+  test("unconfirmed Python shutdown aborts recovery without opening a competing writer", async () => {
+    closeFailureCode = "PYTHON_SHUTDOWN_UNCONFIRMED";
+    const result = await command();
+    assert.equal(result.code, "HUB_PUBLISH_RECOVERY_FAILED");
+    assert.deepEqual(events, ["confirm publish", "confirm regeneration", "close"]);
+    assert.equal(calls.length, 1);
   });
 
 });

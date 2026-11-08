@@ -126,7 +126,11 @@ test("VSIX staging checks archive entries and all package provenance boundaries"
   }
   try {
     const good = await fixture("good");
-    assert.match(await good(), /curatelabsai.graphforge-0\.1\.3-linux-arm64$/);
+    const previousPath = process.env.PATH;
+    try {
+      process.env.PATH = "";
+      assert.match(await good(), /curatelabsai.graphforge-0\.1\.3-linux-arm64$/);
+    } finally { process.env.PATH = previousPath; }
     for (const [name, changes, pattern] of [
       ["platform", { "extension/dist/xyg/provenance.json": { platform: "darwin-arm64" } }, /linux/],
       ["host", { "extension/dist/xyg/provenance.json": { platform: "linux-x64" }, "extension/dist/core/provenance.json": { platform: "linux-x64", version } }, /architecture/],
@@ -135,6 +139,7 @@ test("VSIX staging checks archive entries and all package provenance boundaries"
       ["publisher", { "extension/package.json": { publisher: "other", name: "graphforge", version: "0.1.3" } }, /CurateLabsAI/],
     ]) await assert.rejects(await fixture(name, changes), pattern);
     await assert.rejects(await fixture("symlink", {}, true), /symbolic link/);
+    assert.equal(fs.existsSync(path.join(root, "symlink", "unpacked")), false, "Reject links before creating any staged files");
     await assert.rejects(await fixture("absolute", {}, false, "/xtension/package.json"), /absolute|escaping/);
     await assert.rejects(await fixture("traversal", {}, false, "../xxxxxx/package.json"), /invalid relative path|escaping/);
     await assert.rejects(await fixture("backslash", {}, false, "extension\\package.json"), /invalid characters|backslash|escaping/);

@@ -50,6 +50,7 @@ export class PythonBridge {
     { resolve: (v: Record<string, unknown>) => void; reject: (e: Error) => void }
   >();
   private startupError: string | undefined;
+  private disposal: Promise<void> | undefined;
 
   constructor(
     private readonly interpreterPath: string,
@@ -63,6 +64,7 @@ export class PythonBridge {
   ) {}
 
   private ensureStarted(): void {
+    if (this.disposal) throw new PythonBridgeError("Python bridge has been disposed.");
     if (this.child) {
       return;
     }
@@ -175,18 +177,38 @@ export class PythonBridge {
     });
   }
 
-  async dispose(): Promise<void> {
-    if (!this.child) {
-      return;
-    }
+  dispose(): Promise<void> {
+    this.disposal ??= this.stopChild();
+    return this.disposal;
+  }
+
+  private async stopChild(): Promise<void> {
+    const child = this.child;
+    if (!child) return;
+    // Register before requesting close: an acknowledged close may exit before
+    // the promise continuation runs. A signal alone does not release a writer.
+    let exited = child.exitCode !== null || child.signalCode !== null;
+    const exit = new Promise<void>(resolve => {
+      if (exited) resolve();
+      else child.once("exit", () => { exited = true; resolve(); });
+    });
     try {
       await this.request("close");
     } catch {
-      // Best-effort; fall through to hard-kill below regardless.
+      // The child may have exited or its request timed out. Confirm OS exit below.
     }
     this.rl?.close();
-    this.child.kill();
-    this.child = undefined;
+    if (!exited) child.kill();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([exit, new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new PythonBridgeError(
+          "Python shutdown could not be confirmed; the project writer may still be active.",
+          "PYTHON_SHUTDOWN_UNCONFIRMED",
+        )), 5_000);
+      })]);
+      if (this.child === child) this.child = undefined;
+    } finally { clearTimeout(timer); }
   }
 }
 

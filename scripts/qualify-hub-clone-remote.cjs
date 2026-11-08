@@ -57,6 +57,14 @@ function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, 
 }
 Object.assign(exports, { devContainerAuthority, remoteUri, containerFilter, containerPlatform, buildDevcontainerConfig });
 
+/** Reject paths and entry types that cannot belong to a staged extension. */
+function validateVsixEntry(entry) {
+  const name = entry.fileName;
+  assert.ok(!name.includes("\\") && !path.posix.isAbsolute(name) && !name.split("/").includes(".."), "VSIX contains an escaping archive path");
+  const type = (entry.externalFileAttributes >>> 16) & 0xf000;
+  assert.ok([0, 0x4000, 0x8000].includes(type), "VSIX contains a symbolic link or special file");
+}
+
 /** Validate ZIP metadata before extraction, including links that could escape it. */
 async function validateVsixArchive(vsix) {
   const yauzl = require("yauzl");
@@ -67,10 +75,41 @@ async function validateVsixArchive(vsix) {
       zip.on("end", resolve);
       zip.on("entry", entry => {
         try {
+          validateVsixEntry(entry);
+          zip.readEntry();
+        } catch (failure) {
+          zip.close();
+          reject(failure);
+        }
+      });
+      zip.readEntry();
+    });
+  });
+}
+
+/** Extract regular extension files with Node streams; no platform executable is needed. */
+async function extractVsix(vsix, staging) {
+  const yauzl = require("yauzl");
+  const { pipeline } = require("node:stream/promises");
+  await new Promise((resolve, reject) => {
+    yauzl.open(vsix, { lazyEntries: true, strictFileNames: true }, (error, zip) => {
+      if (error) return reject(error);
+      zip.on("error", reject);
+      zip.on("end", resolve);
+      zip.on("entry", async entry => {
+        try {
+          validateVsixEntry(entry);
           const name = entry.fileName;
-          assert.ok(!name.includes("\\") && !path.posix.isAbsolute(name) && !name.split("/").includes(".."), "VSIX contains an escaping archive path");
-          const type = (entry.externalFileAttributes >>> 16) & 0xf000;
-          assert.ok([0, 0x4000, 0x8000].includes(type), "VSIX contains a symbolic link or special file");
+          if (name.startsWith("extension/")) {
+            const destination = path.join(staging, name);
+            if (name.endsWith("/")) fs.mkdirSync(destination, { recursive: true });
+            else {
+              fs.mkdirSync(path.dirname(destination), { recursive: true });
+              const input = await new Promise((readResolve, readReject) =>
+                zip.openReadStream(entry, (readError, stream) => readError ? readReject(readError) : readResolve(stream)));
+              await pipeline(input, fs.createWriteStream(destination, { flags: "wx" }));
+            }
+          }
           zip.readEntry();
         } catch (failure) {
           zip.close();
@@ -86,7 +125,7 @@ async function validateVsixArchive(vsix) {
 async function stageVsix(vsix, root, extensions, expectedPlatform, coreVersion) {
   await validateVsixArchive(vsix);
   const staging = path.join(root, "unpacked");
-  execFileSync("unzip", ["-q", vsix, "extension/*", "-d", staging]);
+  await extractVsix(vsix, staging);
   const staged = path.join(staging, "extension");
   const pkg = readJson(path.join(staged, "package.json"));
   assert.equal(pkg.publisher, "CurateLabsAI");
