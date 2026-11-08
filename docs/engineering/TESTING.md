@@ -97,24 +97,27 @@ non-Linux UI host driving a Linux engine. Linux CI already covers a Linux UI hos
 Prerequisites: a macOS desktop with Docker Desktop running (its named volumes are ext4 and its
 folder sharing is a non-admitted virtiofs mount, which the runner asserts), and network access to
 npm, VS Code downloads, the Marketplace (Dev Containers), the container registry, and
-`graphforge.sh`. Run it through npm, with a candidate VSIX and an evidence directory outside
-the repository:
+`graphforge.sh`. Run it through npm, with a platform-specific Linux candidate VSIX matching
+the container architecture and a short evidence directory outside the repository. On Apple
+silicon, build/package the `linux-arm64` VSIX on native arm64 Linux and leave the Docker
+platform override unset:
 
 ```sh
-npm run qualify:hub-clone:dev-container -- /absolute/path/candidate.vsix /absolute/path/evidence
+env -u GRAPHFORGE_QUALIFICATION_DOCKER_PLATFORM npm run qualify:hub-clone:dev-container -- /absolute/path/graphforge-linux-arm64.vsix /private/tmp/gf104
 ```
 
 The container uses Docker's native architecture. Set
 `GRAPHFORGE_QUALIFICATION_DOCKER_PLATFORM=linux/amd64` to run the engine host as Linux
-x64 instead (emulated on Apple silicon); the report records the platform. On Apple silicon
-the native `linux-arm64-gnu` Core `0.6.0-rc.5` build currently fails the Hub clone with
-`hub.network` while x64 succeeds from the same host (#94 evidence). A native arm64 run
-therefore ends `status: "failed"` at the clone step after its storage rejections pass; set
-the x64 platform for a passing report until Core fixes that build.
+x64 instead (emulated on Apple silicon), using a matching `linux-x64` VSIX; the report records
+the platform. An emulated x64 pass cannot qualify #104. The historical native
+`linux-arm64-gnu` Core `0.6.0-rc.5` failure was repaired in Core PR #2262. The runner now uses
+the exact Core version pinned in `package.json`, validates the VSIX platform against the
+requested container architecture, and checks the actual extension-host architecture.
 
-The driver installs the VSIX and `ms-vscode-remote.remote-containers` into a fresh VS Code
-1.142.0 profile, writes a throwaway `devcontainer.json` (Node 22 image, `node` user, Core
-`0.6.0-rc.5` installed in the container, a new Docker named volume at `/gfwork`), and
+The driver installs `ms-vscode-remote.remote-containers` into a fresh VS Code
+1.142.0 profile and stages the Linux VSIX for the remote development host without trying to
+install it in the macOS UI host. It writes a throwaway `devcontainer.json` (Node 22 image,
+`node` user, a new Docker named volume at `/gfwork`) and
 opens that folder as a `dev-container+<hex>` remote URI. This runner file is the test
 entrypoint inside the remote extension host. It requires `remoteName` to be
 `dev-container` and the destination parent to be an admitted ext4 volume beneath a
@@ -124,7 +127,10 @@ fail with `GF_UNSUPPORTED_FILESYSTEM`, Linux guidance naming the dev container, 
 APFS/NTFS text, and no destination left behind. A failure of the bind-mount check is a Core
 finding, not something to relax in the runner.
 
-The report records the VSIX digest, versions (VS Code, Dev Containers, Core), UI host and
+The clone uses the VSIX's bundled registry Core; no separate Core install or transport
+fallback is used. The runner verifies the bundled native binary's SHA-256 against its
+package provenance before cloning. The report records that provenance, the VSIX digest,
+versions (VS Code, Dev Containers, Core), UI host and
 extension-host platform/arch/uid, statfs types, both rejections, clone identity, and node
 counts. There is no CI artifact, so attach `report.json` to the tracking issue. The driver
 removes its container (by Dev Containers label), volume, and work directory on exit, whether the
