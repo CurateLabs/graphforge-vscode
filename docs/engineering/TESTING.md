@@ -46,9 +46,10 @@ layout, paint, export, interaction, other platforms or the full release matrix.
 The existing CI workflow has an opt-in `qualify_hub_clone` dispatch input. It builds
 one VSIX, then installs those same bytes into fresh VS Code 1.142.0 profiles on
 Linux, macOS, and Windows with a Node 22 test runner and the public Core
-`0.6.0-rc.5` package. It exercises
+package pinned in `package.json` (currently `0.6.0`). It exercises
 the agent clone command, open, query, close, durable reopen, and the same query
-again. Linux also verifies real tmpfs rejection and an absent destination. This
+again. Linux also verifies the default tmpfs warning, explicit strict-policy
+rejection, and an absent destination after rejection. This
 does not publish anything. Dispatch it on the exact branch or commit being
 qualified; each host uploads a JSON report with the VSIX digest, versions,
 platform, clone identity, and before/after result.

@@ -145,7 +145,7 @@ exports.run = async function run() {
 async function main() {
   const vsix = path.resolve(process.argv[2] ?? "graphforge-ci.vsix");
   const evidence = path.resolve(process.argv[3] ?? "hub-clone-evidence");
-  const coreVersion = "0.6.0-rc.5";
+  const coreVersion = require("../package.json").dependencies["@curatelabs/graphforge"];
   const vscodeVersion = "1.142.0";
   assert.ok(fs.statSync(vsix).isFile(), "Pass an existing packaged VSIX");
   assert.ok(process.env.npm_execpath, "Run through npm run qualify:hub-clone -- <vsix> <evidence-directory>");
@@ -163,7 +163,7 @@ async function main() {
   };
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   try {
-    // Install the real public candidate outside the source checkout. No saved dependency edits.
+    // Install the exact public dependency pin outside the source checkout. No saved dependency edits.
     execFileSync(process.execPath, [process.env.npm_execpath, "install", "--prefix", path.join(root, "binding"), "--no-package-lock", "--no-save", "--no-audit", "--no-fund", `@curatelabs/graphforge@${coreVersion}`], { stdio: "inherit" });
     const { downloadAndUnzipVSCode, runTests } = require("@vscode/test-electron");
     const downloadOptions = { version: vscodeVersion };
