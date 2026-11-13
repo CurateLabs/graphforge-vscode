@@ -48,6 +48,7 @@ export type PublishToHubResult = HubPublishSuccess & {
 
 const TITLE = "GraphForge: Publish to Hub…";
 const PUBLISH = "Publish";
+const recoveringSessions = new WeakSet<GraphForgeSession>();
 
 export function registerPublishToHub(
   context: vscode.ExtensionContext,
@@ -67,6 +68,7 @@ async function runPublishToHub(
 ): Promise<CommandOutcome<PublishToHubResult>> {
   // Palette calls pass no args and prompt; agents pass args and never prompt.
   const interactive = args === undefined;
+  if (recoveringSessions.has(session)) return recoveryBusy(interactive);
   if (!isCliAvailable()) {
     return reportFailure({
       error: "Publishing to the Hub needs the Node binding (@curatelabs/graphforge), which isn't loaded.",
@@ -153,15 +155,17 @@ async function recoverPublishFailure(
   request: HubPublishRequest,
   failure: HubPublishFailure,
 ): Promise<CommandOutcome<PublishToHubResult>> {
-  const actions = failure.actions ?? [];
-  const labels = actions.map(action =>
-    (action.kind === "publishAsOwner" ? "Publish as the owning organization" : "Regenerate the ID") +
-    (actions.length > 1 ? ` (${action.id})` : ""),
-  );
-  const selected = await vscode.window.showErrorMessage(`GraphForge: ${failure.error}`, ...labels);
-  const action = selected === undefined ? undefined : actions[labels.indexOf(selected)];
-  if (!action) return failure;
+  if (recoveringSessions.has(session)) return recoveryBusy(true);
+  recoveringSessions.add(session);
   try {
+    const actions = failure.actions ?? [];
+    const labels = actions.map(action =>
+      (action.kind === "publishAsOwner" ? "Publish as the owning organization" : "Regenerate the ID") +
+      (actions.length > 1 ? ` (${action.id})` : ""),
+    );
+    const selected = await vscode.window.showErrorMessage(`GraphForge: ${failure.error}`, ...labels);
+    const action = selected === undefined ? undefined : actions[labels.indexOf(selected)];
+    if (!action) return failure;
     const retry = await prepareHubPublishRetry(action, request, {
       chooseOwnerRepository: async suggested => vscode.window.showInputBox({
         title: TITLE,
@@ -187,8 +191,10 @@ async function recoverPublishFailure(
         const wasOpen = session.project?.rootPath === request.projectPath;
         const writeMode = session.writeMode;
         let canRestore = true;
+        let result: ReturnType<typeof runHubPublishRegeneration>;
+        let reopenError: string | undefined;
         try {
-          if (wasOpen) {
+          if (wasOpen || !session.project) {
             try { await session.closeProject(); }
             catch (error) {
               canRestore = (error as { code?: unknown } | undefined)?.code !== "PYTHON_SHUTDOWN_UNCONFIRMED";
@@ -196,10 +202,17 @@ async function recoverPublishFailure(
             }
           }
           if (wasOpen && session.project) throw new Error("The active project changed. Publish again before regenerating.");
-          return runHubPublishRegeneration(request, argv, runGraphForgeCli);
+          result = runHubPublishRegeneration(request, argv, runGraphForgeCli);
         } finally {
-          if (wasOpen && canRestore && !session.project) await session.openProject(request.projectPath, writeMode);
+          if (wasOpen && canRestore && !session.project) {
+            try { await session.openProject(request.projectPath, writeMode); }
+            catch (error) {
+              logErrorDetail("reopening after ID regeneration failed", error);
+              reopenError = error instanceof Error ? error.message : String(error);
+            }
+          }
         }
+        return { ...result, ...(reopenError !== undefined ? { reopenError } : {}) };
       },
     });
     if ("cancelled" in retry) return retry;
@@ -212,6 +225,7 @@ async function recoverPublishFailure(
       if (choice !== "Publish Again") return { cancelled: true };
     }
     // A fresh normal publish confirmation still gates the external write.
+    recoveringSessions.delete(session);
     return runPublishToHub(session, undefined, retry);
   } catch (error) {
     logErrorDetail("publish recovery failed", error);
@@ -220,7 +234,17 @@ async function recoverPublishFailure(
       code: "HUB_PUBLISH_RECOVERY_FAILED",
       nextAction: "Check the project state and publish again.",
     }, true);
+  } finally {
+    recoveringSessions.delete(session);
   }
+}
+
+function recoveryBusy(interactive: boolean): HubPublishFailure {
+  return reportFailure({
+    error: "Publish recovery is already in progress for this session.",
+    code: "HUB_PUBLISH_RECOVERY_BUSY",
+    nextAction: "Wait for recovery to finish before publishing again.",
+  }, interactive);
 }
 
 async function promptForRequest(projectPath: string): Promise<HubPublishRequest | undefined> {

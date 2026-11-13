@@ -1,3 +1,4 @@
+import { logErrorDetail } from "../commands/shared";
 import { queryResultPage, resultIdentity, type ResultPage, type ResultPageMetadata } from "./resultRows";
 import * as vscode from "vscode";
 import {
@@ -104,6 +105,10 @@ export { NodeOnlyFeatureError, UnsupportedByBindingError } from "./errors";
 export class GraphForgeSession implements vscode.Disposable {
   private backend: EngineBackend | undefined;
   private attachmentVersion = 0;
+  private lifecycle: Promise<void> = Promise.resolve();
+  // A failed shutdown may leave a writer alive. No later transition may
+  // mistake an empty session for proof that another writer can safely open.
+  private shutdownFailure: { reason: unknown } | undefined;
   private disposed = false;
   private activeProject: DetectedProject | undefined;
   private activeWriteMode: WriteMode = "single_writer";
@@ -129,16 +134,11 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   dispose(): void {
+    if (this.disposed) return;
     this.disposed = true;
-    ++this.attachmentVersion;
+    void this.closeProject().catch(error => logErrorDetail("session shutdown failed", error));
     this._onDidChange.dispose();
     this.statusBar.dispose();
-    void this.backend?.dispose();
-    this.backend = undefined;
-    this.activeProject = undefined;
-    this.lastResult = undefined;
-    this.publicResult = undefined;
-    this.publicResultMetadata = {};
   }
 
   get project(): DetectedProject | undefined {
@@ -209,6 +209,16 @@ export class GraphForgeSession implements vscode.Disposable {
   /** Detach the engine backend and clear session result/viz state (#63 e2e teardown). */
   async closeProject(): Promise<void> {
     ++this.attachmentVersion;
+    const previous = this.detachBackend();
+    // Queue behind outstanding attachments, including their cancellation
+    // cleanup. Concurrent closes share the same retirement boundary.
+    await this.queueLifecycle(async () => {
+      if (previous) await this.retireBackend(previous);
+      this.assertShutdownConfirmed();
+    });
+  }
+
+  private detachBackend(): EngineBackend | undefined {
     const previous = this.backend;
     this.backend = undefined;
     this.activeProject = undefined;
@@ -218,11 +228,30 @@ export class GraphForgeSession implements vscode.Disposable {
     this.publicResultMetadata = {};
     this.lastResultTitle = undefined;
     this.activeWriteMode = "single_writer";
-    this.refreshStatus();
-    this._onDidChange.fire();
-    // Callers that need a new writer must wait for asynchronous Python close
-    // as well as synchronous native close. Detach notifications remain immediate.
-    if (previous) await previous.dispose();
+    if (!this.disposed) {
+      this.refreshStatus();
+      this._onDidChange.fire();
+    }
+    return previous;
+  }
+
+  private queueLifecycle(operation: () => Promise<void>): Promise<void> {
+    const completion = this.lifecycle.then(operation);
+    // Observe the rejection without hiding it from the requesting caller.
+    this.lifecycle = completion.then(() => undefined, () => undefined);
+    return completion;
+  }
+
+  private assertShutdownConfirmed(): void {
+    if (this.shutdownFailure) throw this.shutdownFailure.reason;
+  }
+
+  private async retireBackend(backend: EngineBackend): Promise<void> {
+    try { await backend.dispose(); }
+    catch (reason) {
+      this.shutdownFailure ??= { reason };
+      throw this.shutdownFailure.reason;
+    }
   }
 
   /**
@@ -258,43 +287,40 @@ export class GraphForgeSession implements vscode.Disposable {
     rootPath: string,
     writeMode: WriteMode = "single_writer",
   ): Promise<void> {
-    if (this.disposed) throw Object.assign(new Error("The session was disposed. Open a new session."), { code: "SESSION_CHANGED" });
     const attachment = ++this.attachmentVersion;
-    let backend: EngineBackend;
-    try {
-      backend = await openEngineBackend(rootPath, writeMode);
-    } catch (err) {
-      this.refreshStatus();
-      throw err instanceof Error ? err : new Error(String(err));
-    }
-
-    let project: DetectedProject;
-    try {
-      const projects = await discoverProjects();
-      if (attachment !== this.attachmentVersion)
+    const assertCurrent = () => {
+      if (this.disposed || attachment !== this.attachmentVersion)
         throw Object.assign(new Error("The project open was cancelled or superseded. Open the project again."), { code: "SESSION_CHANGED" });
-      project = projects.find(p => p.rootPath === rootPath) ?? {
-        rootPath, name: rootPath.split(/[\\/]/).pop() ?? rootPath,
-      };
-    } catch (error) {
-      await backend.dispose();
-      throw error;
-    }
-    // Prepare first, then install the pair without yielding. Restored results
-    // always see either the old session/project or the fully prepared new one.
-    const previous = this.backend;
-    this.backend = backend;
-    this.activeProject = project;
-    this.algorithmContractsCache = undefined;
-    this.lastResult = undefined;
-    this.publicResult = undefined;
-    this.publicResultMetadata = {};
-    this.lastResultTitle = undefined;
-    this.activeWriteMode = backend.runtime === "node" ? writeMode : "single_writer";
-    if (previous) void previous.dispose();
-
-    this.refreshStatus();
-    this._onDidChange.fire();
+    };
+    await this.queueLifecycle(async () => {
+      this.assertShutdownConfirmed();
+      assertCurrent();
+      const backend = await openEngineBackend(rootPath, writeMode);
+      try {
+        const projects = await discoverProjects();
+        assertCurrent();
+        const project = projects.find(p => p.rootPath === rootPath) ?? {
+          rootPath, name: rootPath.split(/[\\/]/).pop() ?? rootPath,
+        };
+        // Preparation failure preserves the old pair. Once prepared, detach
+        // before awaiting retirement so concurrent close cannot retire it twice.
+        const previous = this.detachBackend();
+        if (previous) await this.retireBackend(previous);
+        this.assertShutdownConfirmed();
+        assertCurrent();
+        // Install the prepared pair without yielding. Restored results cannot
+        // bind a new backend to the previous project's identity.
+        this.backend = backend;
+        this.activeProject = project;
+        this.activeWriteMode = backend.runtime === "node" ? writeMode : "single_writer";
+        this.refreshStatus();
+        this._onDidChange.fire();
+      } catch (error) {
+        await this.retireBackend(backend);
+        this.assertShutdownConfirmed();
+        throw error;
+      }
+    });
   }
 
   async ensureProject(): Promise<DetectedProject> {
@@ -1726,16 +1752,21 @@ export class GraphForgeSession implements vscode.Disposable {
   }
 
   private async refreshStatusAsync(): Promise<void> {
-    if (this.activeProject && this.backend) {
+    if (this.disposed) return;
+    const project = this.activeProject;
+    const backend = this.backend;
+    const attachment = this.attachmentVersion;
+    if (project && backend) {
       const mode = await this.ontologyMode();
-      const runtimeLabel =
-        this.backend.runtime === "python" ? "Python" : "Node";
-      this.statusBar.text = `$(database) GraphForge: ${this.activeProject.name} (${mode}) · ${runtimeLabel}`;
-      this.statusBar.tooltip = `${this.activeProject.rootPath}\nRuntime: ${runtimeLabel}`;
+      if (this.disposed || backend !== this.backend || project !== this.activeProject) return;
+      const runtimeLabel = backend.runtime === "python" ? "Python" : "Node";
+      this.statusBar.text = `$(database) GraphForge: ${project.name} (${mode}) · ${runtimeLabel}`;
+      this.statusBar.tooltip = `${project.rootPath}\nRuntime: ${runtimeLabel}`;
       return;
     }
 
     const snapshot = await this.environmentSnapshot();
+    if (this.disposed || attachment !== this.attachmentVersion) return;
     const usable =
       chooseRuntime(
         snapshot.preference,

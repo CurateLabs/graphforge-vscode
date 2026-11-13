@@ -384,7 +384,7 @@ suite("Taken-ID publish recovery (#103)", () => {
     assert.deepEqual(retry, { cancelled: true });
   });
 
-  test("confirmation runs only Core's regenerate command and keeps the requested Branch", async () => {
+  test("confirmation runs Core regeneration and retries its exact replacement Version", async () => {
     for (const selection of [{ ref: "main" }]) {
       let confirmed = false;
       let calls = 0;
@@ -403,7 +403,7 @@ suite("Taken-ID publish recovery (#103)", () => {
         },
       });
       assert.equal(calls, 1);
-      assert.deepEqual(retry, { repository: "alice/demo", projectPath: PROJECT, ref: "main" });
+      assert.deepEqual(retry, { repository: "alice/demo", projectPath: PROJECT, versionUuid: VERSION_UUID });
     }
   });
 
@@ -434,27 +434,48 @@ suite("Taken-ID publish recovery (#103)", () => {
     assert.equal(retry.code, "HUB_ID_REGENERATION_SELECTION_UNSUPPORTED");
   });
 
+  test("unsupported Core refuses before reading status or mutating", () => {
+    for (const help of [cli(2), cli(0, "regenerate-id"), cli(0, "--expected-branch-uuid")]) {
+      const calls: string[][] = [];
+      const result = runHubPublishRegeneration(request, ["ontology", "regenerate-id", id], argv => {
+        calls.push(argv);
+        return help;
+      });
+      assert.ok(isHubCloneFailure(result));
+      assert.equal(result.code, "HUB_ID_REGENERATION_UNSUPPORTED");
+      assert.match(result.nextAction, /0\.6\.0/);
+      assert.deepEqual(calls, [["ontology", "regenerate-id", "--help"]]);
+    }
+  });
+
   test("current Branch check refuses other Branches and unverified status before mutation", () => {
     for (const status of [cli(2), cli(0, "{}"), cli(0, JSON.stringify({
       label: "different", branch_uuid: VERSION_UUID, head_version_uuid: VERSION_UUID,
     }))]) {
-      let calls = 0;
+      const calls: string[][] = [];
       const result = runHubPublishRegeneration(request, ["ontology", "regenerate-id", id], argv => {
-        calls++;
-        assert.deepEqual(argv, ["status", "--project", PROJECT, "--json"]);
-        return status;
+        calls.push(argv);
+        return argv.includes("--help") ? cli(0, "--expected-branch-uuid --expected-head-version-uuid") : status;
       });
       assert.ok(isHubCloneFailure(result));
-      assert.equal(calls, 1);
+      assert.deepEqual(calls, [["ontology", "regenerate-id", "--help"], ["status", "--project", PROJECT, "--json"]]);
     }
-    const seen: string[][] = [];
-    const result = runHubPublishRegeneration(request, ["ontology", "regenerate-id", id], argv => {
-      seen.push(argv);
-      return cli(0, JSON.stringify({ label: "main", branch_uuid: VERSION_UUID, head_version_uuid: VERSION_UUID }));
+  });
+
+  test("native mutation receives exact status expectations and preserves a raced refusal", () => {
+    const branch = "0193e4f6-7b2a-7c3d-8e4f-5a6b7c8d9e1f";
+    const args = ["ontology", "regenerate-id", id];
+    const refusal = cli(2, "", coreError("GF_WRITE_CONFLICT", "Branch changed during preparation"));
+    const calls: string[][] = [];
+    const result = runHubPublishRegeneration(request, args, argv => {
+      calls.push(argv);
+      if (argv.includes("--help")) return cli(0, "--expected-branch-uuid --expected-head-version-uuid");
+      if (argv[0] === "status") return cli(0, JSON.stringify({ label: "main", branch_uuid: branch, head_version_uuid: VERSION_UUID }));
+      return refusal;
     });
-    assert.ok(!isHubCloneFailure(result));
-    assert.equal(seen.length, 2);
-    assert.equal(seen[1][0], "ontology");
+    assert.deepEqual(calls[2], [...args, "--expected-branch-uuid", branch, "--expected-head-version-uuid", VERSION_UUID]);
+    assert.deepEqual(result, refusal);
+    assert.equal(calls.length, 3, "never fall back to an unguarded mutation");
   });
 
 });

@@ -255,7 +255,7 @@ function coreCredentialAction(message: string): string | undefined {
 }
 
 /**
- * rc.7's CLI deliberately exposes no Hub error body or owner metadata in JSON
+ * Core's CLI deliberately exposes no Hub error body or owner metadata in JSON
  * details. Its validated, privacy-filtered next steps are native client prose
  * (Core hub_publish/refusals.rs). Recognize only those complete lines; never
  * execute a command extracted from arbitrary error text. Core's exact refusal
@@ -288,13 +288,22 @@ function exactVersionRegenerationUnsupported(): HubPublishFailure {
   };
 }
 
-/** Check Core's current Branch immediately before its current-Branch-only write. */
+/** Bind status to Core's atomic Branch/head/refusal guard before rewriting. */
 export function runHubPublishRegeneration(
   request: HubPublishRequest,
   args: string[],
   runCli: (args: string[]) => CliRunResult,
 ): CliRunResult | HubPublishFailure {
   if (request.versionUuid !== undefined) return exactVersionRegenerationUnsupported();
+  const help = runCli(["ontology", "regenerate-id", "--help"]);
+  if (help.exitCode !== 0 || !help.stdout.includes("--expected-branch-uuid") ||
+      !help.stdout.includes("--expected-head-version-uuid")) {
+    return {
+      error: "The loaded Core cannot atomically guard ID regeneration by Branch and head.",
+      code: "HUB_ID_REGENERATION_UNSUPPORTED",
+      nextAction: 'Upgrade to GraphForge Core 0.6.0 or later, then run "GraphForge: Setup Native Binding".',
+    };
+  }
   const status = runCli(["status", "--project", request.projectPath, "--json"]);
   const receipt = lastJsonLine(status.stdout) as {
     label?: unknown; branch_uuid?: unknown; head_version_uuid?: unknown;
@@ -316,9 +325,9 @@ export function runHubPublishRegeneration(
       nextAction: "Select the intended Branch in Core and publish its ref again before regenerating.",
     };
   }
-  // Both calls are synchronous, with no user interaction or asynchronous
-  // session work between this check and Core's guarded native mutation.
-  return runCli(args);
+  // Core validates both expectations against the exact-ID refusal and retains
+  // its generation comparison through publication, including other processes.
+  return runCli([...args, "--expected-branch-uuid", branch, "--expected-head-version-uuid", head]);
 }
 
 /** Prepare a retry; only Core may rewrite project content, after confirmation. */
@@ -328,7 +337,7 @@ export async function prepareHubPublishRetry(
   recovery: {
     chooseOwnerRepository: (suggested: string | undefined) => Promise<string | undefined>;
     confirmRegenerate: (id: string) => Promise<boolean>;
-    runCli: (args: string[]) => Promise<CliRunResult | HubPublishFailure>;
+    runCli: (args: string[]) => Promise<(CliRunResult | HubPublishFailure) & { reopenError?: string }>;
   },
 ): Promise<HubPublishRequest | HubPublishFailure | { cancelled: true }> {
   if (action.kind === "publishAsOwner") {
@@ -343,13 +352,15 @@ export async function prepareHubPublishRetry(
     "ontology", "regenerate-id", action.id, "--project", request.projectPath,
     "--operation-uuid", randomOperationId(), "--yes", "--json",
   ]);
-  if ("error" in result) return result;
+  const reopenGuidance = result.reopenError !== undefined
+    ? ` Reopening the project failed: ${result.reopenError}. Reopen it before publishing again.` : "";
+  if ("error" in result) return { ...result, nextAction: result.nextAction + reopenGuidance };
   if (result.exitCode !== 0) {
     const structured = lastJsonLine(result.stderr) as CoreCliError | undefined;
     return {
       error: asString(structured?.error?.message) ?? `GraphForge ID regeneration failed (exit ${result.exitCode}).`,
       code: asString(structured?.error?.details?.semantic_code) ?? asString(structured?.error?.code) ?? "HUB_ID_REGENERATION_FAILED",
-      nextAction: "Resolve Core's refusal, then publish again.",
+      nextAction: "Resolve Core's refusal, then publish again." + reopenGuidance,
     };
   }
   const receipt = lastJsonLine(result.stdout) as { id?: unknown; version_uuid?: unknown } | undefined;
@@ -358,12 +369,21 @@ export async function prepareHubPublishRetry(
     return {
       error: "Core completed ID regeneration without a recognized replacement Version receipt.",
       code: "HUB_ID_REGENERATION_RECEIPT_INVALID",
-      nextAction: "Inspect this project's current Branch head before publishing again.",
+      nextAction: "Inspect this project's current Branch head before publishing again." + reopenGuidance,
     };
   }
-  // Keep the human's Branch selection. Never substitute a Version from a
-  // different Branch, even if another client switches Branches during recovery.
-  return request;
+  if (result.reopenError !== undefined) {
+    return {
+      error: `Core regenerated the ID as ${asString(receipt?.id)} in Version ${versionUuid}, but reopening failed: ${result.reopenError}.`,
+      code: "HUB_ID_REGENERATION_REOPEN_FAILED",
+      nextAction: `Reopen ${request.projectPath}, then publish exact Version ${versionUuid}. Do not regenerate the ID again.`,
+    };
+  }
+  // The guarded native receipt identifies the replacement's immutable content.
+  // Later Branch advancement must not change what the second confirmation publishes.
+  const retry = { ...request, versionUuid };
+  delete retry.ref;
+  return retry;
 }
 
 function nextActionForCoreCode(code: string, message: string, repository?: string): string {

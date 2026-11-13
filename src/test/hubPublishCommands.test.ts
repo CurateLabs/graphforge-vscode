@@ -17,6 +17,7 @@ suite("Publish recovery command wiring (#103)", () => {
   let prompts: number;
   let currentLabel: string;
   let regenerationFails: boolean;
+  let reopenFails: boolean;
   let closeFailureCode: string | undefined;
 
   setup(() => {
@@ -26,6 +27,7 @@ suite("Publish recovery command wiring (#103)", () => {
     prompts = 0;
     currentLabel = "main";
     regenerationFails = false;
+    reopenFails = false;
     closeFailureCode = undefined;
     owner = false;
     cancelled = false;
@@ -41,11 +43,12 @@ suite("Publish recovery command wiring (#103)", () => {
     replace(core, "runCli", (argv: string[]) => {
       if (argv[0] === "--skills-bundle-dir") argv = argv.slice(2);
       if (argv[0] === "status") return { exitCode: 0, stdout: JSON.stringify({ label: currentLabel, branch_uuid: replacement, head_version_uuid: replacement }), stderr: "" };
-      if (argv.includes("--help")) return { exitCode: 0, stdout: "publish", stderr: "" };
+      if (argv.includes("--help")) return { exitCode: 0, stdout: "publish --expected-branch-uuid --expected-head-version-uuid", stderr: "" };
       calls.push(argv);
       if (argv[0] === "ontology") {
         events.push("regenerate");
         if (regenerationFails) return { exitCode: 2, stdout: "", stderr: JSON.stringify({ error: { code: "GF_VALIDATION", message: "Core refused regeneration" } }) };
+        currentLabel = "advanced-after-regeneration";
         return { exitCode: 0, stdout: JSON.stringify({ id: "ont_bbbbbbbbbbbbbbbb", version_uuid: replacement }), stderr: "" };
       }
       if (calls.filter(call => call[0] === "publish").length === 1) {
@@ -87,22 +90,24 @@ suite("Publish recovery command wiring (#103)", () => {
       writeMode: "queued_writer",
       project: { rootPath: "/work/project" } as { rootPath: string } | undefined,
       closeProject: async () => { events.push("close"); session.project = undefined; if (closeFailureCode) throw Object.assign(new Error("close failed"), { code: closeFailureCode }); },
-      openProject: async (rootPath: string, writeMode: string) => { assert.equal(writeMode, "queued_writer"); events.push("reopen"); session.project = { rootPath }; },
+      openProject: async (rootPath: string, writeMode: string) => { assert.equal(writeMode, "queued_writer"); events.push("reopen"); if (reopenFails) throw new Error("reopen refused"); session.project = { rootPath }; },
     };
     registerPublishToHub({ subscriptions: [] } as unknown as vscode.ExtensionContext, session as unknown as GraphForgeSession);
   });
 
   teardown(() => { for (const undo of restore.reverse()) undo(); });
 
-  test("modal confirmation gates Core rewriting, session reopen and separately confirmed Branch publication", async () => {
+  test("modal confirmation gates guarded rewriting and separately confirmed immutable Version publication", async () => {
     const result = await command();
     assert.equal(result.repository, "alice/demo");
     assert.deepEqual(events, ["confirm publish", "confirm regeneration", "close", "regenerate", "reopen", "confirm publish"]);
     assert.equal(calls.length, 3);
     assert.ok(calls[1].includes("--yes"));
     assert.ok(calls[1].includes("--operation-uuid"));
-    assert.equal(calls[2][calls[2].indexOf("--ref") + 1], "main");
-    assert.ok(!calls[2].includes("--version-uuid"));
+    assert.equal(calls[1][calls[1].indexOf("--expected-branch-uuid") + 1], replacement);
+    assert.equal(calls[1][calls[1].indexOf("--expected-head-version-uuid") + 1], replacement);
+    assert.equal(calls[2][calls[2].indexOf("--version-uuid") + 1], replacement);
+    assert.ok(!calls[2].includes("--ref"));
   });
 
   test("cancelled modal leaves the session open and never regenerates or republishes", async () => {
@@ -145,6 +150,17 @@ suite("Publish recovery command wiring (#103)", () => {
     assert.equal(calls.length, 2);
   });
 
+  test("completed regeneration remains visible when reopening fails", async () => {
+    reopenFails = true;
+    const result = await command();
+    assert.equal(result.code, "HUB_ID_REGENERATION_REOPEN_FAILED");
+    assert.match(result.error, /regenerated/);
+    assert.ok(result.error.includes(replacement));
+    assert.match(result.error, /reopen refused/);
+    assert.ok(result.nextAction.includes(replacement));
+    assert.equal(calls.length, 2, "do not publish again while restoration failed");
+  });
+
   test("real session close waits for deferred disposal before running the regeneration CLI", async () => {
     const real = new GraphForgeSession();
     let release!: () => void;
@@ -175,6 +191,35 @@ suite("Publish recovery command wiring (#103)", () => {
       assert.equal(result.repository, "alice/demo");
       assert.ok(events.includes("regenerate"));
     } finally { real.dispose(); }
+  });
+
+  test("concurrent publication cannot bypass recovery's shutdown and reopen boundary", async () => {
+    const real = new GraphForgeSession();
+    let release!: () => void, started!: () => void;
+    const closing = new Promise<void>(resolve => { started = resolve; });
+    const state = real as unknown as { activeProject: { rootPath: string } | undefined; backend: unknown };
+    state.activeProject = { rootPath: "/work/project" };
+    state.backend = { dispose: () => { started(); return new Promise<void>(resolve => { release = resolve; }); } };
+    real.openProject = async rootPath => { state.activeProject = { rootPath }; };
+    registerPublishToHub({ subscriptions: [] } as unknown as vscode.ExtensionContext, real);
+    const pending = command();
+    try {
+      await closing;
+      const concurrent = await command({ repository: "alice/demo", ref: "main", confirm: true });
+      assert.equal(concurrent.code, "HUB_PUBLISH_RECOVERY_BUSY");
+      assert.equal(calls.length, 1);
+      release();
+      assert.equal((await pending).repository, "alice/demo");
+    } finally { release(); await pending; real.dispose(); }
+  });
+
+  test("Core refusal retains its code when reopening also fails", async () => {
+    regenerationFails = true;
+    reopenFails = true;
+    const result = await command();
+    assert.equal(result.code, "GF_VALIDATION");
+    assert.match(result.nextAction, /reopen refused/);
+    assert.equal(calls.length, 2);
   });
 
   test("close failure attempts to restore the original project without running Core", async () => {
