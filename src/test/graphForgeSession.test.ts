@@ -62,6 +62,42 @@ suite("GraphForgeSession result generation", () => {
     } finally { session.dispose(); }
   });
 
+  test("closing awaits a deferred backend disposal before a new writer can run", async () => {
+    const session = new GraphForgeSession();
+    let release!: () => void;
+    let started = false;
+    let complete = false;
+    (session as unknown as { backend: Partial<EngineBackend> }).backend = {
+      dispose: () => { started = true; return new Promise<void>(resolve => { release = resolve; }); },
+    };
+    const pending = session.closeProject().then(() => { complete = true; });
+    try {
+      await Promise.resolve();
+      assert.equal(started, true);
+      assert.equal(complete, false);
+      release();
+      await pending;
+      assert.equal(complete, true);
+    } finally { session.dispose(); }
+  });
+
+  test("concurrent closes both await the same retiring writer", async () => {
+    const session = new GraphForgeSession();
+    let release!: () => void;
+    let disposals = 0;
+    let secondComplete = false;
+    (session as unknown as { backend: Partial<EngineBackend> }).backend = {
+      dispose: () => { disposals++; return new Promise<void>(resolve => { release = resolve; }); },
+    };
+    const first = session.closeProject();
+    const second = session.closeProject().then(() => { secondComplete = true; });
+    try {
+      await Promise.resolve(); await Promise.resolve();
+      assert.equal(secondComplete, false, "another close must not release recovery before writer exit");
+      assert.equal(disposals, 1);
+    } finally { release(); await Promise.all([first, second]); session.dispose(); }
+  });
+
   for (const method of ["execute", "rank"] as const) {
     test(`${method} retains the read generation across a concurrent mutation`, async () => {
       const session = new GraphForgeSession();
@@ -95,6 +131,118 @@ suite("GraphForgeSession result generation", () => {
       } finally { session.dispose(); }
     });
   }
+});
+
+suite("GraphForgeSession lifecycle ordering", () => {
+  let session: GraphForgeSession;
+  let root: string;
+  const project = { rootPath: "/old/project", name: "old" };
+  const backend = (dispose: () => Promise<void>) => Object.assign(new NodeEngineBackend(makeStubForge()), { dispose });
+  const deferred = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>(done => { resolve = done; });
+    return { promise, resolve };
+  };
+  setup(async function () {
+    session = new GraphForgeSession();
+    root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-lifecycle-"));
+    if (!await session.hasUsableRuntime()) {
+      if (process.env.GRAPHFORGE_REQUIRE_NATIVE) assert.fail("A runtime is required for installation acceptance");
+      this.skip();
+    }
+    (session as unknown as { activeProject: unknown }).activeProject = project;
+  });
+  teardown(async () => {
+    session.dispose();
+    await session.closeProject().catch(() => {}); // Failure is asserted by the owning test.
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  test("failed shutdown reaches concurrent closes and prevents later opens", async () => {
+    const started = deferred(), release = deferred();
+    const failure = Object.assign(new Error("writer still alive"), { code: "PYTHON_SHUTDOWN_UNCONFIRMED" });
+    let disposals = 0;
+    (session as unknown as { backend: EngineBackend }).backend = backend(async () => {
+      disposals++; started.resolve(); await release.promise; throw failure;
+    });
+    const first = assert.rejects(session.closeProject(), error => error === failure);
+    const second = assert.rejects(session.closeProject(), error => error === failure);
+    await started.promise;
+    release.resolve();
+    await Promise.all([first, second]);
+    await assert.rejects(session.closeProject(), error => error === failure);
+    await assert.rejects(session.initializeProject(root), error => error === failure);
+    assert.equal(disposals, 1);
+    assert.deepEqual(fs.readdirSync(root), [], "a failed shutdown must prevent even preparing another writer");
+  });
+
+  for (const fails of [false, true]) {
+    test(`replacement awaits previous shutdown${fails ? " and fails closed on rejection" : " before exposing its backend"}`, async () => {
+      const started = deferred(), release = deferred();
+      const failure = new Error("shutdown refused");
+      let disposals = 0;
+      (session as unknown as { backend: EngineBackend }).backend = backend(async () => {
+        disposals++; started.resolve(); await release.promise; if (fails) throw failure;
+      });
+      const pending = session.initializeProject(root);
+      const outcome = fails ? assert.rejects(pending, error => error === failure) : pending;
+      await started.promise;
+      assert.equal(session.project, undefined);
+      assert.equal(session.activeRuntime, undefined);
+      release.resolve();
+      await outcome;
+      assert.equal(disposals, 1);
+      if (fails) {
+        await assert.rejects(session.initializeProject(root), error => error === failure);
+        // The prepared candidate was closed after the previous shutdown failed.
+        const probe = new GraphForgeSession();
+        try { await probe.openProject(root); }
+        finally { await probe.closeProject(); probe.dispose(); }
+      } else {
+        assert.equal((session.project as { rootPath: string } | undefined)?.rootPath, root);
+        await session.closeProject();
+      }
+    });
+  }
+
+  test("latest attachment wins and close waits for cancelled attachment cleanup", async () => {
+    const other = path.join(root, "other");
+    fs.mkdirSync(other);
+    const first = assert.rejects(session.initializeProject(path.join(root, "first")), error => (error as { code?: string }).code === "SESSION_CHANGED");
+    const second = session.initializeProject(other);
+    await Promise.all([first, second]);
+    assert.equal(session.project?.rootPath, other);
+    await session.closeProject();
+    assert.equal(session.project, undefined);
+  });
+
+  test("an empty-session status snapshot cannot overwrite the newly attached project", async () => {
+    const snapshot = await session.environmentSnapshot();
+    (session as unknown as { activeProject: unknown }).activeProject = undefined;
+    let release!: () => void;
+    session.environmentSnapshot = () => new Promise(resolve => { release = () => resolve(snapshot); });
+    const internals = session as unknown as { refreshStatusAsync(): Promise<void>; statusBar: { text: string } };
+    const stale = internals.refreshStatusAsync();
+    injectForge(session, makeStubForge());
+    injectCapabilities(session, []);
+    await internals.refreshStatusAsync();
+    const expected = internals.statusBar.text;
+    release(); await stale;
+    assert.equal(internals.statusBar.text, expected);
+    assert.match(expected, /fake-project/);
+    await session.closeProject();
+  });
+
+  test("preparation failure preserves the current backend and project", async () => {
+    let disposals = 0;
+    (session as unknown as { backend: EngineBackend }).backend = backend(async () => { disposals++; });
+    fs.writeFileSync(path.join(root, "foreign.txt"), "Do not initialize this directory");
+    await assert.rejects(session.initializeProject(root));
+    assert.equal(session.project, project);
+    assert.equal(session.activeRuntime, "node");
+    assert.equal(disposals, 0);
+    await session.closeProject();
+  });
 });
 
 suite("GraphForgeSession bounded command pages", () => {
@@ -284,8 +432,13 @@ suite("GraphForgeSession result completion boundaries", () => {
           this.skip();
         }
         const pending = session.initializeProject(root);
+        let settled = false;
+        void pending.then(() => { settled = true; }, () => { settled = true; });
         const rejected = assert.rejects(pending, (error: unknown) => (error as { code?: string }).code === "SESSION_CHANGED");
-        if (action === "close") await session.closeProject();
+        if (action === "close") {
+          await session.closeProject();
+          assert.equal(settled, true, "close must wait for cancelled attachment cleanup");
+        }
         else session.dispose();
         await rejected;
         assert.equal(session.project, undefined);

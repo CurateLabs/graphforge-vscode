@@ -46,9 +46,10 @@ layout, paint, export, interaction, other platforms or the full release matrix.
 The existing CI workflow has an opt-in `qualify_hub_clone` dispatch input. It builds
 one VSIX, then installs those same bytes into fresh VS Code 1.142.0 profiles on
 Linux, macOS, and Windows with a Node 22 test runner and the public Core
-`0.6.0-rc.5` package. It exercises
+package pinned in `package.json` (currently `0.6.0`). It exercises
 the agent clone command, open, query, close, durable reopen, and the same query
-again. Linux also verifies real tmpfs rejection and an absent destination. This
+again. Linux also verifies the default tmpfs warning, explicit strict-policy
+rejection, and an absent destination after rejection. This
 does not publish anything. Dispatch it on the exact branch or commit being
 qualified; each host uploads a JSON report with the VSIX digest, versions,
 platform, clone identity, and before/after result.
@@ -122,10 +123,12 @@ opens that folder as a `dev-container+<hex>` remote URI. This runner file is the
 entrypoint inside the remote extension host. It requires `remoteName` to be
 `dev-container` and the destination parent to be an admitted ext4 volume beneath a
 different root filesystem, then runs clone, open, query, close, durable reopen, and the same
-query again. Real `/dev/shm` (tmpfs) and macOS bind-mount (virtiofs) destinations must each
-fail with `GF_UNSUPPORTED_FILESYSTEM`, Linux guidance naming the dev container, no
-APFS/NTFS text, and no destination left behind. A failure of the bind-mount check is a Core
-finding, not something to relax in the runner.
+query again. With Core 0.6.0, a real `/dev/shm` (tmpfs) destination must clone under
+the default policy with `GF_UNVERIFIED_FILESYSTEM`. The runner then explicitly sets
+`GRAPHFORGE_FILESYSTEM_DURABILITY=strict` for tmpfs and macOS bind-mount (virtiofs)
+refusals. Both must return `GF_UNSUPPORTED_FILESYSTEM`, Linux guidance naming the dev
+container, no APFS/NTFS text, and no destination left behind. The previous policy is
+restored after each strict check. These are native Core decisions, never simulated probes.
 
 The clone uses the VSIX's bundled registry Core; no separate Core install or transport
 fallback is used. The runner verifies the bundled native binary's SHA-256 against its
@@ -137,6 +140,27 @@ removes its container (by Dev Containers label), volume, and work directory on e
 run passes or fails; the 25-minute watchdog removes the container to unblock a hung window.
 `ELECTRON_RUN_AS_NODE` is cleared for the VS Code launch. Same fixture caveat: a zero node count is
 storage and identity evidence, not #95 useful-result evidence.
+
+### Guarded publish recovery
+
+An optional third argument to `qualify:hub-clone:dev-container` supplies a native
+fixture directory containing `manifest.json` and `project/`. Generate the Project
+with the exact released Core Rust facade, including an actual
+`record_publish_id_taken` call, then drop all handles. Preserve the complete
+Project, including its private `.publish-refusals`; portable export omits that
+local authority. The manifest records the producing Core/source/generator identity,
+selected Branch/head, refused ID and independently queried Branch/CURRENT names.
+
+The installed extension uses only the VSIX's bundled registry Core. The runner
+checks wrong-Branch/head refusals without authority changes, then exercises modal
+recovery, real native rewriting and durable reopen. It intercepts only publication:
+the first response is an explicitly injected `id_taken` diagnostic backed by the
+native fixture receipt; the second call is captured and stopped with a sentinel.
+All help/status/regeneration and Branch advancement calls execute real bundled
+Core. A native commit advances the Branch after regeneration, proving the retry
+and second confirmation still name the original immutable replacement Version.
+This qualifies packaged recovery and retry selection; it does not claim a live
+Hub refusal or a successful publication.
 
 ## Local gates
 

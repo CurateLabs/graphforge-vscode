@@ -1,0 +1,302 @@
+import * as assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as vscode from "vscode";
+import { registerPublishToHub } from "../commands/publishToHub";
+import { loadGraphForgeModule } from "../session/nativeLoader";
+import { GraphForgeSession } from "../session/graphForgeSession";
+
+suite("Publish recovery command wiring (#103)", () => {
+  const id = "ont_aaaaaaaaaaaaaaaa";
+  const replacement = "0193e4f6-7b2a-7c3d-8e4f-5a6b7c8d9e0f";
+  let restore: Array<() => void>;
+  let command: (...args: any[]) => Promise<any>;
+  let calls: string[][];
+  let events: string[];
+  let guidance: string;
+  let cancelled: boolean;
+  let owner: boolean;
+  let prompts: number;
+  let currentLabel: string;
+  let regenerationFails: boolean;
+  let reopenFails: boolean;
+  let closeFailureCode: string | undefined;
+  let changeProjectDuringConfirmation: boolean;
+
+  setup(() => {
+    restore = [];
+    calls = [];
+    events = [];
+    prompts = 0;
+    currentLabel = "main";
+    regenerationFails = false;
+    reopenFails = false;
+    closeFailureCode = undefined;
+    changeProjectDuringConfirmation = false;
+    owner = false;
+    cancelled = false;
+    guidance = `${id} is taken; run gf ontology regenerate-id ${id}`;
+    const replace = (object: object, key: string, value: unknown) => {
+      const target = object as Record<string, unknown>;
+      const previous = target[key];
+      target[key] = value;
+      restore.push(() => { target[key] = previous; });
+    };
+    const core = loadGraphForgeModule();
+    assert.ok(core, "Tests require the installed or bundled Core facade");
+    replace(core, "runCli", (argv: string[]) => {
+      if (argv[0] === "--skills-bundle-dir") argv = argv.slice(2);
+      if (argv[0] === "status") return { exitCode: 0, stdout: JSON.stringify({ label: currentLabel, branch_uuid: replacement, head_version_uuid: replacement }), stderr: "" };
+      if (argv.includes("--help")) return { exitCode: 0, stdout: "publish --expected-branch-uuid --expected-head-version-uuid", stderr: "" };
+      calls.push(argv);
+      if (argv[0] === "ontology") {
+        events.push("regenerate");
+        if (regenerationFails) return { exitCode: 2, stdout: "", stderr: JSON.stringify({ error: { code: "GF_VALIDATION", message: "Core refused regeneration" } }) };
+        currentLabel = "advanced-after-regeneration";
+        return { exitCode: 0, stdout: JSON.stringify({ id: "ont_bbbbbbbbbbbbbbbb", version_uuid: replacement }), stderr: "" };
+      }
+      if (calls.filter(call => call[0] === "publish").length === 1) {
+        return { exitCode: 2, stdout: "", stderr: JSON.stringify({ error: {
+          code: "GF_VALIDATION", message: `validation error: hub.publish.id_taken: ${guidance}`,
+          details: { semantic_code: "hub.publish.id_taken" },
+        } }) };
+      }
+      return { exitCode: 0, stderr: "", stdout: JSON.stringify({
+        format: "graphforge-hub-publish/1", repository: { owner: owner ? "research" : "alice", repository: "demo" },
+        refs: ["main"], revision: "revision", previous_revision: null,
+        manifest_validator: "validator", operation_uuid: "operation", request_commitment: "commitment",
+      }) };
+    });
+    replace(vscode.commands, "registerCommand", (_id: string, callback: typeof command) => {
+      command = callback;
+      return new vscode.Disposable(() => {});
+    });
+    replace(vscode.window, "withProgress", async (_options: unknown, task: () => unknown) => task());
+    replace(vscode.window, "showInputBox", async (options: { value?: string }) => {
+      prompts++;
+      return options.value ?? (prompts === 1 ? "alice/demo" : "main");
+    });
+    replace(vscode.window, "showWarningMessage", async (_message: string, options: { modal: boolean; detail: string }, action: string) => {
+      prompts++;
+      assert.equal(options.modal, true);
+      if (action === "Regenerate the ID") {
+        events.push("confirm regeneration");
+        assert.match(options.detail, /rewrite this project's references locally/);
+        assert.match(options.detail, /\/work\/project/);
+        if (changeProjectDuringConfirmation) session.projectTransitionVersion++;
+        return cancelled ? undefined : action;
+      }
+      events.push("confirm publish");
+      return action;
+    });
+    replace(vscode.window, "showErrorMessage", async (_message: string, action: string) => { prompts++; return action; });
+    replace(vscode.window, "showInformationMessage", async (_message: string, action?: string) => action);
+    const session = {
+      writeMode: "queued_writer",
+      projectTransitionVersion: 0,
+      project: { rootPath: "/work/project" } as { rootPath: string } | undefined,
+      closeProject: async () => { session.projectTransitionVersion++; events.push("close"); session.project = undefined; if (closeFailureCode) throw Object.assign(new Error("close failed"), { code: closeFailureCode }); },
+      openProject: async (rootPath: string, writeMode: string) => { assert.equal(writeMode, "queued_writer"); events.push("reopen"); if (reopenFails) throw new Error("reopen refused"); session.project = { rootPath }; },
+    };
+    registerPublishToHub({ subscriptions: [] } as unknown as vscode.ExtensionContext, session as unknown as GraphForgeSession);
+  });
+
+  teardown(() => { for (const undo of restore.reverse()) undo(); });
+
+  test("modal confirmation gates guarded rewriting and separately confirmed immutable Version publication", async () => {
+    const result = await command();
+    assert.equal(result.repository, "alice/demo");
+    assert.deepEqual(events, ["confirm publish", "confirm regeneration", "close", "regenerate", "reopen", "confirm publish"]);
+    assert.equal(calls.length, 3);
+    assert.ok(calls[1].includes("--yes"));
+    assert.ok(calls[1].includes("--operation-uuid"));
+    assert.equal(calls[1][calls[1].indexOf("--expected-branch-uuid") + 1], replacement);
+    assert.equal(calls[1][calls[1].indexOf("--expected-head-version-uuid") + 1], replacement);
+    assert.equal(calls[2][calls[2].indexOf("--version-uuid") + 1], replacement);
+    assert.ok(!calls[2].includes("--ref"));
+  });
+
+  test("cancelled modal leaves the session open and never regenerates or republishes", async () => {
+    cancelled = true;
+    assert.deepEqual(await command(), { cancelled: true });
+    assert.deepEqual(events, ["confirm publish", "confirm regeneration"]);
+    assert.equal(calls.length, 1);
+  });
+
+  test("organization hint selects that organization and reuses normal publish confirmation", async () => {
+    owner = true;
+    guidance = `${id} is taken; publish as research instead of regenerating`;
+    const result = await command();
+    assert.equal(result.repository, "research/demo");
+    assert.equal(calls[1][1], "research/demo");
+    assert.deepEqual(events, ["confirm publish", "confirm publish"]);
+  });
+
+  test("agent calls return recovery actions without any prompts or local mutation", async () => {
+    const result = await command({ repository: "alice/demo", ref: "main", confirm: true });
+    assert.equal(result.code, "hub.publish.id_taken");
+    assert.deepEqual(result.actions, [{ kind: "regenerateId", id }]);
+    assert.equal(prompts, 0);
+    assert.deepEqual(events, []);
+    assert.equal(calls.length, 1);
+  });
+  test("different current Branch refuses without rewriting and restores write mode", async () => {
+    currentLabel = "other";
+    const result = await command();
+    assert.equal(result.code, "HUB_ID_REGENERATION_SELECTION_MISMATCH");
+    assert.deepEqual(events, ["confirm publish", "confirm regeneration", "close", "reopen"]);
+    assert.equal(calls.length, 1);
+  });
+
+  test("Core refusal still reopens the project with its original write mode", async () => {
+    regenerationFails = true;
+    const result = await command();
+    assert.equal(result.code, "GF_VALIDATION");
+    assert.deepEqual(events, ["confirm publish", "confirm regeneration", "close", "regenerate", "reopen"]);
+    assert.equal(calls.length, 2);
+  });
+
+  test("completed regeneration remains visible when reopening fails", async () => {
+    reopenFails = true;
+    const result = await command();
+    assert.equal(result.code, "HUB_ID_REGENERATION_REOPEN_FAILED");
+    assert.match(result.error, /regenerated/);
+    assert.ok(result.error.includes(replacement));
+    assert.match(result.error, /reopen refused/);
+    assert.ok(result.nextAction.includes(replacement));
+    assert.equal(calls.length, 2, "do not publish again while restoration failed");
+  });
+
+  test("real session close waits for deferred disposal before running the regeneration CLI", async () => {
+    const real = new GraphForgeSession();
+    let release!: () => void;
+    let closing = false;
+    const state = real as unknown as {
+      activeProject: { rootPath: string } | undefined;
+      activeWriteMode: string;
+      backend: unknown;
+    };
+    state.activeProject = { rootPath: "/work/project" };
+    state.activeWriteMode = "optimistic_multi_writer";
+    state.backend = { dispose: () => {
+      closing = true;
+      return new Promise<void>(resolve => { release = resolve; });
+    } };
+    real.openProject = async (rootPath, mode) => {
+      assert.equal(mode, "optimistic_multi_writer");
+      state.activeProject = { rootPath };
+    };
+    registerPublishToHub({ subscriptions: [] } as unknown as vscode.ExtensionContext, real);
+    try {
+      const pending = command();
+      for (let turn = 0; turn < 30 && !closing; turn++) await Promise.resolve();
+      assert.equal(closing, true);
+      assert.ok(!events.includes("regenerate"));
+      release();
+      const result = await pending;
+      assert.equal(result.repository, "alice/demo");
+      assert.ok(events.includes("regenerate"));
+    } finally { real.dispose(); }
+  });
+
+  test("concurrent publication cannot bypass recovery's shutdown and reopen boundary", async () => {
+    const real = new GraphForgeSession();
+    let release!: () => void, started!: () => void;
+    const closing = new Promise<void>(resolve => { started = resolve; });
+    const state = real as unknown as { activeProject: { rootPath: string } | undefined; backend: unknown };
+    state.activeProject = { rootPath: "/work/project" };
+    state.backend = { dispose: () => { started(); return new Promise<void>(resolve => { release = resolve; }); } };
+    real.openProject = async rootPath => { state.activeProject = { rootPath }; };
+    registerPublishToHub({ subscriptions: [] } as unknown as vscode.ExtensionContext, real);
+    const pending = command();
+    try {
+      await closing;
+      const concurrent = await command({ repository: "alice/demo", ref: "main", confirm: true });
+      assert.equal(concurrent.code, "HUB_PUBLISH_RECOVERY_BUSY");
+      assert.equal(calls.length, 1);
+      release();
+      assert.equal((await pending).repository, "alice/demo");
+    } finally { release(); await pending; real.dispose(); }
+  });
+
+  test("a second publish cannot cross an outstanding publish confirmation", async () => {
+    const original = vscode.window.showWarningMessage;
+    let release!: () => void;
+    let started!: () => void;
+    const confirming = new Promise<void>(resolve => { started = resolve; });
+    let first = true;
+    (vscode.window as any).showWarningMessage = async (...args: any[]) => {
+      if (first) {
+        first = false; started(); await new Promise<void>(resolve => { release = resolve; });
+      }
+      return (original as any)(...args);
+    };
+    const pending = command();
+    try {
+      await confirming;
+      const second = await command({ repository: "alice/demo", ref: "main", confirm: true });
+      assert.equal(second.code, "HUB_PUBLISH_RECOVERY_BUSY");
+      assert.equal(calls.length, 0, "do not publish or recover under another outstanding confirmation");
+    } finally { release(); await pending; (vscode.window as any).showWarningMessage = original; }
+  });
+
+  test("a newer project request during the regeneration dialog cancels stale recovery", async () => {
+    changeProjectDuringConfirmation = true;
+    const result = await command();
+    assert.equal(result.code, "HUB_PUBLISH_RECOVERY_FAILED");
+    assert.equal(calls.length, 1);
+    assert.deepEqual(events, ["confirm publish", "confirm regeneration"]);
+  });
+
+  test("recovery shutdown preserves a later request to open another project", async () => {
+    const real = new GraphForgeSession();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-recovery-transition-"));
+    let release!: () => void, started!: () => void;
+    const closing = new Promise<void>(resolve => { started = resolve; });
+    const state = real as unknown as { activeProject: { rootPath: string } | undefined; backend: unknown };
+    state.activeProject = { rootPath: "/work/project" };
+    state.backend = { dispose: () => { started(); return new Promise<void>(resolve => { release = resolve; }); } };
+    let restored = false;
+    const originalOpen = real.openProject.bind(real);
+    real.openProject = async (...args) => { restored = true; return originalOpen(...args); };
+    registerPublishToHub({ subscriptions: [] } as unknown as vscode.ExtensionContext, real);
+    const pending = command();
+    try {
+      await closing;
+      const opening = real.initializeProject(root);
+      release();
+      const [result] = await Promise.all([pending, opening]);
+      assert.equal(result.code, "HUB_PUBLISH_RECOVERY_FAILED");
+      assert.equal(real.project?.rootPath, root);
+      assert.equal(restored, false, "recovery cannot supersede the newer open");
+      assert.ok(!events.includes("regenerate"));
+    } finally { release(); await pending; await real.closeProject(); real.dispose(); fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("Core refusal retains its code when reopening also fails", async () => {
+    regenerationFails = true;
+    reopenFails = true;
+    const result = await command();
+    assert.equal(result.code, "GF_VALIDATION");
+    assert.match(result.nextAction, /reopen refused/);
+    assert.equal(calls.length, 2);
+  });
+
+  test("close failure attempts to restore the original project without running Core", async () => {
+    closeFailureCode = "CLOSE_FAILED";
+    const result = await command();
+    assert.equal(result.code, "HUB_PUBLISH_RECOVERY_FAILED");
+    assert.deepEqual(events, ["confirm publish", "confirm regeneration", "close", "reopen"]);
+    assert.equal(calls.length, 1);
+  });
+
+  test("unconfirmed Python shutdown aborts recovery without opening a competing writer", async () => {
+    closeFailureCode = "PYTHON_SHUTDOWN_UNCONFIRMED";
+    const result = await command();
+    assert.equal(result.code, "HUB_PUBLISH_RECOVERY_FAILED");
+    assert.deepEqual(events, ["confirm publish", "confirm regeneration", "close"]);
+    assert.equal(calls.length, 1);
+  });
+
+});

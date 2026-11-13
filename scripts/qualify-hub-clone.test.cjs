@@ -94,7 +94,7 @@ test("VSIX staging checks archive entries and all package provenance boundaries"
   const { stageVsix } = require("./qualify-hub-clone-remote.cjs");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-vsix-"));
   const version = require("../package.json").dependencies["@curatelabs/graphforge"];
-  async function fixture(name, changes = {}, symlink = false, rewritePath) {
+  async function fixture(name, changes = {}, symlink = false, rewritePath, dos = false) {
     const zip = new ZipFile();
     const file = path.join(root, `${name}.vsix`);
     const output = fs.createWriteStream(file);
@@ -119,6 +119,15 @@ test("VSIX staging checks archive entries and all package provenance boundaries"
       for (let at = bytes.indexOf(from); at !== -1; at = bytes.indexOf(from, at + to.length)) to.copy(bytes, at);
       fs.writeFileSync(file, bytes);
     }
+    if (dos) {
+      const bytes = fs.readFileSync(file);
+      for (let at = 0; at < bytes.length - 46; at++) {
+        if (bytes.readUInt32LE(at) !== 0x02014b50) continue;
+        bytes.writeUInt16LE(20, at + 4); // MS-DOS host, ZIP version 2.0
+        bytes.writeUInt32LE(0xa0000020, at + 38); // Not a Unix symlink on DOS
+      }
+      fs.writeFileSync(file, bytes);
+    }
     const work = path.join(root, name);
     const extensions = path.join(work, "extensions");
     fs.mkdirSync(extensions, { recursive: true });
@@ -138,6 +147,7 @@ test("VSIX staging checks archive entries and all package provenance boundaries"
       ["core-version", { "extension/dist/core/provenance.json": { platform: "linux-arm64", version: "0.6.0-rc.5" } }, /pinned Core/],
       ["publisher", { "extension/package.json": { publisher: "other", name: "graphforge", version: "0.1.3" } }, /CurateLabsAI/],
     ]) await assert.rejects(await fixture(name, changes), pattern);
+    assert.match(await (await fixture("dos", {}, false, undefined, true))(), /linux-arm64$/);
     await assert.rejects(await fixture("symlink", {}, true), /symbolic link/);
     assert.equal(fs.existsSync(path.join(root, "symlink", "unpacked")), false, "Reject links before creating any staged files");
     await assert.rejects(await fixture("absolute", {}, false, "/xtension/package.json"), /absolute|escaping/);

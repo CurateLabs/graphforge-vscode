@@ -20,7 +20,7 @@ function containerPlatform(serverArch, dockerPlatform) {
   return platform === "linux/arm64" ? "linux-arm64" : "linux-x64";
 }
 
-function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, coreVersion, dockerPlatform, xygSuite = false }) {
+function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, coreVersion, dockerPlatform, xygSuite = false, recoveryFixture = false }) {
   const workspace = `/workspaces/${workspaceName}`;
   return {
     name: "graphforge-hub-clone-qualification",
@@ -42,6 +42,7 @@ function buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName, 
       GRAPHFORGE_QUALIFICATION_EXTENSION: `${workspace}/extensions/${extensionDirName}`,
       GRAPHFORGE_QUALIFICATION_REJECT_BIND: `${workspace}/rejected-bind`,
       GRAPHFORGE_NATIVE_MODULE: `${workspace}/extensions/${extensionDirName}/dist/core/node_modules/@curatelabs/graphforge`,
+      ...(recoveryFixture ? { GRAPHFORGE_QUALIFICATION_RECOVERY_FIXTURE: `${workspace}/recovery-fixture` } : {}),
       ...(xygSuite ? {
         TMPDIR: "/gfwork",
         GRAPHFORGE_XYG_MOCHA: "/gfwork/test-runner/node_modules/mocha",
@@ -61,8 +62,13 @@ Object.assign(exports, { devContainerAuthority, remoteUri, containerFilter, cont
 function validateVsixEntry(entry) {
   const name = entry.fileName;
   assert.ok(!name.includes("\\") && !path.posix.isAbsolute(name) && !name.split("/").includes(".."), "VSIX contains an escaping archive path");
-  const type = (entry.externalFileAttributes >>> 16) & 0xf000;
-  assert.ok([0, 0x4000, 0x8000].includes(type), "VSIX contains a symbolic link or special file");
+  const host = entry.versionMadeBy >>> 8;
+  // Only Unix and macOS hosts encode POSIX mode bits here. DOS attributes
+  // have different semantics; extraction still creates ordinary files only.
+  if (host === 3 || host === 19) {
+    const type = (entry.externalFileAttributes >>> 16) & 0xf000;
+    assert.ok([0, 0x4000, 0x8000].includes(type), "VSIX contains a symbolic link or special file");
+  }
 }
 
 /** Validate ZIP metadata before extraction, including links that could escape it. */
@@ -152,6 +158,8 @@ async function main() {
   const vsix = path.resolve(process.argv[2] ?? "graphforge-ci.vsix");
   const evidence = path.resolve(process.argv[3] ?? "dev-container-evidence");
   const xygSuite = process.env.GRAPHFORGE_QUALIFICATION_SUITE === "xyg";
+  const recoveryFixture = process.argv[4] ? path.resolve(process.argv[4]) : undefined;
+  assert.ok(!recoveryFixture || !xygSuite, "Recovery fixture belongs to the Hub qualification lane");
   const coreVersion = require("../package.json").dependencies["@curatelabs/graphforge"];
   const vscodeVersion = "1.142.0";
   const watchdogMs = 25 * 60 * 1000;
@@ -190,12 +198,17 @@ async function main() {
     authority,
     scope: xygSuite
       ? "Actual Linux Dev Container extension host and macOS desktop: bundled Core, analytical and four-view XYG paint, export, Arrow/edit/reopen, themes, reduced motion and resize; not screen-reader or massive-data qualification"
-      : "Remote (dev-container) platform-specific packaged extension and bundled registry Core clone/open/query/close/reopen on an admitted volume beneath a non-admitted root, with tmpfs and macOS bind-mount rejection; not useful-result or publish-back qualification",
+      : "Remote (dev-container) platform-specific packaged extension and bundled registry Core clone/open/query/close/reopen on an admitted volume beneath a non-admitted root, with default tmpfs warning and explicit strict tmpfs/macOS bind-mount rejection; optional guarded recovery uses an injected publish boundary, not live publish-back qualification",
   };
   fs.mkdirSync(path.join(hostFolder, ".devcontainer"), { recursive: true });
   fs.mkdirSync(path.join(hostFolder, "rejected-bind"));
   fs.mkdirSync(path.join(userData, "User"), { recursive: true });
   fs.copyFileSync(path.join(__dirname, "qualify-hub-clone.cjs"), path.join(hostFolder, "qualify-hub-clone.cjs"));
+  if (recoveryFixture) {
+    assert.ok(fs.statSync(path.join(recoveryFixture, "manifest.json")).isFile());
+    fs.cpSync(recoveryFixture, path.join(hostFolder, "recovery-fixture"), { recursive: true });
+    fs.copyFileSync(path.join(__dirname, "qualify-hub-publish-recovery.cjs"), path.join(hostFolder, "qualify-hub-publish-recovery.cjs"));
+  }
   if (xygSuite) {
     fs.copyFileSync(path.join(__dirname, "qualify-installed-xyg.cjs"), path.join(hostFolder, "qualify-installed-xyg.cjs"));
     const source = path.join(hostFolder, "test-source");
@@ -241,7 +254,7 @@ async function main() {
     phase = "container";
     assert.throws(() => docker("volume", "inspect", volumeName), "Qualification volume already exists");
     volumeOwned = true;
-    writeJson(path.join(hostFolder, ".devcontainer", "devcontainer.json"), buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName: path.basename(installed), coreVersion, dockerPlatform, xygSuite }));
+    writeJson(path.join(hostFolder, ".devcontainer", "devcontainer.json"), buildDevcontainerConfig({ workspaceName, volumeName, extensionDirName: path.basename(installed), coreVersion, dockerPlatform, xygSuite, recoveryFixture: !!recoveryFixture }));
     writeJson(hostReport, report);
 
     phase = "remote-run";

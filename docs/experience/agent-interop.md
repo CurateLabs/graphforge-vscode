@@ -125,7 +125,7 @@ Source of truth: `package.json#contributes.commands` (88 contributed commands on
 | `graphforge.initializeProjectHere` | none | `void` | 1 QuickPick (workspace folder vs. browse), plus confirmation dialogs for non-empty/missing targets | Needs a usable runtime first (fails closed with "Setup Native Binding" / "Setup Python Binding" action buttons otherwise) |
 | `graphforge.openProject` | `pathArg?: string` | `void` | Folder picker only when `pathArg` omitted | Needs the target to already be a valid `FORMAT` project |
 | `graphforge.openSampleProject` | `{ path?, force? }` | `{ path, project, seeded }` or `{ error, code, nextAction? }` / `{ cancelled: true }` | Interactive replacement of a non-empty target confirms; a new target does not | Needs a usable runtime; materializes project-owned air-routes data/query/notebook/Streamlit app/result/viz/mutation files |
-| `graphforge.cloneFromHub` | `{ repository, destination, ref?, versionUuid?, open? }` | `{ repository, destination, immutableVersion, packageDigest, generationUuid, researchVersionUuid?, opened }` or `{ error, code, nextAction }` / `{ cancelled: true }` | None when `destination` is passed; palette and `vscode://` link calls prompt (the link confirms first) | Node binding with `gf clone` (v0.6.0+); runs Core in-process and never calls a Hub API (ADR-0005). Core's `hub.*` semantic codes pass through. The destination must be on a Core-admitted durable volume of the engine host (Linux ext4/XFS/Btrfs, macOS APFS, Windows fixed local NTFS); otherwise `code: "GF_UNSUPPORTED_FILESYSTEM"` (or Core's `details.semantic_code` when it supplies one; match the message too) with host-specific `nextAction` and nothing created. In-memory sessions have no such requirement |
+| `graphforge.cloneFromHub` | `{ repository, destination, ref?, versionUuid?, open? }` | `{ repository, destination, immutableVersion, packageDigest, generationUuid, researchVersionUuid?, opened }` or `{ error, code, nextAction }` / `{ cancelled: true }` | None when `destination` is passed; palette and `vscode://` link calls prompt (the link confirms first) | Node binding with `gf clone` (v0.6.0+); runs Core in-process and never calls a Hub API (ADR-0005). Core's `hub.*` semantic codes pass through. Core qualifies durable engine-host volumes (Linux ext4/XFS/Btrfs, macOS APFS, Windows fixed local NTFS). Unproven filesystems warn with `GF_UNVERIFIED_FILESYSTEM` by default; `GRAPHFORGE_FILESYSTEM_DURABILITY=strict` returns `GF_UNSUPPORTED_FILESYSTEM` with host-specific guidance and nothing created. Broken durability primitives still refuse. In-memory sessions have no such requirement |
 | `graphforge.publishToHub` | `{ repository, ref? \| versionUuid?, projectPath?, confirm: true }` | `{ repository, refs, revision, previousRevision, manifestValidator, operationUuid, requestCommitment, previews: [], projectPath, coreVersion? }` or `{ error, code, nextAction }` / `{ cancelled: true }` | None for agent calls, which must pass `confirm: true` (`CONFIRMATION_REQUIRED` otherwise, like `applyProjectMutation`); the palette prompts for repository and Branch/Version, then shows a modal listing repository, selection, project, and producing Core version | Node binding with `gf publish` (v0.6.0+; older bindings return `PUBLISH_UNSUPPORTED`). Native data only; any `previews` entry returns `HUB_PUBLISH_PREVIEWS_UNAVAILABLE` until XYG static export (CurateLabs/xyg#935) ships. Core owns the credential: with no `GRAPHFORGE_HUB_PUBLISH_TOKEN` it returns `hub.publish.auth_denied` and its next action, passed through unchanged |
 | `graphforge.openSampleNotebook` | none | `{ path, projectPath, relativePath }` or `{ error, code, nextAction? }` | No | Opens the project-owned Python/Jupyter path for the active air-routes sample; absolute paths make the location explicit and it never installs packages or selects a kernel |
 | `graphforge.openSampleStreamlit` | none | `{ path, projectPath, relativePath, command }` or `{ error, code, nextAction? }` | No | Opens the portable Python/Streamlit dashboard source for the active air-routes sample; run the returned command to serve it outside VS Code |
@@ -224,6 +224,32 @@ fields are flattened into that same object:
 
 The command materializes every remaining choice into the saved XYG intent; it
 does not accept or infer a nested `bindings` object.
+
+### Taken permanent IDs during publish
+
+`graphforge.publishToHub` returns `hub.publish.id_taken` with Core's message and
+optional `actions`: `{ kind: "publishAsOwner", id, owner? }` or
+`{ kind: "regenerateId", id }`. An owner is included only when Core names it.
+Organization recovery is offered only for Core's authorization hint, before any
+other item's regeneration action. Core forbids regeneration for that hint.
+
+Programmatic publish calls never prompt or automatically mutate IDs. Interactive
+calls offer these actions. Regeneration requires a modal explaining the local
+reference rewrite and delegates to `gf ontology regenerate-id` with a fresh
+operation UUID and `--yes`. Only Core rewrites project files and validates the
+recorded refusal. Recovery requires Core's paired atomic Branch/head options
+(shipped in 0.6.0); an older loaded Core returns actionable upgrade guidance
+before mutation. Exact-Version recovery refuses without rewriting. Branch recovery
+reads Core status and passes its Branch UUID and head Version UUID as expectations;
+Core also requires its saved refusal to identify that exact head. The retry uses
+only the immutable replacement `version_uuid` returned by Core, even if a Branch
+advances afterward, and requires its own publication confirmation. Unknown or stale
+Core guidance remains visible without inventing an executable action.
+Concurrent publish calls are refused until the active flow's confirmations,
+recovery, and retry finish. Recovery never restores over a newer project request.
+If reopening fails after a successful rewrite, the failure reports the replacement
+ID and exact Version; it never prompts another regeneration or publishes automatically.
+A backend shutdown failure blocks later opens until the session is replaced.
 
 ## Recommended agent loop
 

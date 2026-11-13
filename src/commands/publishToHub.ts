@@ -8,9 +8,11 @@ import {
   buildHubPublishArgs,
   describePublishSelection,
   parsePublishSelection,
+  prepareHubPublishRetry,
   publishToHub,
   publishUnsupported,
   requirePublishConfirmation,
+  runHubPublishRegeneration,
   type HubPublishFailure,
   type HubPublishRequest,
   type HubPublishSuccess,
@@ -46,6 +48,7 @@ export type PublishToHubResult = HubPublishSuccess & {
 
 const TITLE = "GraphForge: Publish to Hub…";
 const PUBLISH = "Publish";
+const publishingSessions = new WeakSet<GraphForgeSession>();
 
 export function registerPublishToHub(
   context: vscode.ExtensionContext,
@@ -62,6 +65,19 @@ async function runPublishToHub(
   session: GraphForgeSession,
   args?: PublishToHubArgs,
 ): Promise<CommandOutcome<PublishToHubResult>> {
+  // Own the complete flow, including outstanding dialogs and any recovery
+  // retry. A second confirmation cannot straddle another call's regeneration.
+  if (publishingSessions.has(session)) return publishBusy(args === undefined);
+  publishingSessions.add(session);
+  try { return await publishWithSession(session, args); }
+  finally { publishingSessions.delete(session); }
+}
+
+async function publishWithSession(
+  session: GraphForgeSession,
+  args?: PublishToHubArgs,
+  retryRequest?: HubPublishRequest,
+): Promise<CommandOutcome<PublishToHubResult>> {
   // Palette calls pass no args and prompt; agents pass args and never prompt.
   const interactive = args === undefined;
   if (!isCliAvailable()) {
@@ -75,7 +91,7 @@ async function runPublishToHub(
     return reportFailure(publishUnsupported(), interactive);
   }
 
-  const projectPath = args?.projectPath ?? session.project?.rootPath;
+  const projectPath = retryRequest?.projectPath ?? args?.projectPath ?? session.project?.rootPath;
   if (!projectPath) {
     return reportFailure({
       error: "Open the GraphForge project to publish first.",
@@ -87,7 +103,7 @@ async function runPublishToHub(
 
   let request: HubPublishRequest;
   if (interactive) {
-    const prompted = await promptForRequest(projectPath);
+    const prompted = retryRequest ?? await promptForRequest(projectPath);
     if (!prompted) {
       return { cancelled: true };
     }
@@ -132,6 +148,9 @@ async function runPublishToHub(
     };
   }
   if (isHubCloneFailure(outcome)) {
+    if (interactive && outcome.actions?.length) {
+      return recoverPublishFailure(session, request, outcome);
+    }
     return reportFailure(outcome, interactive);
   }
   if (interactive) {
@@ -140,6 +159,107 @@ async function runPublishToHub(
     );
   }
   return { ...outcome, projectPath, ...(coreVersion ? { coreVersion } : {}) };
+}
+
+async function recoverPublishFailure(
+  session: GraphForgeSession,
+  request: HubPublishRequest,
+  failure: HubPublishFailure,
+): Promise<CommandOutcome<PublishToHubResult>> {
+  const recoveryTransition = session.projectTransitionVersion;
+  try {
+    const actions = failure.actions ?? [];
+    const labels = actions.map(action =>
+      (action.kind === "publishAsOwner" ? "Publish as the owning organization" : "Regenerate the ID") +
+      (actions.length > 1 ? ` (${action.id})` : ""),
+    );
+    const selected = await vscode.window.showErrorMessage(`GraphForge: ${failure.error}`, ...labels);
+    const action = selected === undefined ? undefined : actions[labels.indexOf(selected)];
+    if (!action) return failure;
+    const retry = await prepareHubPublishRetry(action, request, {
+      chooseOwnerRepository: async suggested => vscode.window.showInputBox({
+        title: TITLE,
+        prompt: "Repository in the owning organization Core authorized. Core handles your publish identity.",
+        ...(suggested ? { value: suggested } : {}),
+        placeHolder: "organization/repository",
+        validateInput: value => parseHubRepository(value) ? undefined : "Use owner/repository or a graphforge.sh URL.",
+      }),
+      confirmRegenerate: async id => {
+        const choice = await vscode.window.showWarningMessage(
+          `Regenerate ${id}?`,
+          { modal: true, detail:
+            `Core will create a new permanent ID and rewrite this project's references locally in a new Version.\n\n` +
+            `Project: ${request.projectPath}\n\nThis does not publish anything.`,
+          },
+          "Regenerate the ID",
+        );
+        return choice === "Regenerate the ID";
+      },
+      runCli: async argv => {
+        if (session.projectTransitionVersion !== recoveryTransition)
+          throw new Error("The active project changed. Publish again before regenerating.");
+        // A CLI write needs its own native handle. Release our writer and stale
+        // results first, then reopen the committed project even after refusal.
+        const wasOpen = session.project?.rootPath === request.projectPath;
+        const writeMode = session.writeMode;
+        let canRestore = true;
+        let result: ReturnType<typeof runHubPublishRegeneration>;
+        let reopenError: string | undefined;
+        let restorationVersion: number | undefined;
+        try {
+          if (wasOpen || !session.project) {
+            const closing = session.closeProject();
+            restorationVersion = session.projectTransitionVersion;
+            try { await closing; }
+            catch (error) {
+              canRestore = (error as { code?: unknown } | undefined)?.code !== "PYTHON_SHUTDOWN_UNCONFIRMED";
+              throw error;
+            }
+          }
+          if ((restorationVersion !== undefined && session.projectTransitionVersion !== restorationVersion) ||
+              (wasOpen && session.project)) {
+            throw new Error("The active project changed. Publish again before regenerating.");
+          }
+          result = runHubPublishRegeneration(request, argv, runGraphForgeCli);
+        } finally {
+          if (wasOpen && canRestore && !session.project && session.projectTransitionVersion === restorationVersion) {
+            try { await session.openProject(request.projectPath, writeMode); }
+            catch (error) {
+              logErrorDetail("reopening after ID regeneration failed", error);
+              reopenError = error instanceof Error ? error.message : String(error);
+            }
+          }
+        }
+        return { ...result, ...(reopenError !== undefined ? { reopenError } : {}) };
+      },
+    });
+    if ("cancelled" in retry) return retry;
+    if (isHubCloneFailure(retry)) return reportFailure(retry, true);
+    if (action.kind === "regenerateId") {
+      const choice = await vscode.window.showInformationMessage(
+        "GraphForge: Core regenerated the ID and its local references. Publish the replacement Version when ready.",
+        "Publish Again",
+      );
+      if (choice !== "Publish Again") return { cancelled: true };
+    }
+    // A fresh normal publish confirmation still gates the external write.
+    return publishWithSession(session, undefined, retry);
+  } catch (error) {
+    logErrorDetail("publish recovery failed", error);
+    return reportFailure({
+      error: error instanceof Error ? error.message : "GraphForge publish recovery failed.",
+      code: "HUB_PUBLISH_RECOVERY_FAILED",
+      nextAction: "Check the project state and publish again.",
+    }, true);
+  }
+}
+
+function publishBusy(interactive: boolean): HubPublishFailure {
+  return reportFailure({
+    error: "A publish or recovery is already in progress for this session.",
+    code: "HUB_PUBLISH_RECOVERY_BUSY",
+    nextAction: "Wait for the current publish or recovery to finish before publishing again.",
+  }, interactive);
 }
 
 async function promptForRequest(projectPath: string): Promise<HubPublishRequest | undefined> {

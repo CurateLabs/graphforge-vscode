@@ -64,7 +64,15 @@ exports.run = async function run() {
       assert.ok(fs.statSync(parentDir).isDirectory(), `${label} parent is missing`);
       const rejectedDestination = path.join(parentDir, `graphforge-qualification-${process.pid}`);
       assert.equal(fs.existsSync(rejectedDestination), false);
-      const rejected = await command("graphforge.cloneFromHub", { repository: "opendata/openalex", destination: rejectedDestination });
+      const previousPolicy = process.env.GRAPHFORGE_FILESYSTEM_DURABILITY;
+      let rejected;
+      process.env.GRAPHFORGE_FILESYSTEM_DURABILITY = "strict";
+      try {
+        rejected = await command("graphforge.cloneFromHub", { repository: "opendata/openalex", destination: rejectedDestination });
+      } finally {
+        if (previousPolicy === undefined) delete process.env.GRAPHFORGE_FILESYSTEM_DURABILITY;
+        else process.env.GRAPHFORGE_FILESYSTEM_DURABILITY = previousPolicy;
+      }
       assert.equal(rejected.code, "GF_UNSUPPORTED_FILESYSTEM", `${label}: ${JSON.stringify(rejected)}`);
       assert.match(rejected.error, /GF_UNSUPPORTED_FILESYSTEM/);
       assert.match(rejected.nextAction, /ext4, XFS, or Btrfs/);
@@ -85,7 +93,18 @@ exports.run = async function run() {
         assert.equal(report.filesystems.destinationParent, 0xef53);
         assert.notEqual(report.filesystems.root, report.filesystems.destinationParent);
       }
-      report.unsupportedStorage = { tmpfs: await rejectIn("/dev/shm", "tmpfs") };
+      assert.equal(process.env.GRAPHFORGE_FILESYSTEM_DURABILITY, undefined, "Default warning policy must be unset");
+      const unverified = path.join("/dev/shm", `graphforge-warning-${process.pid}`);
+      assert.equal(fs.existsSync(unverified), false);
+      try {
+        const admitted = await command("graphforge.cloneFromHub", { repository: "opendata/openalex", destination: unverified });
+        assert.equal(admitted.destination, unverified, JSON.stringify(admitted));
+        assert.ok(admitted.warnings?.some(warning => warning.code === "GF_UNVERIFIED_FILESYSTEM"), "Default unproven storage must carry Core's warning");
+        report.unverifiedStorage = { tmpfs: admitted };
+      } finally {
+        fs.rmSync(unverified, { recursive: true, force: true });
+      }
+      report.unsupportedStorage = { policy: "strict", tmpfs: await rejectIn("/dev/shm", "tmpfs") };
       const bindMount = process.env.GRAPHFORGE_QUALIFICATION_REJECT_BIND;
       if (bindMount) {
         report.filesystems.bindMount = fs.statfsSync(bindMount).type;
@@ -111,6 +130,8 @@ exports.run = async function run() {
     report.nodeCount = String(first.rows[0].nodes);
     report.reopenedNodeCount = String(second.rows[0].nodes);
     assert.equal((await command("graphforge.closeProject")).closed, true);
+    const fixture = process.env.GRAPHFORGE_QUALIFICATION_RECOVERY_FIXTURE;
+    if (fixture) report.publishRecovery = await require("./qualify-hub-publish-recovery.cjs").run({ vscode, binding, root, fixture });
     report.status = "passed";
   } catch (error) {
     report.status = "failed";
@@ -124,7 +145,7 @@ exports.run = async function run() {
 async function main() {
   const vsix = path.resolve(process.argv[2] ?? "graphforge-ci.vsix");
   const evidence = path.resolve(process.argv[3] ?? "hub-clone-evidence");
-  const coreVersion = "0.6.0-rc.5";
+  const coreVersion = require("../package.json").dependencies["@curatelabs/graphforge"];
   const vscodeVersion = "1.142.0";
   assert.ok(fs.statSync(vsix).isFile(), "Pass an existing packaged VSIX");
   assert.ok(process.env.npm_execpath, "Run through npm run qualify:hub-clone -- <vsix> <evidence-directory>");
@@ -142,7 +163,7 @@ async function main() {
   };
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   try {
-    // Install the real public candidate outside the source checkout. No saved dependency edits.
+    // Install the exact public dependency pin outside the source checkout. No saved dependency edits.
     execFileSync(process.execPath, [process.env.npm_execpath, "install", "--prefix", path.join(root, "binding"), "--no-package-lock", "--no-save", "--no-audit", "--no-fund", `@curatelabs/graphforge@${coreVersion}`], { stdio: "inherit" });
     const { downloadAndUnzipVSCode, runTests } = require("@vscode/test-electron");
     const downloadOptions = { version: vscodeVersion };
