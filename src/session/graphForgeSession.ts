@@ -145,6 +145,11 @@ export class GraphForgeSession implements vscode.Disposable {
     return this.activeProject;
   }
 
+  /** Latest open/close request, including queued transitions with no active project yet. */
+  get projectTransitionVersion(): number {
+    return this.attachmentVersion;
+  }
+
   /** Runtime actually backing the open session, if any (#12). */
   get activeRuntime(): RuntimeKind | undefined {
     return this.backend?.runtime;
@@ -1766,7 +1771,8 @@ export class GraphForgeSession implements vscode.Disposable {
     }
 
     const snapshot = await this.environmentSnapshot();
-    if (this.disposed || attachment !== this.attachmentVersion) return;
+    if (this.disposed || attachment !== this.attachmentVersion ||
+        project !== this.activeProject || backend !== this.backend) return;
     const usable =
       chooseRuntime(
         snapshot.preference,

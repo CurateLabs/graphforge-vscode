@@ -1,4 +1,7 @@
 import * as assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { registerPublishToHub } from "../commands/publishToHub";
 import { loadGraphForgeModule } from "../session/nativeLoader";
@@ -19,6 +22,7 @@ suite("Publish recovery command wiring (#103)", () => {
   let regenerationFails: boolean;
   let reopenFails: boolean;
   let closeFailureCode: string | undefined;
+  let changeProjectDuringConfirmation: boolean;
 
   setup(() => {
     restore = [];
@@ -29,6 +33,7 @@ suite("Publish recovery command wiring (#103)", () => {
     regenerationFails = false;
     reopenFails = false;
     closeFailureCode = undefined;
+    changeProjectDuringConfirmation = false;
     owner = false;
     cancelled = false;
     guidance = `${id} is taken; run gf ontology regenerate-id ${id}`;
@@ -79,6 +84,7 @@ suite("Publish recovery command wiring (#103)", () => {
         events.push("confirm regeneration");
         assert.match(options.detail, /rewrite this project's references locally/);
         assert.match(options.detail, /\/work\/project/);
+        if (changeProjectDuringConfirmation) session.projectTransitionVersion++;
         return cancelled ? undefined : action;
       }
       events.push("confirm publish");
@@ -88,8 +94,9 @@ suite("Publish recovery command wiring (#103)", () => {
     replace(vscode.window, "showInformationMessage", async (_message: string, action?: string) => action);
     const session = {
       writeMode: "queued_writer",
+      projectTransitionVersion: 0,
       project: { rootPath: "/work/project" } as { rootPath: string } | undefined,
-      closeProject: async () => { events.push("close"); session.project = undefined; if (closeFailureCode) throw Object.assign(new Error("close failed"), { code: closeFailureCode }); },
+      closeProject: async () => { session.projectTransitionVersion++; events.push("close"); session.project = undefined; if (closeFailureCode) throw Object.assign(new Error("close failed"), { code: closeFailureCode }); },
       openProject: async (rootPath: string, writeMode: string) => { assert.equal(writeMode, "queued_writer"); events.push("reopen"); if (reopenFails) throw new Error("reopen refused"); session.project = { rootPath }; },
     };
     registerPublishToHub({ subscriptions: [] } as unknown as vscode.ExtensionContext, session as unknown as GraphForgeSession);
@@ -211,6 +218,60 @@ suite("Publish recovery command wiring (#103)", () => {
       release();
       assert.equal((await pending).repository, "alice/demo");
     } finally { release(); await pending; real.dispose(); }
+  });
+
+  test("a second publish cannot cross an outstanding publish confirmation", async () => {
+    const original = vscode.window.showWarningMessage;
+    let release!: () => void;
+    let started!: () => void;
+    const confirming = new Promise<void>(resolve => { started = resolve; });
+    let first = true;
+    (vscode.window as any).showWarningMessage = async (...args: any[]) => {
+      if (first) {
+        first = false; started(); await new Promise<void>(resolve => { release = resolve; });
+      }
+      return (original as any)(...args);
+    };
+    const pending = command();
+    try {
+      await confirming;
+      const second = await command({ repository: "alice/demo", ref: "main", confirm: true });
+      assert.equal(second.code, "HUB_PUBLISH_RECOVERY_BUSY");
+      assert.equal(calls.length, 0, "do not publish or recover under another outstanding confirmation");
+    } finally { release(); await pending; (vscode.window as any).showWarningMessage = original; }
+  });
+
+  test("a newer project request during the regeneration dialog cancels stale recovery", async () => {
+    changeProjectDuringConfirmation = true;
+    const result = await command();
+    assert.equal(result.code, "HUB_PUBLISH_RECOVERY_FAILED");
+    assert.equal(calls.length, 1);
+    assert.deepEqual(events, ["confirm publish", "confirm regeneration"]);
+  });
+
+  test("recovery shutdown preserves a later request to open another project", async () => {
+    const real = new GraphForgeSession();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gf-recovery-transition-"));
+    let release!: () => void, started!: () => void;
+    const closing = new Promise<void>(resolve => { started = resolve; });
+    const state = real as unknown as { activeProject: { rootPath: string } | undefined; backend: unknown };
+    state.activeProject = { rootPath: "/work/project" };
+    state.backend = { dispose: () => { started(); return new Promise<void>(resolve => { release = resolve; }); } };
+    let restored = false;
+    const originalOpen = real.openProject.bind(real);
+    real.openProject = async (...args) => { restored = true; return originalOpen(...args); };
+    registerPublishToHub({ subscriptions: [] } as unknown as vscode.ExtensionContext, real);
+    const pending = command();
+    try {
+      await closing;
+      const opening = real.initializeProject(root);
+      release();
+      const [result] = await Promise.all([pending, opening]);
+      assert.equal(result.code, "HUB_PUBLISH_RECOVERY_FAILED");
+      assert.equal(real.project?.rootPath, root);
+      assert.equal(restored, false, "recovery cannot supersede the newer open");
+      assert.ok(!events.includes("regenerate"));
+    } finally { release(); await pending; await real.closeProject(); real.dispose(); fs.rmSync(root, { recursive: true, force: true }); }
   });
 
   test("Core refusal retains its code when reopening also fails", async () => {

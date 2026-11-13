@@ -216,6 +216,23 @@ suite("GraphForgeSession lifecycle ordering", () => {
     assert.equal(session.project, undefined);
   });
 
+  test("an empty-session status snapshot cannot overwrite the newly attached project", async () => {
+    const snapshot = await session.environmentSnapshot();
+    (session as unknown as { activeProject: unknown }).activeProject = undefined;
+    let release!: () => void;
+    session.environmentSnapshot = () => new Promise(resolve => { release = () => resolve(snapshot); });
+    const internals = session as unknown as { refreshStatusAsync(): Promise<void>; statusBar: { text: string } };
+    const stale = internals.refreshStatusAsync();
+    injectForge(session, makeStubForge());
+    injectCapabilities(session, []);
+    await internals.refreshStatusAsync();
+    const expected = internals.statusBar.text;
+    release(); await stale;
+    assert.equal(internals.statusBar.text, expected);
+    assert.match(expected, /fake-project/);
+    await session.closeProject();
+  });
+
   test("preparation failure preserves the current backend and project", async () => {
     let disposals = 0;
     (session as unknown as { backend: EngineBackend }).backend = backend(async () => { disposals++; });

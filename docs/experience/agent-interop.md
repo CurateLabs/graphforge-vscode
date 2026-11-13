@@ -245,7 +245,8 @@ Core also requires its saved refusal to identify that exact head. The retry uses
 only the immutable replacement `version_uuid` returned by Core, even if a Branch
 advances afterward, and requires its own publication confirmation. Unknown or stale
 Core guidance remains visible without inventing an executable action.
-Concurrent publish recovery is refused until close, mutation, and reopen finish.
+Concurrent publish calls are refused until the active flow's confirmations,
+recovery, and retry finish. Recovery never restores over a newer project request.
 If reopening fails after a successful rewrite, the failure reports the replacement
 ID and exact Version; it never prompts another regeneration or publishes automatically.
 A backend shutdown failure blocks later opens until the session is replaced.
