@@ -628,8 +628,8 @@
   "dependencies": {
     "@curatelabs/graphforge": "0.6.0",
     "apache-arrow": "^21.2.0",
-    "semver": "^7.8.5",
-    "koffi": "3.1.4"
+    "semver": "^7.8.6",
+    "koffi": "3.3.7"
   },
   "peerDependencies": {
     "@curatelabs/graphforge-cli": "^0.6.0-rc.5"
@@ -642,16 +642,16 @@
   "devDependencies": {
     "@codspeed/tinybench-plugin": "^5.7.1",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.6.6",
     "@types/semver": "^7.8.0",
-    "@types/vscode": "^1.96.0",
+    "@types/vscode": "^1.145.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.3.2",
     "mocha": "^11.8.0",
     "tinybench": "^5.1.0",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1",
+    "vite": "^8.3.7",
     "yauzl": "3.4.0",
     "yazl": "2.5.1"
   }
