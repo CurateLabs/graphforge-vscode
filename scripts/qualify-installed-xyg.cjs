@@ -63,7 +63,7 @@ async function main() {
   const reportPath = path.join(evidence, "installed.json");
   const report = {
     status: "running", sourceHead: process.env.GITHUB_SHA ?? execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
-    vsixSha256: createHash("sha256").update(fs.readFileSync(vsix)).digest("hex"), requestedCore: "0.6.0-rc.7",
+    vsixSha256: createHash("sha256").update(fs.readFileSync(vsix)).digest("hex"), requestedCore: require("../package.json").dependencies["@curatelabs/graphforge"],
     scope: "Clean installed local desktop VSIX: real Core, Arrow persistence, canonical edit/reopen, four views, exports and explicit temporal limit, themes, reduced motion, resize, retained views; not a screen-reader certification or remote-host proof",
   };
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
