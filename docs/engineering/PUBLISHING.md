@@ -183,8 +183,11 @@ a `v*` tag push or a manual `workflow_dispatch` (`dry_run`, default `true`):
 3. **`release-set`**: downloads all five, runs `verify-release-vsix.mjs` over the set, and
    uploads them together as artifact `graphforge-release-vsix`. If any target failed or is
    missing, this job (and so publishing) never runs.
-4. **`publish`**: only for a tag push or `dry_run: false`. Uses the GitHub `production`
-   environment. It re-verifies the set, then publishes every VSIX to Open VSX with
+4. **`publish`**: runs every time and uses the GitHub `production` environment. It re-verifies
+   the set, signs in to Pulumi with GitHub OIDC, opens the ESC environment and asks Open VSX
+   whether `OVSX_PAT` may publish to the publisher namespace (`ovsx verify-pat`). A failure at any
+   of those fails the job, in a dry run too, so a broken credential is found before a tag exists.
+   Only for a tag push or `dry_run: false` does it then publish every VSIX to Open VSX with
    `ovsx publish --skip-duplicate` (pinned `ovsx` version). A target Open VSX already has for this
    version (`... is already published.`) counts as done for that target only. Any other failure
    fails the job after every target has been attempted, and re-running the job finishes the rest.
@@ -245,10 +248,10 @@ Pulumi ESC environment, not as a long-lived GitHub Actions secret:
   per the hardening recommendation on issue #20 — if a `PULUMI_ACCESS_TOKEN` secret still
   exists on the repo, it is stale and should be deleted.
 
-If the OIDC trust isn't configured yet, the ESC environment doesn't exist, or it doesn't define
-`OVSX_PAT`, the `publish` job logs a warning and skips the Open VSX publish instead of failing —
-the `release-set` artifact is still produced. This lets the workflow merge and run safely before
-the one-time setup below is done.
+If the OIDC trust isn't configured, the ESC environment doesn't exist, it doesn't define
+`OVSX_PAT`, or Open VSX rejects the token, the `publish` job fails with an error naming which one —
+in dry runs as well. The `release-set` artifact is still produced. (Until 0.2.0 this case only
+logged a warning, and the v0.1.3 tag run reported success without publishing.)
 
 ### One-time setup for David
 
@@ -323,7 +326,8 @@ In order, for version `X.Y.Z`:
    ```
 
    Confirm all five `Package and qualify (<target>)` jobs and `Verify complete release set` pass,
-   and that `publish` was skipped. The job summary lists each file with its `TargetPlatform`.
+   and that `Publish to Open VSX` passed its credential checks with its `Publish Open VSX via Pulumi
+   ESC` step skipped. The job summary lists each file with its `TargetPlatform`.
 3. **Create the GitHub release and tag** `vX.Y.Z` on that `main` commit (by hand, as before; for
    example `gh release create vX.Y.Z --target <sha> --title "GraphForge for VS Code X.Y.Z"
    --notes-file <notes>`). The tag push starts `Publish Open VSX`. It re-runs everything and,
@@ -346,5 +350,5 @@ In order, for version `X.Y.Z`:
    published.
 7. Work through the post-publish checklist above on at least one platform per OS.
 
-A plain dry run with `dry_run: true` never touches Open VSX, and the Azure pipeline with the default
+A plain dry run with `dry_run: true` publishes nothing to Open VSX (it only verifies the token), and the Azure pipeline with the default
 `publish: false` never touches the Marketplace.
