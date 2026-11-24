@@ -6,6 +6,10 @@ updates:
       interval: weekly
     target-branch: main
     open-pull-requests-limit: 5
+    ignore:
+      # vsce rejects @types/vscode newer than engines.vscode; bump both together by hand.
+      - dependency-name: "@types/vscode"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     groups:
       npm-minor-patch:
         applies-to: version-updates
