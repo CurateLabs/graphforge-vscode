@@ -79,8 +79,10 @@ The one-time setup sequence is:
 5. Open **Security** for the service connection. Keep **Open access** disabled and authorize only
    the `CurateLabs.graphforge-vscode` YAML pipeline. Keep the service connection shared only with
    the current `GraphForge` project.
-6. Run the Azure pipeline with its `publish` parameter left at the default `false`. It installs,
-   type-checks, tests, builds, packages a dependency-free VSIX, and runs this identity lookup:
+6. Run the Azure pipeline with its `publish` parameter left at the default `false`. It downloads
+   and verifies the release VSIXs for the `package.json` version from the GitHub release (so that
+   release must already carry them; see [Release steps](#release-steps)), then runs this identity
+   lookup:
 
    ```bash
    az rest --method get \
@@ -111,40 +113,49 @@ For recovery or rotation, recreate the managed identity/service-connection feder
 default bootstrap flow to obtain the new Marketplace resource ID, replace the publisher member,
 then verify pipeline-only access and branch control before enabling a publish.
 
-## Package
+## Platform-targeted packages
+
+Every VSIX bundles the native Core and XYG binaries of the machine that packaged it
+(`scripts/package-extension.mjs` passes `vsce package --target <process.platform>-<process.arch>`).
+A release therefore ships **one platform-targeted VSIX per supported platform**, each built on a
+matching native runner:
+
+| Target | GitHub runner |
+| --- | --- |
+| `linux-x64` | `blacksmith-4vcpu-ubuntu-2404` |
+| `linux-arm64` | `ubuntu-24.04-arm` |
+| `darwin-arm64` | `macos-15` |
+| `darwin-x64` | `macos-15-intel` |
+| `win32-x64` | `windows-latest` |
+
+These are the same runners and packaging path as the `Packaged XYG (<platform>)` jobs in
+`.github/workflows/xyg-qualification.yml`. VS Code and Open VSX serve each user the VSIX for their
+platform. **No universal (untargeted) VSIX is ever published**: it would carry one platform's
+native code to every platform. `scripts/verify-release-vsix.mjs` is the guard. Given a directory,
+it requires exactly `graphforge-<target>.vsix` for all five targets, and checks that each one:
+
+- declares that exact `TargetPlatform` in `extension.vsixmanifest`;
+- has this checkout's `CurateLabsAI.graphforge` id and `package.json` version;
+- contains that target's native Core, XYG and koffi binaries and no other target's.
+
+With `--target <t>` it checks a single build. Both publishing pipelines run it immediately before
+publishing anything.
+
+## Local package
 
 ```bash
 npm ci
 npm run check && npm run compile && npm test
-npx vsce package
+npm run verify:package
+npm run package -- --no-dependencies -o ../graphforge-<platform>.vsix
 ```
 
-This produces `graphforge-<version>.vsix` at the repo root. Run `npm run verify:package` before
-packaging. It fails when required runtime or sample files are absent, the file/size budget is
-exceeded, or the package contains test, source, documentation, agent, or internal review paths.
-Never publish a locally built VSIX that has not passed this contract.
+This builds the VSIX for the local machine's platform only. Write it outside the worktree
+(`verify:package` counts every file in the worktree). Never publish a locally built VSIX. Releases
+are published only from the pipelines below.
 
-`.github/workflows/ci.yml`'s `package` job already runs `npx vsce package --no-dependencies` as
-a packaging gate on every PR/push to `main` (see `TESTING.md`) and uploads the `.vsix` as a
-build artifact — it does **not** publish. Marketplace and Open VSX publishing are deliberately
-separate: Azure Pipelines publishes the Marketplace from `main` with federated identity, while
-the GitHub release workflow publishes Open VSX from a release tag or manual dispatch.
-
-## Publish
-
-```bash
-# Visual Studio Marketplace
-# Run the Azure DevOps "CurateLabs.graphforge-vscode" pipeline from approved main.
-# The pipeline uses the graphforge-marketplace-publishing service connection.
-npx vsce package --no-dependencies --out graphforge-marketplace.vsix
-npx vsce publish --packagePath graphforge-marketplace.vsix --azure-credential
-
-# Open VSX
-npx ovsx publish graphforge-<version>.vsix --pat "$OVSX_PAT"
-```
-
-Bump `version` in `package.json` (semver) before each publish; `vsce`/`ovsx` both reject
-republishing an existing version.
+`.github/workflows/ci.yml`'s `package` job runs `npm run package -- --no-dependencies` as a
+packaging gate on every PR/push to `main` (see `TESTING.md`) and does **not** publish.
 
 ## Post-publish checklist
 
@@ -160,23 +171,50 @@ republishing an existing version.
 
 ## Release publishing
 
-`azure-pipelines.yml` owns Visual Studio Marketplace publishing. It has no push or PR triggers;
-run it manually from approved `main` after the PR is merged and the version has been bumped. It
-defaults to a package-only bootstrap run, which prints the managed identity's Marketplace resource
-ID; add that identity as a publisher Contributor once. Select `publish: true` only for an approved
-release. The service connection's branch-control check is the authorization boundary.
+`.github/workflows/publish.yml` builds every release VSIX and owns Open VSX publishing. It runs on
+a `v*` tag push or a manual `workflow_dispatch` (`dry_run`, default `true`):
 
-`.github/workflows/publish.yml` owns Open VSX publishing. It has two jobs:
+1. **`check`** (once, Linux): a tag push fails unless `vX.Y.Z` exactly matches `package.json`.
+   Then `npm ci`, type check, compile and unit tests.
+2. **`package`** (matrix, one job per target on its native runner, see the table above): asserts
+   the host is the expected platform, compiles, runs `verify:package`, packages
+   `graphforge-<target>.vsix`, runs `verify-release-vsix.mjs --target <target>`, qualifies the
+   installed package (`qualify:xyg:installed`), and uploads artifact `graphforge-vsix-<target>`.
+3. **`release-set`**: downloads all five, runs `verify-release-vsix.mjs` over the set, and
+   uploads them together as artifact `graphforge-release-vsix`. If any target failed or is
+   missing, this job (and so publishing) never runs.
+4. **`publish`**: only for a tag push or `dry_run: false`. Uses the GitHub `production`
+   environment. It re-verifies the set, then publishes every VSIX to Open VSX with
+   `ovsx publish --skip-duplicate` (pinned `ovsx` version). A target Open VSX already has for this
+   version (`... is already published.`) counts as done for that target only. Any other failure
+   fails the job after every target has been attempted, and re-running the job finishes the rest.
 
-1. **`build`** — always runs on `push` of a `v*` tag or manual `workflow_dispatch`. Runs
-   `npm ci`, type checks, unit tests, the Extension Development Host suite, the package-content
-   contract, and `vsce package`, then uploads the `.vsix` as a workflow artifact. A tag build
-   also fails unless `vX.Y.Z` exactly matches `package.json`.
-2. **`publish`** — runs after `build` when triggered by a `v*` tag push, or by
-   `workflow_dispatch` with `dry_run: false`. Uses the GitHub `production` environment for
-   optional required-reviewer protection and publishes only to Open VSX.
+`azure-pipelines.yml` owns Visual Studio Marketplace publishing and **does not build**.
+Microsoft-hosted Azure Pipelines agents have no Linux arm64 image, and their only macOS arm64
+image (macOS 15 Sequoia ARM64) is a paused limited preview. The standard macOS images run on Intel
+hardware ([Microsoft-hosted agents](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/hosted),
+checked 2026-11-24). So `linux-arm64` and `darwin-arm64` cannot be built natively there, and
+cross-packaging would mean shipping native code that was never run on its platform. The pipeline
+therefore:
 
-Both jobs run on Blacksmith's `blacksmith-4vcpu-ubuntu-2404` runner label, matching the other
+1. reads the version from `package.json` on the approved `main` it runs from;
+2. downloads `graphforge-<target>.vsix` for all five targets from the GitHub release `v<version>`
+   (public assets, no GitHub token);
+3. runs `verify-release-vsix.mjs` over them;
+4. with `publish: false` (the default), runs the identity lookup and stops. With `publish: true`,
+   it publishes each VSIX with `vsce publish --packagePath <vsix> --azure-credential
+   --skip-duplicate`, attempts every target, and fails naming any that did not publish.
+
+The Marketplace and Open VSX therefore ship byte-identical, natively built and qualified packages.
+The pipeline has no push or PR triggers. The service connection's branch-control check is the
+authorization boundary.
+
+GitHub releases are created by hand, as v0.1.3 was: a maintainer created the release and tag
+together, and the release has no assets. No workflow creates releases or uploads to them. Attaching
+the VSIXs is a manual release step (below), and the Marketplace pipeline depends on it.
+
+The Linux x64 jobs run on Blacksmith's `blacksmith-4vcpu-ubuntu-2404` runner label (the other
+platform jobs use GitHub-hosted runners), matching the other
 CurateLabs repos (`startops-nextjs`, etc.). **Blacksmith has no separate "linked publishing"
 product** — linking is just installing the Blacksmith GitHub App for the `CurateLabs` org at
 [app.blacksmith.sh](https://app.blacksmith.sh) so `runs-on: blacksmith-*` labels resolve to
@@ -209,7 +247,7 @@ Pulumi ESC environment, not as a long-lived GitHub Actions secret:
 
 If the OIDC trust isn't configured yet, the ESC environment doesn't exist, or it doesn't define
 `OVSX_PAT`, the `publish` job logs a warning and skips the Open VSX publish instead of failing —
-the `build` job's artifact is still produced. This lets the workflow merge and run safely before
+the `release-set` artifact is still produced. This lets the workflow merge and run safely before
 the one-time setup below is done.
 
 ### One-time setup for David
@@ -272,15 +310,41 @@ the one-time setup below is done.
 5. **Never** print `OVSX_PAT` (or any Pulumi token) values in logs, PRs, or issues —
    only secret *names* and the ESC environment *path* should ever appear in this repo.
 
-### Triggering a release
+### Release steps
 
-- **Open VSX automatic:** push a `vX.Y.Z` tag matching the `package.json` version. The `build`
-  job packages, and `publish` runs immediately after (gated only by the `production`
-  environment's protection rules, if any).
-- **Open VSX manual dry run:** run the `Publish Open VSX` workflow via `workflow_dispatch` with
-  `dry_run: true` (the default) to exercise `check`/`compile`/`test:unit`/`vsce package` and
-  download the `.vsix` artifact without touching Open VSX.
-- **Marketplace manual publish:** merge the version bump, then run the Azure DevOps pipeline from
-  approved `main`. The first default run prints the managed identity resource ID for the one-time
-  Publisher Contributor assignment. For a release, select `publish: true`; the service connection
-  branch control must pass before `vsce publish --azure-credential` can run.
+In order, for version `X.Y.Z`:
+
+1. **Merge the version bump** (`package.json` version and `CHANGELOG.md`) to `main`, and wait for
+   `CI` and `XYG qualification` to pass on that `main` commit.
+2. **Dry run (recommended):** run `Publish Open VSX` from `main` with `dry_run: true`:
+
+   ```bash
+   gh workflow run publish.yml --ref main -f dry_run=true
+   ```
+
+   Confirm all five `Package and qualify (<target>)` jobs and `Verify complete release set` pass,
+   and that `publish` was skipped. The job summary lists each file with its `TargetPlatform`.
+3. **Create the GitHub release and tag** `vX.Y.Z` on that `main` commit (by hand, as before; for
+   example `gh release create vX.Y.Z --target <sha> --title "GraphForge for VS Code X.Y.Z"
+   --notes-file <notes>`). The tag push starts `Publish Open VSX`. It re-runs everything and,
+   after `production` environment approval if one is configured, publishes all five targets to
+   Open VSX.
+4. **If `publish` fails part-way, re-run the failed `publish` job.** Already-published targets are
+   skipped, and a failure never comes from a partial build because the set was verified first.
+5. **Attach the verified VSIXs to the release**, from that tag run:
+
+   ```bash
+   run=$(gh run list --workflow publish.yml --branch vX.Y.Z --event push --limit 1 --json databaseId --jq '.[0].databaseId')
+   gh run download "$run" --name graphforge-release-vsix --dir ../release-vX.Y.Z
+   node scripts/verify-release-vsix.mjs ../release-vX.Y.Z
+   gh release upload vX.Y.Z ../release-vX.Y.Z/graphforge-*.vsix
+   ```
+
+6. **Marketplace:** run the Azure DevOps pipeline from approved `main` (still at the tagged commit,
+   or at least the same `package.json` version) with `publish: true`. It downloads those five
+   release assets, verifies them, and publishes each one. A re-run skips targets that are already
+   published.
+7. Work through the post-publish checklist above on at least one platform per OS.
+
+A plain dry run with `dry_run: true` never touches Open VSX, and the Azure pipeline with the default
+`publish: false` never touches the Marketplace.

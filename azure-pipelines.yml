@@ -1,6 +1,19 @@
 trigger: none
 pr: none
 
+# Visual Studio Marketplace publishing. This pipeline does not build.
+#
+# Each VSIX bundles native Core and XYG binaries for the machine that packages
+# it, so every release target must be built on a matching native machine.
+# Microsoft-hosted Azure Pipelines agents have no Linux arm64 image and no
+# generally available macOS arm64 image, so two of the five targets cannot be
+# built natively here. Instead, .github/workflows/publish.yml builds, qualifies
+# and verifies all five platform VSIXs on native GitHub runners, a maintainer
+# attaches them to the GitHub release for the tag, and this pipeline downloads
+# exactly those files for the package.json version on approved main, re-runs
+# the same release-set guard, and publishes them. Open VSX and the Marketplace
+# therefore ship byte-identical packages. See docs/engineering/PUBLISHING.md.
+
 parameters:
 - name: publish
   displayName: Publish to Visual Studio Marketplace
@@ -16,20 +29,23 @@ steps:
   inputs:
     version: 20.x
 
-- script: npm ci
-  displayName: Install dependencies
+- script: npm ci --ignore-scripts
+  displayName: Install vsce and the release guard
 
-- script: npm run check
-  displayName: Type-check extension
+- script: |
+    set -euo pipefail
+    version="$(node -p 'require("./package.json").version')"
+    dir="$(Agent.TempDirectory)/release-vsix"
+    mkdir -p "$dir"
+    for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+      url="https://github.com/CurateLabs/graphforge-vscode/releases/download/v$version/graphforge-$target.vsix"
+      echo "Downloading $url"
+      curl --fail --silent --show-error --location --retry 3 --output "$dir/graphforge-$target.vsix" "$url"
+    done
+  displayName: Download release VSIXs from the GitHub release
 
-- script: npm run test:unit
-  displayName: Run unit tests
-
-- script: npm run compile
-  displayName: Build extension
-
-- script: npx --no-install vsce package --no-dependencies --out graphforge-marketplace.vsix
-  displayName: Package Marketplace VSIX
+- script: node scripts/verify-release-vsix.mjs "$(Agent.TempDirectory)/release-vsix"
+  displayName: Assert every target is present and correctly targeted
 
 - task: AzureCLI@2
   displayName: Get Marketplace identity resource ID
@@ -41,12 +57,27 @@ steps:
     inlineScript: |
       az rest --method get --url https://app.vssps.visualstudio.com/_apis/profile/profiles/me --resource 499b84ac-1321-427f-aa17-267ca6975798 --query id --output tsv
 
+# Publishes every target, or fails naming the ones that did not publish. The
+# set was verified complete above, so nothing is published from a partial set.
+# --skip-duplicate makes a re-run idempotent for targets already published.
 - task: AzureCLI@2
   displayName: Publish GraphForge to Marketplace
   condition: and(succeeded(), eq(${{ parameters.publish }}, true))
   inputs:
     azureSubscription: graphforge-marketplace-publishing
-    scriptType: pscore
+    scriptType: bash
     scriptLocation: inlineScript
     inlineScript: |
-      npx --no-install vsce publish --packagePath graphforge-marketplace.vsix --azure-credential
+      set -uo pipefail
+      failed=()
+      for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+        vsix="$(Agent.TempDirectory)/release-vsix/graphforge-$target.vsix"
+        echo "Publishing $target"
+        if ! npx --no-install vsce publish --packagePath "$vsix" --azure-credential --skip-duplicate; then
+          failed+=("$target")
+        fi
+      done
+      if [ "${#failed[@]}" -gt 0 ]; then
+        echo "##vso[task.logissue type=error]Marketplace publish failed for: ${failed[*]}. Re-run; already-published targets are skipped."
+        exit 1
+      fi
