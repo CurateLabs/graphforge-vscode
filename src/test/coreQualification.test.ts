@@ -28,16 +28,18 @@ suite("Supported-Core declaration (#95)", () => {
     );
   });
 
-  test("in-range versions are qualified, including the 0.6.0 prerelease line", () => {
-    for (const v of ["0.6.0-rc.5", "0.6.0-rc.6", "0.6.0", "0.6.3"]) {
+  test("final 0.6.x releases are qualified", () => {
+    for (const v of ["0.6.0", "0.6.3"]) {
       const q = evaluateCoreVersion("node", v);
       assert.equal(q.status, "qualified", v);
       assert.equal(q.code, undefined);
     }
   });
 
-  test("earlier prereleases and the next minor are out of range", () => {
-    assert.equal(evaluateCoreVersion("node", "0.6.0-rc.4").status, "unqualified");
+  test("0.6.0 release candidates and the next minor are out of range", () => {
+    for (const v of ["0.6.0-rc.4", "0.6.0-rc.5", "0.6.0-rc.8"]) {
+      assert.equal(evaluateCoreVersion("node", v).status, "unqualified", v);
+    }
     assert.equal(evaluateCoreVersion("node", "0.7.0-rc.1").status, "unqualified");
     assert.equal(evaluateCoreVersion("node", "0.7.0").status, "unqualified");
   });
@@ -78,8 +80,12 @@ suite("Supported-Core declaration (#95)", () => {
   test("PEP 440 prereleases from PyPI map onto the same range", () => {
     assert.equal(toSemver("0.6.0rc5"), "0.6.0-rc.5");
     assert.equal(toSemver("0.6.0b1"), "0.6.0-beta.1");
-    assert.equal(evaluateCoreVersion("python", "0.6.0rc5").status, "qualified");
-    assert.equal(evaluateCoreVersion("python", "0.6.0rc4").status, "unqualified");
+    assert.equal(evaluateCoreVersion("python", "0.6.0").status, "qualified");
+    assert.equal(evaluateCoreVersion("python", "0.6.0rc8").status, "unqualified");
+    assert.equal(
+      evaluateCoreVersion("python", "0.6.0rc5", { range: ">=0.6.0-rc.5 <0.7.0", refuseBelow: "0.5.1" }).status,
+      "qualified",
+    );
   });
 
   test("a custom declaration is honored", () => {
