@@ -68,3 +68,4 @@ flowchart LR
 | [discovery-feeling.md](./discovery-feeling.md) | Feeling / journey | Active | Emotional north star (uncovering hunches), need states, moments that matter, trust/anxiety, experience principles |
 | [key-journeys.md](./key-journeys.md) | Human journey maps | Active hypothesis | Moving from hunch to inquiry, evidence, collaboration, and continuity; channels are treated as implementation implications |
 | [agent-interop.md](./agent-interop.md) | Agent experience / product slice | Active | Stable `graphforge.*` command IDs, structured output shapes, the Check Environment → Setup/Init → Run Query/Rank loop, and remaining argument-bypass gaps |
+| [release-journeys.md](./release-journeys.md) | Release scenarios | Active | Hub clone/publish round trip, qualified Core, XYG views and export; scenario-to-test map and human-only checks for #95 |

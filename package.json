@@ -2,7 +2,7 @@
   "name": "graphforge",
   "displayName": "GraphForge",
   "description": "Explore GraphForge projects in VS Code \u2014 Cypher, analyst verbs, ontology, and epistemic-aware result graphs.",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "publisher": "CurateLabsAI",
   "icon": "media/icon.png",
   "license": "Apache-2.0",
@@ -12,7 +12,7 @@
   },
   "graphforge": {
     "qualifiedCore": {
-      "range": ">=0.6.0-rc.5 <0.7.0",
+      "range": ">=0.6.0 <0.7.0",
       "refuseBelow": "0.5.1",
       "note": "GraphForge Core versions (@curatelabs/graphforge on npm, graphforge on PyPI) this extension build was qualified against. In range: qualified. Parseable but outside range: warn with CORE_VERSION_UNQUALIFIED. Below refuseBelow: refuse with CORE_VERSION_UNSUPPORTED. Read by src/session/coreQualification.ts."
     }
@@ -586,7 +586,7 @@
         "graphforge.engineVersion": {
           "type": "string",
           "default": "latest",
-          "description": "Which graphforge engine version the Setup wizards install \u2014 npm @curatelabs/graphforge for Node, PyPI graphforge for Python. Use \"latest\" (whatever the registry tags latest, which may be outside `graphforge.qualifiedCore`) or a specific version like \"0.6.0-rc.5\". The version picker in Setup Native/Python Binding recommends the newest qualified version and writes here."
+          "description": "Which graphforge engine version the Setup wizards install \u2014 npm @curatelabs/graphforge for Node, PyPI graphforge for Python. Use \"latest\" (whatever the registry tags latest, which may be outside `graphforge.qualifiedCore`) or a specific version like \"0.6.0\". The version picker in Setup Native/Python Binding recommends the newest qualified version and writes here."
         },
         "graphforge.pythonInterpreterPath": {
           "type": "string",
@@ -632,7 +632,7 @@
     "koffi": "3.1.4"
   },
   "peerDependencies": {
-    "@curatelabs/graphforge-cli": "^0.6.0-rc.5"
+    "@curatelabs/graphforge-cli": "^0.6.0"
   },
   "peerDependenciesMeta": {
     "@curatelabs/graphforge-cli": {
