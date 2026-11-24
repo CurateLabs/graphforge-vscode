@@ -1,17 +1,24 @@
 name: Publish Open VSX
 
-# Open VSX release pipeline. Runs on Blacksmith runners (repo must be
-# linked at app.blacksmith.sh — Blacksmith has no separate "publishing" product;
-# linking only swaps runner infra, see docs/engineering/PUBLISHING.md).
+# Open VSX release pipeline, and the single build of every release VSIX.
+#
+# Each VSIX bundles native Core and XYG binaries for the machine that packages
+# it, so one platform-targeted VSIX is built per supported platform on a
+# matching native runner (the same runners and packaging path as the
+# "Packaged XYG (<platform>)" jobs in xyg-qualification.yml). No universal VSIX
+# is ever built or published: scripts/verify-release-vsix.mjs rejects any
+# package whose manifest TargetPlatform is missing or does not match its name.
+# The Azure Marketplace pipeline publishes these same verified files (attached
+# to the GitHub release) instead of rebuilding them; see
+# docs/engineering/PUBLISHING.md.
 #
 # The Open VSX credential (OVSX_PAT) is never stored as a raw GitHub secret.
-# They live in the Pulumi ESC environment curatelabs/graphforge-vscode/production.
+# It lives in the Pulumi ESC environment curatelabs/graphforge-vscode/production.
 # The publish job authenticates to Pulumi Cloud with GitHub OIDC
 # (pulumi/auth-actions exchanges the job's id-token for a short-lived Pulumi
 # access token — no long-lived PULUMI_ACCESS_TOKEN secret), then pulumi/esc-action
 # opens the ESC environment and injects its environmentVariables into the job.
-# See docs/engineering/PUBLISHING.md for the one-time OIDC trust setup David
-# needs to do in the Pulumi Cloud and GitHub dashboards.
+# See docs/engineering/PUBLISHING.md for the one-time OIDC trust setup.
 
 on:
   push:
@@ -32,11 +39,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Check, compile, unit test, package
+  check:
+    name: Check, compile, unit test
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    outputs:
-      vsix_name: ${{ steps.package.outputs.vsix_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -48,6 +53,15 @@ jobs:
         with:
           node-version: "20"
           cache: npm
+
+      - name: Tag matches package.json version
+        if: github.event_name == 'push'
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version."
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -61,35 +75,28 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
-      - name: Verify VSIX contents
-        run: npm run verify:package
-
-      - name: Package extension
-        id: package
-        run: |
-          npm run package -- --no-dependencies
-          vsix_name="$(ls -1 ./*.vsix | head -n1)"
-          echo "Packaged $vsix_name"
-          echo "vsix_name=$(basename "$vsix_name")" >> "$GITHUB_OUTPUT"
-
-      - name: Upload .vsix artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: graphforge-vsix
-          path: "*.vsix"
-          retention-days: 30
-
-  publish:
-    name: Publish to Open VSX
-    needs: build
-    if: github.event_name == 'push' || github.event.inputs.dry_run == 'false'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: production
-    permissions:
-      contents: read
-      # Required for pulumi/auth-actions to exchange the job's GitHub OIDC
-      # id-token for a short-lived Pulumi Cloud access token.
-      id-token: write
+  package:
+    name: Package and qualify (${{ matrix.platform }})
+    needs: check
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: blacksmith-4vcpu-ubuntu-2404
+            platform: linux-x64
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+          - os: macos-15
+            platform: darwin-arm64
+          - os: macos-15-intel
+            platform: darwin-x64
+          - os: windows-latest
+            platform: win32-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -99,20 +106,155 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
+          node-version: "22"
+          cache: npm
+
+      - name: Check actual host architecture
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+        run: node -e 'require("node:assert/strict").equal(`${process.platform}-${process.arch}`, process.env.EXPECTED_PLATFORM)'
+
+      - name: Install dependencies and Rust target
+        run: |
+          npm ci
+          rustup target add wasm32-unknown-unknown --toolchain 1.96.0
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vendor/xyg/target
+          key: xyg-${{ matrix.platform }}-${{ hashFiles('vendor/xyg/Cargo.lock', 'vendor/xyg/rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: |
+            xyg-${{ matrix.platform }}-${{ hashFiles('vendor/xyg/Cargo.lock', 'vendor/xyg/rust-toolchain.toml') }}-
+
+      # The VSIX goes to the runner temp dir, outside the checkout, because
+      # verify:package counts every file in the worktree.
+      - name: Compile and package the platform VSIX
+        run: |
+          npm run compile
+          npm run verify:package
+          mkdir -p "$RUNNER_TEMP/release-vsix"
+          npm run package -- --no-dependencies -o "$RUNNER_TEMP/release-vsix/graphforge-${{ matrix.platform }}.vsix"
+
+      - name: Assert TargetPlatform and native contents
+        run: node scripts/verify-release-vsix.mjs "$RUNNER_TEMP/release-vsix" --target "${{ matrix.platform }}"
+
+      - name: Install desktop test dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Qualify the installed Linux package
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run qualify:xyg:installed -- "$RUNNER_TEMP/release-vsix/graphforge-${{ matrix.platform }}.vsix" "$RUNNER_TEMP/xyg-evidence"
+
+      - name: Qualify the installed desktop package
+        if: runner.os != 'Linux'
+        run: npm run qualify:xyg:installed -- "$RUNNER_TEMP/release-vsix/graphforge-${{ matrix.platform }}.vsix" "$RUNNER_TEMP/xyg-evidence"
+
+      - name: Upload platform VSIX
+        uses: actions/upload-artifact@v7
+        with:
+          name: graphforge-vsix-${{ matrix.platform }}
+          path: ${{ runner.temp }}/release-vsix/graphforge-${{ matrix.platform }}.vsix
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Preserve qualification reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xyg-evidence-${{ matrix.platform }}
+          path: ${{ runner.temp }}/xyg-evidence/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  release-set:
+    name: Verify complete release set
+    needs: package
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
           node-version: "20"
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
-      - name: Download .vsix artifact
+      - name: Download platform VSIXs
         uses: actions/download-artifact@v8
         with:
-          name: graphforge-vsix
+          pattern: graphforge-vsix-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/release-vsix
 
-      # Both Pulumi steps use continue-on-error so a missing OIDC trust or ESC
-      # environment degrades to a package-only run (warnings below) instead of
-      # failing the workflow before the one-time setup in PUBLISHING.md is done.
+      - name: Assert every target is present and correctly targeted
+        run: node scripts/verify-release-vsix.mjs "$RUNNER_TEMP/release-vsix" | tee "$RUNNER_TEMP/release-set.txt"
+
+      - name: Upload release set
+        uses: actions/upload-artifact@v7
+        with:
+          name: graphforge-release-vsix
+          path: ${{ runner.temp }}/release-vsix/*.vsix
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Release set summary
+        run: |
+          {
+            echo "### Release VSIX set"
+            echo ""
+            echo '```'
+            cat "$RUNNER_TEMP/release-set.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish to Open VSX
+    needs: release-set
+    # Runs in dry runs too: everything up to the credential check executes, so a
+    # broken OIDC trust or ESC environment is found before a tag is pushed. Only
+    # the `ovsx publish` step is limited to a tag push or dry_run=false.
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: production
+    env:
+      DRY_RUN: ${{ github.event_name != 'push' && github.event.inputs.dry_run != 'false' }}
+    permissions:
+      contents: read
+      # Required for pulumi/auth-actions to exchange the job's GitHub OIDC
+      # id-token for a short-lived Pulumi Cloud access token.
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download release set
+        uses: actions/download-artifact@v8
+        with:
+          name: graphforge-release-vsix
+          path: ${{ runner.temp }}/release-vsix
+
+      - name: Re-verify release set before publishing
+        run: node scripts/verify-release-vsix.mjs "$RUNNER_TEMP/release-vsix"
+
+      # Both Pulumi steps use continue-on-error only so the check step below can
+      # say which one failed. A missing credential fails the job: the v0.1.3 tag
+      # run skipped publishing with a warning and still reported success.
       - name: Authenticate to Pulumi Cloud (GitHub OIDC)
         id: pulumi-auth
         continue-on-error: true
@@ -133,33 +275,62 @@ jobs:
         id: esc
         run: |
           if [ "${{ steps.pulumi-auth.outcome }}" != "success" ]; then
-            echo "::warning::GitHub OIDC exchange with Pulumi Cloud failed (is the OIDC issuer trust configured for this repo? See docs/engineering/PUBLISHING.md). This run will package only and skip publishing."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::error::GitHub OIDC exchange with Pulumi Cloud failed (is the OIDC issuer trust configured for this repo? See docs/engineering/PUBLISHING.md). Nothing was published."
+            exit 1
           elif [ "${{ steps.esc-open.outcome }}" != "success" ]; then
-            echo "::warning::Could not open ESC environment curatelabs/graphforge-vscode/production (does it exist and is it readable by the OIDC token? See docs/engineering/PUBLISHING.md). This run will package only and skip publishing."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Could not open ESC environment curatelabs/graphforge-vscode/production (does it exist and is it readable by the OIDC token? See docs/engineering/PUBLISHING.md). Nothing was published."
+            exit 1
+          elif [ -z "${OVSX_PAT:-}" ]; then
+            echo "::error::OVSX_PAT not found in curatelabs/graphforge-vscode/production. Nothing was published."
+            exit 1
           fi
 
-      - name: Publish Open VSX via Pulumi ESC
-        if: steps.esc.outputs.skip != 'true'
+      # Asks Open VSX whether the token may publish to this publisher's
+      # namespace. Publishes nothing, so it also runs in dry runs.
+      - name: Verify Open VSX token
         env:
-          # OVSX_PAT is injected into the job environment by esc-action and masked in logs.
-          VSIX_FILE: ${{ needs.build.outputs.vsix_name }}
+          OVSX_VERSION: "1.4.0"
         run: |
           set -euo pipefail
-          if [ -n "${OVSX_PAT:-}" ]; then
-            npx ovsx publish "$VSIX_FILE" --pat "$OVSX_PAT"
-          else
-            echo "::warning::OVSX_PAT not found in curatelabs/graphforge-vscode/production; skipping Open VSX publish."
+          publisher="$(node -p "require('./package.json').publisher")"
+          npx --yes "ovsx@$OVSX_VERSION" verify-pat "$publisher" --pat "$OVSX_PAT"
+
+      # Publishes every target, or reports which ones failed. The set was
+      # verified complete above, so nothing is published from a partial build.
+      # --skip-duplicate makes a re-run idempotent: a target Open VSX already
+      # has for this version ("... is already published.") counts as done for
+      # that target only; any other failure fails the job after all targets
+      # were attempted, and re-running the job finishes the rest.
+      - name: Publish Open VSX via Pulumi ESC
+        if: env.DRY_RUN != 'true'
+        env:
+          # OVSX_PAT is injected into the job environment by esc-action and masked in logs.
+          OVSX_VERSION: "1.4.0"
+        run: |
+          set -uo pipefail
+          failed=()
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+            vsix="$RUNNER_TEMP/release-vsix/graphforge-$target.vsix"
+            echo "::group::Publish $target"
+            if npx --yes "ovsx@$OVSX_VERSION" publish "$vsix" --pat "$OVSX_PAT" --skip-duplicate; then
+              echo "- \`$target\`: published (or already published)" >> "$GITHUB_STEP_SUMMARY"
+            else
+              failed+=("$target")
+              echo "- \`$target\`: **FAILED**" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "::endgroup::"
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::Open VSX publish failed for: ${failed[*]}. Re-run this job; already-published targets are skipped."
+            exit 1
           fi
 
       - name: Publish summary
+        if: always()
         run: |
           {
             echo "### Publish run"
             echo ""
-            echo "- Artifact: \`${{ needs.build.outputs.vsix_name }}\`"
-            echo "- Open VSX credential available: \`${{ steps.esc.outputs.skip == 'true' && 'no (package-only)' || 'yes' }}\`"
+            echo "- Open VSX credential check: \`${{ steps.esc.outcome }}\`"
+            echo "- Mode: \`${{ env.DRY_RUN == 'true' && 'dry run (nothing published)' || 'publish' }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
