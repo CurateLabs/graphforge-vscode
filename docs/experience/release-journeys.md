@@ -128,7 +128,7 @@ result.
 |---|---|---|
 | R1 | `src/test/releaseJourneys.test.ts` (bundled Core qualified); `src/test/coreQualification.test.ts` (bundled Core exact and in range); `scripts/qualify-installed-xyg.cjs` (installed VSIX, Core version equals the pin) | PR CI: Extension Development Host tests, unit tests, Packaged XYG (5 platforms) |
 | R2 | `src/test/coreQualification.test.ts`; `src/test/versionDiscovery.test.ts` | PR CI: unit tests |
-| R3 | `scripts/qualify-hub-clone.cjs` (installed VSIX, production Hub clone, query, close, reopen, identical rows); `src/test/hubClone.test.ts` (argv and receipt mapping) | Dispatch `qualify_hub_clone` (Linux, macOS, Windows); unit tests. The `opendata/openalex` fixture may be metadata-only, so a zero count proves identity and durability, not a useful result. |
+| R3 | `scripts/qualify-hub-clone.cjs` (installed VSIX, production Hub clone, query, close, reopen, identical rows); `src/test/hubClone.test.ts` (argv and receipt mapping) | Dispatch `qualify_hub_clone` (Linux, macOS, Windows); unit tests. The dispatch installs the one VSIX built on Linux on all three hosts, so only its Linux job exercises a matching platform package; macOS and Windows clone evidence on their own packages is pending until the lane downloads a per-platform VSIX. The `opendata/openalex` fixture may be metadata-only, so a zero count proves identity and durability, not a useful result. |
 | R4 | `src/test/extension.test.ts` (`Hub clone agent argument validation`); `src/test/hubClone.test.ts` | PR CI |
 | R5 | `src/test/hubClone.test.ts` (`filesystem admission (#94)`); `scripts/qualify-hub-clone.cjs` (real tmpfs rejection); `scripts/qualify-hub-clone-remote.cjs` (Dev Container) | Unit tests; dispatch; Dev Container lane is local-only |
 | R6 | `src/test/hubClone.test.ts` (`interpretHubCloneResult`); [mismatch receipt](../engineering/evidence/issue-88-mismatch-qualification.json) | Unit tests; recorded receipt from an earlier commit |
@@ -160,8 +160,9 @@ Automated lanes cannot prove these, so they are not mocked:
 ## Success signals and telemetry
 
 - Every PR CI row in the map is green at the release commit.
-- The dispatch `qualify_hub_clone` run at the release commit is green on all three operating
-  systems.
+- The dispatch `qualify_hub_clone` run at the release commit is green on Linux. Its macOS and
+  Windows jobs count as release evidence only once the lane installs each host's own platform VSIX;
+  until then the five `Packaged XYG` jobs are the per-platform package evidence.
 
 ## Open questions
 
